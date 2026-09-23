@@ -3,15 +3,15 @@
   <parent><groupId>ru.pulsedoma</groupId><artifactId>pulse-doma</artifactId><version>0.1.0-SNAPSHOT</version></parent>
   <artifactId>app-bootstrap</artifactId>
   <dependencies>
-    <dependency><groupId>ru.pulsedoma</groupId><artifactId>common</artifactId></dependency>
-    <dependency><groupId>ru.pulsedoma</groupId><artifactId>domain-identity</artifactId></dependency>
-    <dependency><groupId>ru.pulsedoma</groupId><artifactId>domain-issues</artifactId></dependency>
-    <dependency><groupId>ru.pulsedoma</groupId><artifactId>domain-duplicates</artifactId></dependency>
-    <dependency><groupId>ru.pulsedoma</groupId><artifactId>domain-house</artifactId></dependency>
-    <dependency><groupId>ru.pulsedoma</groupId><artifactId>integration-max</artifactId></dependency>
-    <dependency><groupId>ru.pulsedoma</groupId><artifactId>integration-external</artifactId></dependency>
-    <dependency><groupId>ru.pulsedoma</groupId><artifactId>api</artifactId></dependency>
-    <dependency><groupId>ru.pulsedoma</groupId><artifactId>infra</artifactId></dependency>
+    <dependency><groupId>ru.pulsedoma</groupId><artifactId>common</artifactId><version>${project.version}</version></dependency>
+    <dependency><groupId>ru.pulsedoma</groupId><artifactId>domain-identity</artifactId><version>${project.version}</version></dependency>
+    <dependency><groupId>ru.pulsedoma</groupId><artifactId>domain-issues</artifactId><version>${project.version}</version></dependency>
+    <dependency><groupId>ru.pulsedoma</groupId><artifactId>domain-duplicates</artifactId><version>${project.version}</version></dependency>
+    <dependency><groupId>ru.pulsedoma</groupId><artifactId>domain-house</artifactId><version>${project.version}</version></dependency>
+    <dependency><groupId>ru.pulsedoma</groupId><artifactId>integration-max</artifactId><version>${project.version}</version></dependency>
+    <dependency><groupId>ru.pulsedoma</groupId><artifactId>integration-external</artifactId><version>${project.version}</version></dependency>
+    <dependency><groupId>ru.pulsedoma</groupId><artifactId>api</artifactId><version>${project.version}</version></dependency>
+    <dependency><groupId>ru.pulsedoma</groupId><artifactId>infra</artifactId><version>${project.version}</version></dependency>
     <dependency><groupId>org.springframework.boot</groupId><artifactId>spring-boot-starter-actuator</artifactId></dependency>
     <dependency><groupId>io.micrometer</groupId><artifactId>micrometer-registry-prometheus</artifactId></dependency>
     <dependency><groupId>org.springframework.boot</groupId><artifactId>spring-boot-starter-data-redis</artifactId></dependency>

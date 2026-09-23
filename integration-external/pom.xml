@@ -3,9 +3,9 @@
   <parent><groupId>ru.pulsedoma</groupId><artifactId>pulse-doma</artifactId><version>0.1.0-SNAPSHOT</version></parent>
   <artifactId>integration-external</artifactId>
   <dependencies>
-    <dependency><groupId>ru.pulsedoma</groupId><artifactId>common</artifactId></dependency>
-    <dependency><groupId>ru.pulsedoma</groupId><artifactId>domain-identity</artifactId></dependency>
-    <dependency><groupId>ru.pulsedoma</groupId><artifactId>domain-issues</artifactId></dependency>
+    <dependency><groupId>ru.pulsedoma</groupId><artifactId>common</artifactId><version>${project.version}</version></dependency>
+    <dependency><groupId>ru.pulsedoma</groupId><artifactId>domain-identity</artifactId><version>${project.version}</version></dependency>
+    <dependency><groupId>ru.pulsedoma</groupId><artifactId>domain-issues</artifactId><version>${project.version}</version></dependency>
     <dependency><groupId>org.springframework.boot</groupId><artifactId>spring-boot-starter-web</artifactId></dependency>
     <dependency><groupId>org.springframework.boot</groupId><artifactId>spring-boot-starter-webflux</artifactId></dependency>
     <dependency><groupId>org.springframework.boot</groupId><artifactId>spring-boot-starter-data-redis</artifactId></dependency>
