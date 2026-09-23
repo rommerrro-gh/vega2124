@@ -1,0 +1,30 @@
+server:
+  port: 8080
+spring:
+  datasource:
+    url: ${SQLITE_URL:jdbc:sqlite:./data/pulse-doma.db}
+    hikari:
+      maximum-pool-size: 1
+  jpa:
+    open-in-view: false
+    hibernate:
+      ddl-auto: none
+    database-platform: org.hibernate.community.dialect.SQLiteDialect
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+      timeout: 200ms
+max:
+  webhook:
+    secret: ${MAX_WEBHOOK_SECRET:local-dev-secret}
+  api:
+    token: ${MAX_BOT_TOKEN:}
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus

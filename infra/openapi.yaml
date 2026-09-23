@@ -1,0 +1,427 @@
+openapi: 3.1.0
+info:
+  title: Пульс дома API
+  version: 0.1.0
+  description: Контракт из §10 ТЗ; большинство операций пока не реализовано.
+servers:
+  - url: http://localhost:8080
+paths:
+  /webhooks/max:
+    post:
+      operationId: maxWebhook
+      summary: maxWebhook
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        '200':
+          description: Accepted or returned
+        '501':
+          description: Scaffold endpoint pending implementation
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /v1/invitations/{token}/accept:
+    post:
+      operationId: acceptInvitation
+      summary: acceptInvitation
+      parameters:
+        - name: token
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        '200':
+          description: Accepted or returned
+        '501':
+          description: Scaffold endpoint pending implementation
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /v1/me/houses:
+    get:
+      operationId: getMyHouses
+      summary: getMyHouses
+      responses:
+        '200':
+          description: Accepted or returned
+        '501':
+          description: Scaffold endpoint pending implementation
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /v1/me/active-house:
+    put:
+      operationId: setActiveHouse
+      summary: setActiveHouse
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        '200':
+          description: Accepted or returned
+        '501':
+          description: Scaffold endpoint pending implementation
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /v1/reports:
+    post:
+      operationId: createReport
+      summary: createReport
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        '200':
+          description: Accepted or returned
+        '501':
+          description: Scaffold endpoint pending implementation
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /v1/reports/{id}/withdraw:
+    post:
+      operationId: withdrawReport
+      summary: withdrawReport
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        '200':
+          description: Accepted or returned
+        '501':
+          description: Scaffold endpoint pending implementation
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /v1/issues/candidates:
+    get:
+      operationId: getIssueCandidates
+      summary: getIssueCandidates
+      responses:
+        '200':
+          description: Accepted or returned
+        '501':
+          description: Scaffold endpoint pending implementation
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /v1/issues:
+    post:
+      operationId: createIssue
+      summary: createIssue
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        '200':
+          description: Accepted or returned
+        '501':
+          description: Scaffold endpoint pending implementation
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /v1/issues/{id}/join:
+    post:
+      operationId: joinIssue
+      summary: joinIssue
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        '200':
+          description: Accepted or returned
+        '501':
+          description: Scaffold endpoint pending implementation
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /v1/issues/{id}/merge:
+    post:
+      operationId: mergeIssues
+      summary: mergeIssues
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        '200':
+          description: Accepted or returned
+        '501':
+          description: Scaffold endpoint pending implementation
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /v1/issues/{id}/split:
+    post:
+      operationId: splitIssue
+      summary: splitIssue
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        '200':
+          description: Accepted or returned
+        '501':
+          description: Scaffold endpoint pending implementation
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /v1/issues/{id}/status:
+    patch:
+      operationId: changeIssueStatus
+      summary: changeIssueStatus
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        '200':
+          description: Accepted or returned
+        '501':
+          description: Scaffold endpoint pending implementation
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /v1/issues/{id}/verify:
+    post:
+      operationId: verifyIssue
+      summary: verifyIssue
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        '200':
+          description: Accepted or returned
+        '501':
+          description: Scaffold endpoint pending implementation
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /v1/issues/{id}/comments:
+    post:
+      operationId: addIssueComment
+      summary: addIssueComment
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        '200':
+          description: Accepted or returned
+        '501':
+          description: Scaffold endpoint pending implementation
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /v1/incidents:
+    post:
+      operationId: createIncident
+      summary: createIncident
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        '200':
+          description: Accepted or returned
+        '501':
+          description: Scaffold endpoint pending implementation
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /v1/houses/{id}:
+    get:
+      operationId: getHouse
+      summary: getHouse
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Accepted or returned
+        '501':
+          description: Scaffold endpoint pending implementation
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /v1/houses/{id}/events:
+    get:
+      operationId: getHouseEvents
+      summary: getHouseEvents
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Accepted or returned
+        '501':
+          description: Scaffold endpoint pending implementation
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /v1/houses/{id}/polls:
+    post:
+      operationId: createPoll
+      summary: createPoll
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        '200':
+          description: Accepted or returned
+        '501':
+          description: Scaffold endpoint pending implementation
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /v1/connectors/{type}/sync:
+    post:
+      operationId: syncConnector
+      summary: syncConnector
+      parameters:
+        - name: type
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        '200':
+          description: Accepted or returned
+        '501':
+          description: Scaffold endpoint pending implementation
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+components:
+  schemas:
+    ErrorResponse:
+      type: object
+      required: [code, message, details, correlationId]
+      properties:
+        code: {type: string}
+        message: {type: string}
+        details: {type: object}
+        correlationId: {type: string}
