@@ -19,5 +19,5 @@ package ru.pulsedoma.bootstrap;
  * NFR-011: SQLite WAL and single connection configured.
  */
 public final class RequirementsTrace {
-    private RequirementsTrace() { }
+    private RequirementsTrace() {}
 }

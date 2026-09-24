@@ -9,5 +9,7 @@ import org.springframework.scheduling.annotation.EnableScheduling;
 @EnableAsync
 @EnableScheduling
 public class PulseDomaApplication {
-    public static void main(String[] args) { SpringApplication.run(PulseDomaApplication.class, args); }
+    public static void main(String[] args) {
+        SpringApplication.run(PulseDomaApplication.class, args);
+    }
 }

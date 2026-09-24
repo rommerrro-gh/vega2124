@@ -6,5 +6,7 @@ public final class DuplicateScorer {
         return 0.40 * clamp(category) + 0.30 * clamp(location) + 0.20 * clamp(time) + 0.10 * clamp(text);
     }
 
-    private double clamp(double value) { return Math.max(0, Math.min(1, value)); }
+    private double clamp(double value) {
+        return Math.max(0, Math.min(1, value));
+    }
 }

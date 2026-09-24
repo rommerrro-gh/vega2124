@@ -32,7 +32,8 @@ public final class MaxWebhookController {
     public ResponseEntity<Void> receive(@RequestHeader(value = "X-Max-Bot-Api-Secret", required = false) String supplied,
                                         @RequestBody String body) throws Exception {
         if (supplied == null || !MessageDigest.isEqual(secret.getBytes(StandardCharsets.UTF_8),
-                supplied.getBytes(StandardCharsets.UTF_8))) return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
+                supplied.getBytes(StandardCharsets.UTF_8)))
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
         JsonNode update = mapper.readTree(body);
         if (!update.isObject() || !update.hasNonNull("update_type")) return ResponseEntity.badRequest().build();
         queue.enqueue(body);
