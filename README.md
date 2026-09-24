@@ -12,7 +12,7 @@
 | `domain-identity`, `domain-issues`, `domain-duplicates`, `domain-house`, `common` | Библиотеки модели, правил и общих контрактов. |
 | `infra` | Библиотека ресурсов: миграция SQLite, спецификация OpenAPI и демонстрационные данные. |
 
-В `compose.yaml` также запускаются вспомогательные инфраструктурные сервисы Redis и MinIO, а `contract-adapter` — отдельная демонстрационная заглушка на nginx. Они не являются Maven-модулями. Параметры Java-сервиса, включая порт, адреса Redis, MinIO, MAX API и адаптера, задаются в `app-bootstrap/src/main/resources/application.yaml` и могут переопределяться переменными окружения. Библиотекам отдельные `application.yaml` не нужны: они не запускаются самостоятельно и получают настройки от `app-bootstrap`.
+В `compose.yaml` также запускаются вспомогательные инфраструктурные сервисы Redis и MinIO, а `contract-adapter` — отдельная демонстрационная заглушка на nginx. Они не являются Maven-модулями. Для локальной разработки MinIO берётся из [community-сборки Coollabs](https://github.com/coollabsio/minio), закреплённой по digest: [MinIO Community теперь распространяется как исходный код](https://github.com/minio/minio#source-only-distribution), а прежний образ из Quay не загрузился при проверке Compose. Эта сборка предназначена только для локального окружения; для производственного развёртывания выбор и сопровождение S3-хранилища требуют отдельного решения. Параметры Java-сервиса, включая порт, адреса Redis, MinIO, MAX API и адаптера, задаются в `app-bootstrap/src/main/resources/application.yaml` и могут переопределяться переменными окружения. Библиотекам отдельные `application.yaml` не нужны: они не запускаются самостоятельно и получают настройки от `app-bootstrap`.
 
 ## Локальный запуск
 
