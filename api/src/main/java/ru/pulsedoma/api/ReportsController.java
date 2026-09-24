@@ -13,7 +13,7 @@ import org.springframework.web.bind.annotation.RestController;
 @Validated
 @RestController
 @RequestMapping("/v1/reports")
-public final class ReportsController {
+public class ReportsController {
     @PostMapping
     public void create(@Valid @RequestBody CreateReportRequest request) {
         throw PendingOperation.notImplemented();

@@ -9,6 +9,11 @@
     <artifactId>app-bootstrap</artifactId>
     <dependencies>
         <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-test</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
             <groupId>ru.pulsedoma</groupId>
             <artifactId>common</artifactId>
             <version>${project.version}</version>

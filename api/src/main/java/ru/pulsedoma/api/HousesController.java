@@ -18,7 +18,7 @@ import org.springframework.web.bind.annotation.RestController;
 @Validated
 @RestController
 @RequestMapping("/v1/houses")
-public final class HousesController {
+public class HousesController {
     @GetMapping("/{id}")
     public void getHouse(@PathVariable @NotBlank String id) {
         throw PendingOperation.notImplemented();

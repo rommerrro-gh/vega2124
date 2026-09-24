@@ -12,7 +12,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 @Validated
 @RestController
-public final class IdentityController {
+public class IdentityController {
     @PostMapping("/v1/invitations/{token}/accept")
     public void acceptInvitation(@PathVariable @NotBlank String token,
                                  @Valid @RequestBody AcceptInvitationRequest request) {

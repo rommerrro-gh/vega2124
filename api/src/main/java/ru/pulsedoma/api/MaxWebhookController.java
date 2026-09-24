@@ -17,7 +17,7 @@ import ru.pulsedoma.common.WebhookQueue;
 
 @Validated
 @RestController
-public final class MaxWebhookController {
+public class MaxWebhookController {
     private final ObjectMapper mapper;
     private final WebhookQueue queue;
     private final String secret;

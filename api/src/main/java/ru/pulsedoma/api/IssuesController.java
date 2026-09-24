@@ -19,7 +19,7 @@ import ru.pulsedoma.issues.IssueStatus;
 @Validated
 @RestController
 @RequestMapping("/v1/issues")
-public final class IssuesController {
+public class IssuesController {
     @GetMapping("/candidates")
     public void candidates(@RequestParam @NotBlank String houseId,
                            @RequestParam @NotBlank String query) {
