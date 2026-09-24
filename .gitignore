@@ -5,4 +5,9 @@ target/
 *.db-shm
 *.db-wal
 .idea/
+*.iml
+*.ipr
+*.iws
+out/
+.run/
 .DS_Store

@@ -6,7 +6,7 @@ public interface ExternalTicketPort {
 
     void updateTicket(String issueId);
 
-    String getTicket(String externalId);
+    ExternalTicketStatus getTicket(String externalId);
 
     void addComment(String externalId, String comment);
 

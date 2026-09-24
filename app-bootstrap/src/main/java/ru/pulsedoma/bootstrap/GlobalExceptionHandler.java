@@ -1,11 +1,14 @@
 package ru.pulsedoma.bootstrap;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
+import jakarta.validation.ConstraintViolationException;
 import org.slf4j.MDC;
-import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.http.converter.HttpMessageNotReadableException;
+import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 import org.springframework.web.server.ResponseStatusException;
 import ru.pulsedoma.api.ErrorResponse;
 import ru.pulsedoma.common.BusinessException;
@@ -22,6 +25,16 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(JsonProcessingException.class)
     ResponseEntity<ErrorResponse> json(JsonProcessingException e) {
         return ResponseEntity.badRequest().body(error("INVALID_JSON", "Invalid JSON body"));
+    }
+
+    @ExceptionHandler({MethodArgumentNotValidException.class, ConstraintViolationException.class})
+    ResponseEntity<ErrorResponse> validation(Exception e) {
+        return ResponseEntity.badRequest().body(error("VALIDATION_ERROR", "Invalid request data"));
+    }
+
+    @ExceptionHandler({HttpMessageNotReadableException.class, MethodArgumentTypeMismatchException.class})
+    ResponseEntity<ErrorResponse> malformed(Exception e) {
+        return ResponseEntity.badRequest().body(error("INVALID_REQUEST", "Invalid request body or parameter"));
     }
 
     @ExceptionHandler(ResponseStatusException.class)

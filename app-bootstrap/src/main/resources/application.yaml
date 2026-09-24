@@ -1,5 +1,5 @@
 server:
-  port: 8080
+  port: ${SERVER_PORT:8080}
 spring:
   datasource:
     url: ${SQLITE_URL:jdbc:sqlite:./data/pulse-doma.db}
@@ -17,12 +17,22 @@ spring:
     redis:
       host: ${REDIS_HOST:localhost}
       port: ${REDIS_PORT:6379}
-      timeout: 200ms
+      timeout: ${REDIS_TIMEOUT:200ms}
 max:
   webhook:
     secret: ${MAX_WEBHOOK_SECRET:local-dev-secret}
+    queue-key: ${MAX_WEBHOOK_QUEUE_KEY:max:webhook:updates}
   api:
+    base-url: ${MAX_API_BASE_URL:https://platform-api2.max.ru}
     token: ${MAX_BOT_TOKEN:}
+integration:
+  external:
+    base-url: ${CONTRACT_ADAPTER_URL:http://localhost:8081}
+storage:
+  minio:
+    endpoint: ${MINIO_ENDPOINT:http://localhost:9000}
+    access-key: ${MINIO_ACCESS_KEY:minioadmin}
+    secret-key: ${MINIO_SECRET_KEY:minioadmin}
 management:
   endpoints:
     web:

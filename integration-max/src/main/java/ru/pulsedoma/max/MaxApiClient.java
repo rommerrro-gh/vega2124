@@ -10,8 +10,9 @@ public final class MaxApiClient {
     private final WebClient client;
     private final String token;
 
-    public MaxApiClient(WebClient.Builder builder, @Value("${max.api.token:}") String token) {
-        this.client = builder.baseUrl("https://platform-api2.max.ru").build();
+    public MaxApiClient(WebClient.Builder builder, @Value("${max.api.token:}") String token,
+                        @Value("${max.api.base-url}") String baseUrl) {
+        this.client = builder.baseUrl(baseUrl).build();
         this.token = token;
     }
 

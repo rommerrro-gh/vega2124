@@ -1,20 +1,29 @@
 package ru.pulsedoma.api;
 
-import org.springframework.http.HttpStatus;
+import jakarta.validation.Valid;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.Size;
+import org.springframework.validation.annotation.Validated;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
-import org.springframework.web.server.ResponseStatusException;
 
+@Validated
 @RestController
 @RequestMapping("/v1/reports")
 public final class ReportsController {
-    // FR-ISS-001, FR-ISS-013, AC-02, AC-16: service and authorization are pending.
     @PostMapping
-    @ResponseStatus(HttpStatus.NOT_IMPLEMENTED)
-    public void create(@RequestBody String body) {
-        throw new ResponseStatusException(HttpStatus.NOT_IMPLEMENTED, "Report workflow is not implemented");
+    public void create(@Valid @RequestBody CreateReportRequest request) {
+        throw PendingOperation.notImplemented();
     }
+
+    @PostMapping("/{id}/withdraw")
+    public void withdraw(@PathVariable @NotBlank String id, @Valid @RequestBody WithdrawReportRequest request) {
+        throw PendingOperation.notImplemented();
+    }
+
+    public record CreateReportRequest(@NotBlank String houseId, @NotBlank @Size(max = 4000) String text) {}
+    public record WithdrawReportRequest(@NotBlank @Size(max = 1000) String reason) {}
 }

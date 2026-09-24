@@ -21,7 +21,8 @@ public class Issue {
     public String zoneJson;
     @Enumerated(EnumType.STRING)
     public IssueStatus status;
-    public String priority;
+    @Enumerated(EnumType.STRING)
+    public IssuePriority priority;
     @Column(name = "sla_due_at")
     public Instant slaDueAt;
 }

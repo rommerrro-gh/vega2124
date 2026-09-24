@@ -2,6 +2,7 @@ package ru.pulsedoma.external;
 
 import org.springframework.stereotype.Component;
 import ru.pulsedoma.issues.ExternalTicketPort;
+import ru.pulsedoma.issues.ExternalTicketStatus;
 
 @Component
 public final class ContractTicketAdapter implements ExternalTicketPort {
@@ -12,8 +13,8 @@ public final class ContractTicketAdapter implements ExternalTicketPort {
     public void updateTicket(String issueId) {
     }
 
-    public String getTicket(String externalId) {
-        return "REGISTERED";
+    public ExternalTicketStatus getTicket(String externalId) {
+        return ExternalTicketStatus.REGISTERED;
     }
 
     public void addComment(String externalId, String comment) {

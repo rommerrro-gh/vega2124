@@ -2,6 +2,8 @@ package ru.pulsedoma.identity;
 
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
 
@@ -16,5 +18,6 @@ public class User {
     public String displayName;
     @Column(name = "phone_enc")
     public String phoneEnc;
-    public String status;
+    @Enumerated(EnumType.STRING)
+    public UserStatus status;
 }
