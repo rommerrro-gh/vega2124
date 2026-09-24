@@ -9,7 +9,7 @@
   <properties>
     <java.version>21</java.version><springdoc.version>2.1.0</springdoc.version><mapstruct.version>1.5.5.Final</mapstruct.version>
     <lombok.version>1.18.30</lombok.version><testcontainers.version>1.18.3</testcontainers.version><resilience4j.version>2.1.0</resilience4j.version>
-    <minio.version>8.5.7</minio.version><flyway.version>9.22.3</flyway.version><sqlite-jdbc.version>3.43.0.0</sqlite-jdbc.version>
+    <minio.version>8.5.7</minio.version><flyway.version>9.16.3</flyway.version><sqlite-jdbc.version>3.43.0.0</sqlite-jdbc.version>
     <jjwt.version>0.11.5</jjwt.version><hibernate.version>6.2.2.Final</hibernate.version>
   </properties>
   <dependencyManagement><dependencies>
