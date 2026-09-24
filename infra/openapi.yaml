@@ -1,0 +1,600 @@
+openapi: 3.1.0
+info:
+  title: Пульс дома API
+  version: 0.1.0
+  description: Контракт из §10 ТЗ. Все маршруты присутствуют; незавершённые операции возвращают 501.
+servers:
+  - url: http://localhost:8080
+paths:
+  /webhooks/max:
+    post:
+      operationId: maxWebhook
+      summary: maxWebhook
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MaxUpdate'
+      responses:
+        '200':
+          description: Accepted or returned
+        '400':
+          description: Invalid request
+        '401':
+          description: Invalid webhook secret
+  /v1/invitations/{token}/accept:
+    post:
+      operationId: acceptInvitation
+      summary: acceptInvitation
+      parameters:
+        - name: token
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AcceptInvitationRequest'
+      responses:
+        '200':
+          description: Accepted or returned
+        '400':
+          description: Invalid request
+        '403':
+          description: Access denied until JWT and house scope are implemented
+        '501':
+          description: Scaffold endpoint pending implementation
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /v1/me/houses:
+    get:
+      operationId: getMyHouses
+      summary: getMyHouses
+      responses:
+        '200':
+          description: Accepted or returned
+        '400':
+          description: Invalid request
+        '403':
+          description: Access denied until JWT and house scope are implemented
+        '501':
+          description: Scaffold endpoint pending implementation
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /v1/me/active-house:
+    put:
+      operationId: setActiveHouse
+      summary: setActiveHouse
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SetActiveHouseRequest'
+      responses:
+        '200':
+          description: Accepted or returned
+        '400':
+          description: Invalid request
+        '403':
+          description: Access denied until JWT and house scope are implemented
+        '501':
+          description: Scaffold endpoint pending implementation
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /v1/reports:
+    post:
+      operationId: createReport
+      summary: createReport
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateReportRequest'
+      responses:
+        '200':
+          description: Accepted or returned
+        '400':
+          description: Invalid request
+        '403':
+          description: Access denied until JWT and house scope are implemented
+        '501':
+          description: Scaffold endpoint pending implementation
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /v1/reports/{id}/withdraw:
+    post:
+      operationId: withdrawReport
+      summary: withdrawReport
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/WithdrawReportRequest'
+      responses:
+        '200':
+          description: Accepted or returned
+        '400':
+          description: Invalid request
+        '403':
+          description: Access denied until JWT and house scope are implemented
+        '501':
+          description: Scaffold endpoint pending implementation
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /v1/issues/candidates:
+    get:
+      operationId: getIssueCandidates
+      summary: getIssueCandidates
+      parameters:
+        - name: houseId
+          in: query
+          required: true
+          schema: {type: string, minLength: 1}
+        - name: query
+          in: query
+          required: true
+          schema: {type: string, minLength: 1}
+      responses:
+        '200':
+          description: Accepted or returned
+        '400':
+          description: Invalid request
+        '403':
+          description: Access denied until JWT and house scope are implemented
+        '501':
+          description: Scaffold endpoint pending implementation
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /v1/issues:
+    post:
+      operationId: createIssue
+      summary: createIssue
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateIssueRequest'
+      responses:
+        '200':
+          description: Accepted or returned
+        '400':
+          description: Invalid request
+        '403':
+          description: Access denied until JWT and house scope are implemented
+        '501':
+          description: Scaffold endpoint pending implementation
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /v1/issues/{id}/join:
+    post:
+      operationId: joinIssue
+      summary: joinIssue
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/JoinIssueRequest'
+      responses:
+        '200':
+          description: Accepted or returned
+        '400':
+          description: Invalid request
+        '403':
+          description: Access denied until JWT and house scope are implemented
+        '501':
+          description: Scaffold endpoint pending implementation
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /v1/issues/{id}/merge:
+    post:
+      operationId: mergeIssues
+      summary: mergeIssues
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MergeIssueRequest'
+      responses:
+        '200':
+          description: Accepted or returned
+        '400':
+          description: Invalid request
+        '403':
+          description: Access denied until JWT and house scope are implemented
+        '501':
+          description: Scaffold endpoint pending implementation
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /v1/issues/{id}/split:
+    post:
+      operationId: splitIssue
+      summary: splitIssue
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SplitIssueRequest'
+      responses:
+        '200':
+          description: Accepted or returned
+        '400':
+          description: Invalid request
+        '403':
+          description: Access denied until JWT and house scope are implemented
+        '501':
+          description: Scaffold endpoint pending implementation
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /v1/issues/{id}/status:
+    patch:
+      operationId: changeIssueStatus
+      summary: changeIssueStatus
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ChangeStatusRequest'
+      responses:
+        '200':
+          description: Accepted or returned
+        '400':
+          description: Invalid request
+        '403':
+          description: Access denied until JWT and house scope are implemented
+        '501':
+          description: Scaffold endpoint pending implementation
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /v1/issues/{id}/verify:
+    post:
+      operationId: verifyIssue
+      summary: verifyIssue
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/VerifyIssueRequest'
+      responses:
+        '200':
+          description: Accepted or returned
+        '400':
+          description: Invalid request
+        '403':
+          description: Access denied until JWT and house scope are implemented
+        '501':
+          description: Scaffold endpoint pending implementation
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /v1/issues/{id}/comments:
+    post:
+      operationId: addIssueComment
+      summary: addIssueComment
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AddCommentRequest'
+      responses:
+        '200':
+          description: Accepted or returned
+        '400':
+          description: Invalid request
+        '403':
+          description: Access denied until JWT and house scope are implemented
+        '501':
+          description: Scaffold endpoint pending implementation
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /v1/incidents:
+    post:
+      operationId: createIncident
+      summary: createIncident
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateIncidentRequest'
+      responses:
+        '200':
+          description: Accepted or returned
+        '400':
+          description: Invalid request
+        '403':
+          description: Access denied until JWT and house scope are implemented
+        '501':
+          description: Scaffold endpoint pending implementation
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /v1/houses/{id}:
+    get:
+      operationId: getHouse
+      summary: getHouse
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Accepted or returned
+        '400':
+          description: Invalid request
+        '403':
+          description: Access denied until JWT and house scope are implemented
+        '501':
+          description: Scaffold endpoint pending implementation
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /v1/houses/{id}/events:
+    get:
+      operationId: getHouseEvents
+      summary: getHouseEvents
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Accepted or returned
+        '400':
+          description: Invalid request
+        '403':
+          description: Access denied until JWT and house scope are implemented
+        '501':
+          description: Scaffold endpoint pending implementation
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /v1/houses/{id}/polls:
+    post:
+      operationId: createPoll
+      summary: createPoll
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreatePollRequest'
+      responses:
+        '200':
+          description: Accepted or returned
+        '400':
+          description: Invalid request
+        '403':
+          description: Access denied until JWT and house scope are implemented
+        '501':
+          description: Scaffold endpoint pending implementation
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /v1/connectors/{type}/sync:
+    post:
+      operationId: syncConnector
+      summary: syncConnector
+      parameters:
+        - name: type
+          in: path
+          required: true
+          schema:
+            type: string
+            enum: [FIAS, GIS, UK]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SyncRequest'
+      responses:
+        '200':
+          description: Accepted or returned
+        '400':
+          description: Invalid request
+        '403':
+          description: Access denied until JWT and house scope are implemented
+        '501':
+          description: Scaffold endpoint pending implementation
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+components:
+  schemas:
+    ErrorResponse:
+      type: object
+      required: [code, message, details, correlationId]
+      properties:
+        code: {type: string}
+        message: {type: string}
+        details: {type: object}
+        correlationId: {type: string}
+    MaxUpdate:
+      type: object
+      required: [update_type]
+      properties:
+        update_type: {type: string, minLength: 1}
+      additionalProperties: true
+    AcceptInvitationRequest:
+      type: object
+      required: [maxUserId]
+      properties:
+        maxUserId: {type: string, minLength: 1}
+    SetActiveHouseRequest:
+      type: object
+      required: [houseId]
+      properties:
+        houseId: {type: string, minLength: 1}
+    CreateReportRequest:
+      type: object
+      required: [houseId, text]
+      properties:
+        houseId: {type: string, minLength: 1}
+        text: {type: string, minLength: 1, maxLength: 4000}
+    WithdrawReportRequest:
+      type: object
+      required: [reason]
+      properties:
+        reason: {type: string, minLength: 1, maxLength: 1000}
+    CreateIssueRequest:
+      type: object
+      required: [houseId, category, description, priority]
+      properties:
+        houseId: {type: string, minLength: 1}
+        category: {type: string, minLength: 1}
+        description: {type: string, minLength: 1}
+        priority: {type: string, enum: [LOW, NORMAL, HIGH, EMERGENCY]}
+    JoinIssueRequest:
+      type: object
+      required: [reportId]
+      properties:
+        reportId: {type: string, minLength: 1}
+    MergeIssueRequest:
+      type: object
+      required: [targetIssueId]
+      properties:
+        targetIssueId: {type: string, minLength: 1}
+    SplitIssueRequest:
+      type: object
+      required: [reportId, reason]
+      properties:
+        reportId: {type: string, minLength: 1}
+        reason: {type: string, minLength: 1}
+    ChangeStatusRequest:
+      type: object
+      required: [status, reason]
+      properties:
+        status:
+          type: string
+          enum: [DRAFT, OPEN, ASSIGNED, IN_PROGRESS, RESOLVED, VERIFICATION_72H, CLOSED_CONFIRMED, CLOSED_UNCONFIRMED, REVIEW_REQUIRED, REOPENED, WITHDRAWN, REJECTED]
+        reason: {type: string, minLength: 1}
+    VerifyIssueRequest:
+      type: object
+      required: [confirmed]
+      properties:
+        confirmed: {type: boolean}
+        comment: {type: string, maxLength: 2000}
+    AddCommentRequest:
+      type: object
+      required: [text]
+      properties:
+        text: {type: string, minLength: 1, maxLength: 2000}
+    CreateIncidentRequest:
+      type: object
+      required: [houseId, type, description]
+      properties:
+        houseId: {type: string, minLength: 1}
+        type: {type: string, minLength: 1}
+        description: {type: string, minLength: 1, maxLength: 4000}
+    CreatePollRequest:
+      type: object
+      required: [question, options]
+      properties:
+        question: {type: string, minLength: 1, maxLength: 500}
+        options:
+          type: array
+          minItems: 2
+          maxItems: 20
+          items: {type: string, minLength: 1}
+        closesAt: {type: string, format: date-time}
+    SyncRequest:
+      type: object
+      required: [houseId]
+      properties:
+        houseId: {type: string, minLength: 1}
