@@ -11,6 +11,8 @@ spring:
       ddl-auto: none
     database-platform: org.hibernate.community.dialect.SQLiteDialect
   flyway:
+    clean-on-validation-error: true # для разработки
+    clean-disabled: false # для разработки
     enabled: true
     locations: classpath:db/migration
   data:
