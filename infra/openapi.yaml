@@ -103,18 +103,16 @@ paths:
             schema:
               $ref: '#/components/schemas/CreateReportRequest'
       responses:
-        '200':
-          description: Accepted or returned
+        '201':
+          description: Report saved and candidates returned, or draft issue created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CreateReportResponse'
         '400':
           description: Invalid request
         '403':
           description: Access denied until JWT and house scope are implemented
-        '501':
-          description: Scaffold endpoint pending implementation
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
   /v1/reports/{id}/withdraw:
     post:
       operationId: withdrawReport
@@ -523,10 +521,30 @@ components:
         houseId: {type: string, minLength: 1}
     CreateReportRequest:
       type: object
-      required: [houseId, text]
+      required: [houseId, authorId, text]
       properties:
         houseId: {type: string, minLength: 1}
+        authorId: {type: string, minLength: 1}
         text: {type: string, minLength: 1, maxLength: 4000}
+        category: {type: string, maxLength: 100}
+    CreateReportResponse:
+      type: object
+      required: [reportId, correlationId, candidates]
+      properties:
+        reportId: {type: string, format: uuid}
+        correlationId: {type: string, format: uuid}
+        candidates:
+          type: array
+          items:
+            type: object
+            required: [issueId, score, reasons]
+            properties:
+              issueId: {type: string}
+              score: {type: number, format: double}
+              reasons:
+                type: array
+                items: {type: string}
+        issueId: {type: string, format: uuid, nullable: true}
     WithdrawReportRequest:
       type: object
       required: [reason]

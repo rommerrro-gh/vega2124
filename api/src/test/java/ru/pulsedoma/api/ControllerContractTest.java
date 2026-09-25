@@ -10,6 +10,12 @@ import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder;
 import org.springframework.validation.beanvalidation.LocalValidatorFactoryBean;
 import ru.pulsedoma.common.WebhookQueue;
+import ru.pulsedoma.issues.Report;
+import ru.pulsedoma.issues.ReportService;
+
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
@@ -21,14 +27,20 @@ import static org.springframework.test.web.servlet.setup.MockMvcBuilders.standal
 class ControllerContractTest {
     private MockMvc mvc;
     private LocalValidatorFactoryBean validator;
+    private ReportService reportService;
 
     @BeforeEach
     void setUp() {
         validator = new LocalValidatorFactoryBean();
         validator.afterPropertiesSet();
         WebhookQueue queue = payload -> {};
+        reportService = mock(ReportService.class);
+        Report report = new Report();
+        report.id = "report-id";
+        report.correlationId = "correlation-id";
+        when(reportService.createReport(any())).thenReturn(report);
         mvc = standaloneSetup(new MaxWebhookController(new ObjectMapper(), queue, "test-secret"),
-                new IdentityController(), new ReportsController(), new IssuesController(),
+                new IdentityController(), new ReportsController(reportService), new IssuesController(),
                 new IncidentsController(), new HousesController(), new ConnectorsController())
                 .setValidator(validator)
                 .build();
@@ -45,7 +57,6 @@ class ControllerContractTest {
                 json(post("/v1/invitations/token/accept"), "{\"maxUserId\":\"user\"}"),
                 get("/v1/me/houses"),
                 json(put("/v1/me/active-house"), "{\"houseId\":\"house\"}"),
-                json(post("/v1/reports"), "{\"houseId\":\"house\",\"text\":\"test\"}"),
                 json(post("/v1/reports/report/withdraw"), "{\"reason\":\"duplicate\"}"),
                 get("/v1/issues/candidates").param("houseId", "house").param("query", "light"),
                 json(post("/v1/issues"), "{\"houseId\":\"house\",\"category\":\"LIGHTING\",\"description\":\"test\",\"priority\":\"NORMAL\"}"),
@@ -68,10 +79,17 @@ class ControllerContractTest {
 
     @Test
     void invalidInputIsRejectedBeforePendingWorkflow() throws Exception {
-        mvc.perform(json(post("/v1/reports"), "{\"houseId\":\"\",\"text\":\"\"}"))
+        mvc.perform(json(post("/v1/reports"), "{\"houseId\":\"\",\"authorId\":\"\",\"text\":\"\"}"))
                 .andExpect(status().isBadRequest());
         mvc.perform(json(patch("/v1/issues/issue/status"), "{\"status\":\"UNKNOWN\",\"reason\":\"test\"}"))
                 .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void createReportReturnsCreated() throws Exception {
+        mvc.perform(json(post("/v1/reports"),
+                "{\"houseId\":\"house\",\"authorId\":\"author\",\"text\":\"test\"}"))
+                .andExpect(status().isCreated());
     }
 
     @Test
