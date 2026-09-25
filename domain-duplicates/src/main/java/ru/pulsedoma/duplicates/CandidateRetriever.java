@@ -15,7 +15,7 @@ import java.util.Set;
 import java.util.stream.Collectors;
 
 @Repository
-public final class CandidateRetriever {
+public class CandidateRetriever {
     private final JdbcTemplate jdbc;
 
     public CandidateRetriever(JdbcTemplate jdbc) {
