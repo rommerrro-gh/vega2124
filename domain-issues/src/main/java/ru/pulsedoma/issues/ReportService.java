@@ -15,6 +15,8 @@ import java.util.UUID;
 
 @Service
 public class ReportService {
+    private static final double CANDIDATE_THRESHOLD = 0.82;
+    private static final double REVIEW_THRESHOLD = 0.65;
     private static final Duration CANDIDATE_WINDOW = Duration.ofDays(30);
     private static final Duration DEFAULT_SLA = Duration.ofHours(72);
     private final JdbcTemplate jdbc;
@@ -64,8 +66,13 @@ public class ReportService {
         List<DuplicateCandidate> candidates = retriever.findCandidates(report.houseId, normalized,
                 report.category, now.minus(CANDIDATE_WINDOW));
         double best = candidates.isEmpty() ? 0 : candidates.get(0).score();
-        report.candidates = best >= 0.65 ? candidates : List.of();
-        if (best < 0.65) {
+        if (best >= CANDIDATE_THRESHOLD) {
+            report.candidates = candidates;
+            audit(report.authorId, "DUPLICATE_CANDIDATES_FOUND", "report", report.id, now);
+        } else if (best >= REVIEW_THRESHOLD) {
+            report.candidates = candidates;
+            audit(report.authorId, "DUPLICATE_REVIEW_REQUIRED", "report", report.id, now);
+        } else {
             String issueId = UUID.randomUUID().toString();
             jdbc.update("""
                     INSERT INTO issues(id, house_id, category, status, priority, sla_due_at,
