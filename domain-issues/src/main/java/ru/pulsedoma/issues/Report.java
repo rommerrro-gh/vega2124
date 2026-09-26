@@ -32,6 +32,4 @@ public class Report {
     public Instant createdAt;
     @Transient
     public List<DuplicateCandidate> candidates = List.of();
-    @Transient
-    public String issueId;
 }

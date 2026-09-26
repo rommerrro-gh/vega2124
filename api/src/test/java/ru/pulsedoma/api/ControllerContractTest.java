@@ -12,6 +12,7 @@ import org.springframework.validation.beanvalidation.LocalValidatorFactoryBean;
 import ru.pulsedoma.common.WebhookQueue;
 import ru.pulsedoma.issues.Report;
 import ru.pulsedoma.issues.ReportService;
+import ru.pulsedoma.issues.MiniAppService;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
@@ -28,6 +29,7 @@ class ControllerContractTest {
     private MockMvc mvc;
     private LocalValidatorFactoryBean validator;
     private ReportService reportService;
+    private MiniAppService miniApp;
 
     @BeforeEach
     void setUp() {
@@ -35,12 +37,13 @@ class ControllerContractTest {
         validator.afterPropertiesSet();
         WebhookQueue queue = payload -> {};
         reportService = mock(ReportService.class);
+        miniApp = mock(MiniAppService.class);
         Report report = new Report();
         report.id = "report-id";
         report.correlationId = "correlation-id";
         when(reportService.createReport(any())).thenReturn(report);
         mvc = standaloneSetup(new MaxWebhookController(new ObjectMapper(), queue, "test-secret"),
-                new IdentityController(), new ReportsController(reportService), new IssuesController(),
+                new IdentityController(miniApp), new ReportsController(reportService), new IssuesController(miniApp),
                 new IncidentsController(), new HousesController(), new ConnectorsController())
                 .setValidator(validator)
                 .build();
@@ -54,16 +57,11 @@ class ControllerContractTest {
     @Test
     void everyPendingOpenApiRouteIsMapped() throws Exception {
         List<MockHttpServletRequestBuilder> requests = List.of(
-                json(post("/v1/invitations/token/accept"), "{\"maxUserId\":\"user\"}"),
-                get("/v1/me/houses"),
                 json(put("/v1/me/active-house"), "{\"houseId\":\"house\"}"),
                 json(post("/v1/reports/report/withdraw"), "{\"reason\":\"duplicate\"}"),
                 get("/v1/issues/candidates").param("houseId", "house").param("query", "light"),
-                json(post("/v1/issues"), "{\"houseId\":\"house\",\"category\":\"LIGHTING\",\"description\":\"test\",\"priority\":\"NORMAL\"}"),
-                json(post("/v1/issues/issue/join"), "{\"reportId\":\"report\"}"),
                 json(post("/v1/issues/issue/merge"), "{\"targetIssueId\":\"target\"}"),
                 json(post("/v1/issues/issue/split"), "{\"reportId\":\"report\",\"reason\":\"test\"}"),
-                json(patch("/v1/issues/issue/status"), "{\"status\":\"OPEN\",\"reason\":\"test\"}"),
                 json(post("/v1/issues/issue/verify"), "{\"confirmed\":true}"),
                 json(post("/v1/issues/issue/comments"), "{\"text\":\"test\"}"),
                 json(post("/v1/incidents"), "{\"houseId\":\"house\",\"type\":\"FIRE\",\"description\":\"test\"}"),
@@ -88,7 +86,7 @@ class ControllerContractTest {
     @Test
     void createReportReturnsCreated() throws Exception {
         mvc.perform(json(post("/v1/reports"),
-                "{\"houseId\":\"house\",\"authorId\":\"author\",\"text\":\"test\"}"))
+                "{\"houseId\":\"house\",\"text\":\"test\",\"category\":\"OTHER\",\"location\":\"Двор\",\"occurredAt\":\"2026-09-20T10:00:00Z\"}").principal(() -> "author"))
                 .andExpect(status().isCreated());
     }
 

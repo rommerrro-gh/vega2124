@@ -9,6 +9,7 @@ import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
+import org.springframework.context.annotation.Profile;
 import ru.pulsedoma.issues.CreateReportCommand;
 import ru.pulsedoma.issues.ReportService;
 
@@ -16,6 +17,7 @@ import java.time.Duration;
 import java.time.Instant;
 
 @Component
+@Profile("!demo")
 public final class MaxWebhookWorker {
     private static final Logger log = LoggerFactory.getLogger(MaxWebhookWorker.class);
     private final StringRedisTemplate redis;

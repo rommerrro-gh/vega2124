@@ -33,42 +33,30 @@ paths:
           required: true
           schema:
             type: string
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/AcceptInvitationRequest'
       responses:
         '200':
-          description: Accepted or returned
-        '400':
-          description: Invalid request
-        '403':
-          description: Access denied until JWT and house scope are implemented
-        '501':
-          description: Scaffold endpoint pending implementation
+          description: Verified house membership created from invitation
           content:
             application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
+              schema: {$ref: '#/components/schemas/HouseView'}
+        '400':
+          description: Invalid request
+        '401': {description: Missing or invalid MAX initData}
   /v1/me/houses:
     get:
       operationId: getMyHouses
       summary: getMyHouses
       responses:
         '200':
-          description: Accepted or returned
-        '400':
-          description: Invalid request
-        '403':
-          description: Access denied until JWT and house scope are implemented
-        '501':
-          description: Scaffold endpoint pending implementation
+          description: Verified houses available to the current MAX user
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ErrorResponse'
+                type: array
+                items: {$ref: '#/components/schemas/HouseView'}
+        '400':
+          description: Invalid request
+        '401': {description: Missing or invalid MAX initData}
   /v1/me/active-house:
     put:
       operationId: setActiveHouse
@@ -104,15 +92,14 @@ paths:
               $ref: '#/components/schemas/CreateReportRequest'
       responses:
         '201':
-          description: Report saved and candidates returned, or draft issue created
+          description: Report saved and duplicate candidates returned; no issue is created until user decision
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/CreateReportResponse'
         '400':
           description: Invalid request
-        '403':
-          description: Access denied until JWT and house scope are implemented
+        '401': {description: Missing or invalid MAX initData}
   /v1/reports/{id}/withdraw:
     post:
       operationId: withdrawReport
@@ -142,6 +129,51 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
+  /v1/reports/{reportId}/attachments:
+    post:
+      operationId: uploadReportAttachment
+      summary: Add a private attachment to the current user's unlinked report
+      parameters:
+        - name: reportId
+          in: path
+          required: true
+          schema: {type: string}
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file]
+              properties:
+                file: {type: string, format: binary}
+      responses:
+        '200':
+          description: Attachment saved
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/AttachmentView'}
+        '400': {description: Invalid format, size, count or report access}
+        '401': {description: Missing or invalid MAX initData}
+  /v1/attachments/{id}:
+    get:
+      operationId: readAttachment
+      summary: Download an attachment as its author, issue participant or house dispatcher
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: {type: string}
+      responses:
+        '200':
+          description: Private attachment content
+          content:
+            image/jpeg: {schema: {type: string, format: binary}}
+            image/png: {schema: {type: string, format: binary}}
+            video/mp4: {schema: {type: string, format: binary}}
+            application/pdf: {schema: {type: string, format: binary}}
+        '400': {description: Attachment not available}
+        '401': {description: Missing or invalid MAX initData}
   /v1/issues/candidates:
     get:
       operationId: getIssueCandidates
@@ -180,17 +212,29 @@ paths:
               $ref: '#/components/schemas/CreateIssueRequest'
       responses:
         '200':
-          description: Accepted or returned
-        '400':
-          description: Invalid request
-        '403':
-          description: Access denied until JWT and house scope are implemented
-        '501':
-          description: Scaffold endpoint pending implementation
+          description: New draft issue created from the current user's unlinked report
           content:
             application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
+              schema: {$ref: '#/components/schemas/IssueView'}
+        '400':
+          description: Invalid request
+        '401': {description: Missing or invalid MAX initData}
+  /v1/issues/{id}:
+    get:
+      operationId: getIssue
+      summary: Issue card for a verified member of its house
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: {type: string}
+      responses:
+        '200':
+          description: Issue card
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/IssueView'}
+        '401': {description: Missing or invalid MAX initData}
   /v1/issues/{id}/join:
     post:
       operationId: joinIssue
@@ -209,17 +253,13 @@ paths:
               $ref: '#/components/schemas/JoinIssueRequest'
       responses:
         '200':
-          description: Accepted or returned
-        '400':
-          description: Invalid request
-        '403':
-          description: Access denied until JWT and house scope are implemented
-        '501':
-          description: Scaffold endpoint pending implementation
+          description: Current user's unlinked report joined to an active issue in the same house
           content:
             application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
+              schema: {$ref: '#/components/schemas/IssueView'}
+        '400':
+          description: Invalid request
+        '401': {description: Missing or invalid MAX initData}
   /v1/issues/{id}/merge:
     post:
       operationId: mergeIssues
@@ -296,17 +336,50 @@ paths:
               $ref: '#/components/schemas/ChangeStatusRequest'
       responses:
         '200':
-          description: Accepted or returned
+          description: Dispatcher changed status and wrote a status event
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/IssueView'}
         '400':
           description: Invalid request
-        '403':
-          description: Access denied until JWT and house scope are implemented
-        '501':
-          description: Scaffold endpoint pending implementation
+        '401': {description: Missing or invalid MAX initData}
+        '403': {description: Dispatcher house access required}
+  /v1/dispatcher/issues:
+    get:
+      operationId: listDispatcherIssues
+      summary: Queue of issues for a dispatcher in one house
+      parameters:
+        - name: houseId
+          in: query
+          required: true
+          schema: {type: string, minLength: 1}
+      responses:
+        '200':
+          description: Issue queue
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ErrorResponse'
+                type: array
+                items: {$ref: '#/components/schemas/IssueView'}
+        '403': {description: Dispatcher house access required}
+        '401': {description: Missing or invalid MAX initData}
+  /v1/dispatcher/issues/{id}:
+    get:
+      operationId: getDispatcherIssue
+      summary: Issue card for a dispatcher
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: {type: string}
+      responses:
+        '200':
+          description: Issue card
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/IssueView'}
+        '403': {description: Dispatcher house access required}
+        '401': {description: Missing or invalid MAX initData}
   /v1/issues/{id}/verify:
     post:
       operationId: verifyIssue
@@ -495,6 +568,34 @@ paths:
                 $ref: '#/components/schemas/ErrorResponse'
 components:
   schemas:
+    HouseView:
+      type: object
+      required: [id, address]
+      properties:
+        id: {type: string}
+        address: {type: string}
+    IssueView:
+      type: object
+      required: [id, houseId, address, status, description, participants, attachments]
+      properties:
+        id: {type: string}
+        houseId: {type: string}
+        address: {type: string}
+        category: {type: string, nullable: true}
+        status: {type: string}
+        description: {type: string}
+        location: {type: string, nullable: true}
+        occurredAt: {type: string, format: date-time, nullable: true}
+        participants: {type: integer}
+        attachments:
+          type: array
+          items: {$ref: '#/components/schemas/AttachmentView'}
+    AttachmentView:
+      type: object
+      required: [id, mime]
+      properties:
+        id: {type: string}
+        mime: {type: string}
     ErrorResponse:
       type: object
       required: [code, message, details, correlationId]
@@ -509,11 +610,6 @@ components:
       properties:
         update_type: {type: string, minLength: 1}
       additionalProperties: true
-    AcceptInvitationRequest:
-      type: object
-      required: [maxUserId]
-      properties:
-        maxUserId: {type: string, minLength: 1}
     SetActiveHouseRequest:
       type: object
       required: [houseId]
@@ -521,12 +617,13 @@ components:
         houseId: {type: string, minLength: 1}
     CreateReportRequest:
       type: object
-      required: [houseId, authorId, text]
+      required: [houseId, text, category, location, occurredAt]
       properties:
         houseId: {type: string, minLength: 1}
-        authorId: {type: string, minLength: 1}
         text: {type: string, minLength: 1, maxLength: 4000}
-        category: {type: string, maxLength: 100}
+        category: {type: string, minLength: 1, maxLength: 100}
+        location: {type: string, minLength: 1, maxLength: 160}
+        occurredAt: {type: string, format: date-time}
     CreateReportResponse:
       type: object
       required: [reportId, correlationId, candidates]
@@ -544,7 +641,6 @@ components:
               reasons:
                 type: array
                 items: {type: string}
-        issueId: {type: string, format: uuid, nullable: true}
     WithdrawReportRequest:
       type: object
       required: [reason]
@@ -552,12 +648,9 @@ components:
         reason: {type: string, minLength: 1, maxLength: 1000}
     CreateIssueRequest:
       type: object
-      required: [houseId, category, description, priority]
+      required: [reportId]
       properties:
-        houseId: {type: string, minLength: 1}
-        category: {type: string, minLength: 1}
-        description: {type: string, minLength: 1}
-        priority: {type: string, enum: [LOW, NORMAL, HIGH, EMERGENCY]}
+        reportId: {type: string, minLength: 1}
     JoinIssueRequest:
       type: object
       required: [reportId]

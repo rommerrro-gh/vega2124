@@ -4,6 +4,7 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import jakarta.validation.ConstraintViolationException;
 import org.slf4j.MDC;
 import org.springframework.http.ResponseEntity;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
@@ -19,7 +20,12 @@ import java.util.Map;
 public class GlobalExceptionHandler {
     @ExceptionHandler(BusinessException.class)
     ResponseEntity<ErrorResponse> business(BusinessException e) {
-        return ResponseEntity.badRequest().body(error(e.getCode(), e.getMessage()));
+        HttpStatus status = switch (e.getCode()) {
+            case "HOUSE_ACCESS_DENIED" -> HttpStatus.FORBIDDEN;
+            case "ISSUE_NOT_FOUND", "ATTACHMENT_NOT_FOUND" -> HttpStatus.NOT_FOUND;
+            default -> HttpStatus.BAD_REQUEST;
+        };
+        return ResponseEntity.status(status).body(error(e.getCode(), e.getMessage()));
     }
 
     @ExceptionHandler(JsonProcessingException.class)

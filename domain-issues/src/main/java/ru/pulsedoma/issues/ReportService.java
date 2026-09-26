@@ -18,7 +18,6 @@ public class ReportService {
     private static final double CANDIDATE_THRESHOLD = 0.82;
     private static final double REVIEW_THRESHOLD = 0.65;
     private static final Duration CANDIDATE_WINDOW = Duration.ofDays(30);
-    private static final Duration DEFAULT_SLA = Duration.ofHours(72);
     private final JdbcTemplate jdbc;
     private final TextNormalizer normalizer;
     private final CandidateRetriever retriever;
@@ -38,6 +37,13 @@ public class ReportService {
         }
         String normalized = normalizer.normalize(command.text());
         if (normalized.isBlank()) throw new BusinessException("INVALID_REPORT", "Report text has no searchable terms");
+        String locationKey = command.location() == null ? null : normalizer.normalize(command.location());
+        if (command.location() != null && locationKey.isBlank()) {
+            throw new BusinessException("INVALID_LOCATION", "Location has no searchable terms");
+        }
+        if (command.occurredAt() != null && command.occurredAt().isAfter(Instant.now().plusSeconds(300))) {
+            throw new BusinessException("INVALID_TIME", "Occurrence time cannot be in the future");
+        }
         Integer allowed = jdbc.queryForObject("""
                 SELECT count(*) FROM house_memberships
                 WHERE house_id = ? AND user_id = ? AND verification_status = 'VERIFIED'
@@ -57,14 +63,18 @@ public class ReportService {
         report.category = command.category();
         report.createdAt = now;
         jdbc.update("""
-                INSERT INTO reports(id, house_id, author_id, raw_text, search_text, category, correlation_id, created_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                INSERT INTO reports(id, house_id, author_id, raw_text, search_text, category,
+                                    zone_json, occurred_at, correlation_id, created_at)
+                VALUES (?, ?, ?, ?, ?, ?, CASE WHEN ? IS NULL THEN NULL ELSE json_object('label', ?, 'key', ?) END,
+                        ?, ?, ?)
                 """, report.id, report.houseId, report.authorId, report.rawText, normalized,
-                report.category, report.correlationId, now.toString());
+                report.category, command.location(), command.location(), locationKey,
+                command.occurredAt() == null ? null : command.occurredAt().toString(),
+                report.correlationId, now.toString());
         audit(report.authorId, "REPORT_CREATED", "report", report.id, now);
 
         List<DuplicateCandidate> candidates = retriever.findCandidates(report.houseId, normalized,
-                report.category, now.minus(CANDIDATE_WINDOW));
+                report.category, locationKey, now.minus(CANDIDATE_WINDOW));
         double best = candidates.isEmpty() ? 0 : candidates.get(0).score();
         if (best >= CANDIDATE_THRESHOLD) {
             report.candidates = candidates;
@@ -72,21 +82,6 @@ public class ReportService {
         } else if (best >= REVIEW_THRESHOLD) {
             report.candidates = candidates;
             audit(report.authorId, "DUPLICATE_REVIEW_REQUIRED", "report", report.id, now);
-        } else {
-            String issueId = UUID.randomUUID().toString();
-            jdbc.update("""
-                    INSERT INTO issues(id, house_id, category, status, priority, sla_due_at,
-                                       normalized_text, search_text, created_at, updated_at)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                    """, issueId, report.houseId, report.category, IssueStatus.DRAFT.name(),
-                    IssuePriority.NORMAL.name(), now.plus(DEFAULT_SLA).toString(), normalized,
-                    normalized, now.toString(), now.toString());
-            jdbc.update("""
-                    INSERT INTO issue_reports(id, issue_id, report_id, link_reason, score, linked_at)
-                    VALUES (?, ?, ?, ?, ?, ?)
-                    """, UUID.randomUUID().toString(), issueId, report.id, "new_issue", 1.0, now.toString());
-            report.issueId = issueId;
-            audit(report.authorId, "ISSUE_DRAFT_CREATED", "issue", issueId, now);
         }
         return report;
     }

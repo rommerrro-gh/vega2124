@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Пульс дома — диспетчер</title>
+  <link rel="stylesheet" href="/miniapp/style.css">
+  <link rel="stylesheet" href="/miniapp/extended.css">
+  <link rel="stylesheet" href="/dispatcher/style.css">
+  <script src="https://st.max.ru/js/max-web-app.js" defer></script>
+  <script src="/dispatcher/app.js" defer></script>
+</head>
+<body>
+  <main class="shell">
+    <header class="topbar"><span class="mark">◉</span><span>Пульс дома</span><span class="topbar-note">КАБИНЕТ</span></header>
+    <section class="hero"><p class="eyebrow">ДИСПЕТЧЕРУ</p><h1>Очередь заявок</h1><p>Просмотрите новое обращение и зафиксируйте следующий шаг.</p></section>
+    <div id="notice" class="notice" role="alert" hidden></div>
+    <section class="panel">
+      <label for="house">Дом</label><select id="house"><option value="">Загрузка домов…</option></select>
+      <div id="issue-list"></div>
+    </section>
+    <section id="issue-detail" class="panel detail-panel" hidden>
+      <div class="step"><span>→</span> Карточка заявки</div>
+      <h2 id="issue-title"></h2>
+      <p id="issue-address" class="muted"></p>
+      <p id="issue-location" class="muted"></p>
+      <p id="issue-time" class="muted"></p>
+      <p id="issue-description"></p>
+      <div id="issue-attachments"></div>
+      <div class="result-meta"><span id="issue-status"></span><span id="issue-participants"></span></div>
+      <label for="reason">Комментарий к изменению статуса</label>
+      <textarea id="reason" maxlength="1000" placeholder="Что сделано или кому передана задача"></textarea>
+      <button id="next-status" type="button" class="primary"></button>
+    </section>
+  </main>
+</body>
+</html>

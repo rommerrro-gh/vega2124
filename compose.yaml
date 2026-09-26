@@ -4,6 +4,7 @@ services:
     ports:
       - "8080:8080"
     environment:
+      SPRING_PROFILES_ACTIVE: ${SPRING_PROFILES_ACTIVE:-}
       SQLITE_URL: jdbc:sqlite:/app/data/pulse-doma.db
       REDIS_HOST: redis
       MAX_WEBHOOK_SECRET: ${MAX_WEBHOOK_SECRET:-local-dev-secret}

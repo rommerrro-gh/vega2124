@@ -13,13 +13,19 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
-import ru.pulsedoma.issues.IssuePriority;
 import ru.pulsedoma.issues.IssueStatus;
+import ru.pulsedoma.issues.MiniAppService;
+import java.security.Principal;
 
 @Validated
 @RestController
 @RequestMapping("/v1/issues")
 public class IssuesController {
+    private final MiniAppService miniApp;
+
+    public IssuesController(MiniAppService miniApp) {
+        this.miniApp = miniApp;
+    }
     @GetMapping("/candidates")
     public void candidates(@RequestParam @NotBlank String houseId,
                            @RequestParam @NotBlank String query) {
@@ -27,13 +33,19 @@ public class IssuesController {
     }
 
     @PostMapping
-    public void create(@Valid @RequestBody CreateIssueRequest request) {
-        throw PendingOperation.notImplemented();
+    public MiniAppService.IssueView create(@Valid @RequestBody CreateIssueRequest request, Principal principal) {
+        return miniApp.createIssue(request.reportId(), principal.getName());
+    }
+
+    @GetMapping("/{id}")
+    public MiniAppService.IssueView get(@PathVariable @NotBlank String id, Principal principal) {
+        return miniApp.issue(id, principal.getName());
     }
 
     @PostMapping("/{id}/join")
-    public void join(@PathVariable @NotBlank String id, @Valid @RequestBody JoinIssueRequest request) {
-        throw PendingOperation.notImplemented();
+    public MiniAppService.IssueView join(@PathVariable @NotBlank String id,
+                                          @Valid @RequestBody JoinIssueRequest request, Principal principal) {
+        return miniApp.joinIssue(id, request.reportId(), principal.getName());
     }
 
     @PostMapping("/{id}/merge")
@@ -47,8 +59,10 @@ public class IssuesController {
     }
 
     @PatchMapping("/{id}/status")
-    public void changeStatus(@PathVariable @NotBlank String id, @Valid @RequestBody ChangeStatusRequest request) {
-        throw PendingOperation.notImplemented();
+    public MiniAppService.IssueView changeStatus(@PathVariable @NotBlank String id,
+                                                  @Valid @RequestBody ChangeStatusRequest request,
+                                                  Principal principal) {
+        return miniApp.changeStatus(id, principal.getName(), request.status(), request.reason());
     }
 
     @PostMapping("/{id}/verify")
@@ -61,8 +75,7 @@ public class IssuesController {
         throw PendingOperation.notImplemented();
     }
 
-    public record CreateIssueRequest(@NotBlank String houseId, @NotBlank String category,
-                                     @NotBlank String description, @NotNull IssuePriority priority) {}
+    public record CreateIssueRequest(@NotBlank String reportId) {}
     public record JoinIssueRequest(@NotBlank String reportId) {}
     public record MergeIssueRequest(@NotBlank String targetIssueId) {}
     public record SplitIssueRequest(@NotBlank String reportId, @NotBlank String reason) {}

@@ -9,5 +9,6 @@ target/
 *.ipr
 *.iws
 out/
+data/
 .run/
 .DS_Store

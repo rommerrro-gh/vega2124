@@ -1,0 +1,4 @@
+input{display:block;width:100%;font:inherit;color:#172b24;background:#fbfcfa;border:1px solid #d5e1d8;border-radius:13px;padding:14px;outline:none}
+input:focus{border-color:#16895f;box-shadow:0 0 0 3px #cdeedc}
+input[type=file]{font-size:13px}
+.attachment-link{display:block;width:100%;text-align:left;border:1px solid #dce7dd;background:#f7fbf8;color:#126246;border-radius:10px;padding:11px 12px;margin:8px 0;cursor:pointer}

@@ -9,19 +9,27 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RestController;
+import ru.pulsedoma.issues.MiniAppService;
+import java.security.Principal;
+import java.util.List;
 
 @Validated
 @RestController
 public class IdentityController {
+    private final MiniAppService miniApp;
+
+    public IdentityController(MiniAppService miniApp) {
+        this.miniApp = miniApp;
+    }
     @PostMapping("/v1/invitations/{token}/accept")
-    public void acceptInvitation(@PathVariable @NotBlank String token,
-                                 @Valid @RequestBody AcceptInvitationRequest request) {
-        throw PendingOperation.notImplemented();
+    public MiniAppService.HouseView acceptInvitation(@PathVariable @NotBlank String token,
+                                                      Principal principal) {
+        return miniApp.acceptInvitation(token, principal.getName());
     }
 
     @GetMapping("/v1/me/houses")
-    public void getMyHouses() {
-        throw PendingOperation.notImplemented();
+    public List<MiniAppService.HouseView> getMyHouses(Principal principal) {
+        return miniApp.houses(principal.getName());
     }
 
     @PutMapping("/v1/me/active-house")
@@ -29,6 +37,5 @@ public class IdentityController {
         throw PendingOperation.notImplemented();
     }
 
-    public record AcceptInvitationRequest(@NotBlank String maxUserId) {}
     public record SetActiveHouseRequest(@NotBlank String houseId) {}
 }

@@ -23,7 +23,7 @@ public class CandidateRetriever {
     }
 
     public List<DuplicateCandidate> findCandidates(String houseId, String normalizedText,
-                                                    String category, Instant startedAt) {
+                                                    String category, String locationKey, Instant startedAt) {
         if (houseId == null || houseId.isBlank() || normalizedText == null || normalizedText.isBlank()) {
             return List.of();
         }
@@ -39,6 +39,8 @@ public class CandidateRetriever {
                 FROM issues_fts JOIN issues i ON i.rowid = issues_fts.rowid
                 WHERE issues_fts MATCH ? AND i.house_id = ?
                   AND i.status IN ('OPEN', 'IN_PROGRESS', 'ASSIGNED')
+                  AND (? IS NULL OR i.category = ?)
+                  AND (? IS NULL OR json_extract(i.zone_json, '$.key') = ?)
                   AND datetime(i.created_at) >= datetime(?)
                   AND datetime(i.created_at) <= datetime(?)
                 ORDER BY rank LIMIT 10
@@ -52,16 +54,18 @@ public class CandidateRetriever {
             boolean sameCategory = category != null && category.equals(rs.getString("category"));
             Instant created = parseSqliteTime(rs.getString("created_at"));
             double recency = Math.max(0, 1 - (double) Duration.between(created, now).toHours() / (30 * 24));
-            double score = category == null || category.isBlank()
-                    ? 0.7 * text + 0.3 * recency
-                    : 0.4 * (sameCategory ? 1 : 0) + 0.4 * text + 0.2 * recency;
+            double score = locationKey == null
+                    ? (category == null || category.isBlank() ? 0.7 * text + 0.3 * recency
+                       : 0.4 * (sameCategory ? 1 : 0) + 0.4 * text + 0.2 * recency)
+                    : new DuplicateScorer().score(sameCategory ? 1 : 0, 1, recency, text);
             List<String> reasons = new java.util.ArrayList<>();
             if (sameCategory) reasons.add("same_category");
+            if (locationKey != null) reasons.add("same_location");
             if (shared > 0) reasons.add("shared_terms:" + shared);
             if (recency >= 0.8) reasons.add("recent_issue");
             return new DuplicateCandidate(rs.getString("id"), Math.round(score * 10000) / 10000.0,
                     List.copyOf(reasons));
-        }, match, houseId, startedAt.toString(), now.toString());
+        }, match, houseId, category, category, locationKey, locationKey, startedAt.toString(), now.toString());
         return found.stream().sorted(Comparator.comparingDouble(DuplicateCandidate::score).reversed()).toList();
     }
 

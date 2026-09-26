@@ -17,6 +17,9 @@ import ru.pulsedoma.issues.Report;
 import ru.pulsedoma.issues.ReportService;
 
 import java.util.List;
+import java.security.Principal;
+import java.time.Instant;
+import jakarta.validation.constraints.NotNull;
 
 @Validated
 @RestController
@@ -30,10 +33,11 @@ public class ReportsController {
 
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
-    public CreateReportResponse create(@Valid @RequestBody CreateReportRequest request) {
+    public CreateReportResponse create(@Valid @RequestBody CreateReportRequest request, Principal principal) {
         Report report = reports.createReport(new CreateReportCommand(
-                request.houseId(), request.authorId(), request.text(), request.category()));
-        return new CreateReportResponse(report.id, report.correlationId, report.candidates, report.issueId);
+                request.houseId(), principal.getName(), request.text(), request.category(),
+                request.location(), request.occurredAt()));
+        return new CreateReportResponse(report.id, report.correlationId, report.candidates);
     }
 
     @PostMapping("/{id}/withdraw")
@@ -41,10 +45,12 @@ public class ReportsController {
         throw PendingOperation.notImplemented();
     }
 
-    public record CreateReportRequest(@NotBlank String houseId, @NotBlank String authorId,
+    public record CreateReportRequest(@NotBlank String houseId,
                                       @NotBlank @Size(max = 4000) String text,
-                                      @Size(max = 100) String category) {}
+                                      @NotBlank @Size(max = 100) String category,
+                                      @NotBlank @Size(max = 160) String location,
+                                      @NotNull Instant occurredAt) {}
     public record CreateReportResponse(String reportId, String correlationId,
-                                       List<DuplicateCandidate> candidates, String issueId) {}
+                                       List<DuplicateCandidate> candidates) {}
     public record WithdrawReportRequest(@NotBlank @Size(max = 1000) String reason) {}
 }
