@@ -19,6 +19,11 @@
       <p>Проверим, есть ли похожая заявка, и сохраним ваш выбор.</p>
     </section>
     <div id="notice" class="notice" role="alert" hidden></div>
+    <section class="panel">
+      <div class="step">МОИ ЗАЯВКИ</div>
+      <div id="my-issues"></div>
+      <button id="refresh-issues" class="secondary" type="button">Обновить заявки</button>
+    </section>
     <section id="form-step" class="panel">
       <div class="step"><span>01</span> Описание проблемы</div>
       <form id="report-form">
@@ -61,6 +66,14 @@
       <p id="result-description"></p>
       <div id="result-attachments"></div>
       <div class="result-meta"><span id="result-status"></span><span id="result-participants"></span></div>
+      <div id="verification" class="verification" hidden>
+        <h3>Работа выполнена?</h3>
+        <p id="verification-deadline" class="muted"></p>
+        <label for="verification-comment">Комментарий, если проблема осталась</label>
+        <textarea id="verification-comment" maxlength="2000" placeholder="Что ещё не исправлено?"></textarea>
+        <button id="confirm-result" class="primary" type="button">Да, проблема решена</button>
+        <button id="reject-result" class="secondary" type="button">Нет, проблема осталась</button>
+      </div>
       <button id="again" class="secondary" type="button">Сообщить о другой проблеме</button>
     </section>
   </main>

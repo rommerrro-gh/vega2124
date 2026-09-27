@@ -66,8 +66,10 @@ public class IssuesController {
     }
 
     @PostMapping("/{id}/verify")
-    public void verify(@PathVariable @NotBlank String id, @Valid @RequestBody VerifyIssueRequest request) {
-        throw PendingOperation.notImplemented();
+    public MiniAppService.IssueView verify(@PathVariable @NotBlank String id,
+                                           @Valid @RequestBody VerifyIssueRequest request,
+                                           Principal principal) {
+        return miniApp.verify(id, principal.getName(), request.confirmed(), request.comment());
     }
 
     @PostMapping("/{id}/comments")

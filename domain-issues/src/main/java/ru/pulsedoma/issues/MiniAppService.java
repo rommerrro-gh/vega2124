@@ -27,8 +27,19 @@ public class MiniAppService {
     public record HouseView(String id, String address) {}
     public record IssueView(String id, String houseId, String address, String category,
                             IssueStatus status, String description, String location,
-                            String occurredAt, int participants,
+                            String occurredAt, String verificationDueAt, int participants,
                             List<AttachmentService.AttachmentView> attachments) {}
+
+    public List<IssueView> myIssues(String userId) {
+        List<String> ids = jdbc.query("""
+                SELECT i.id FROM issues i JOIN issue_participants p ON p.issue_id = i.id
+                WHERE p.user_id = ? AND EXISTS (
+                  SELECT 1 FROM house_memberships m WHERE m.house_id = i.house_id
+                    AND m.user_id = p.user_id AND m.verification_status = 'VERIFIED')
+                ORDER BY i.updated_at DESC LIMIT 100
+                """, (rs, row) -> rs.getString(1), userId);
+        return ids.stream().map(id -> issue(id, userId)).toList();
+    }
 
     public List<HouseView> houses(String userId) {
         return jdbc.query("""
@@ -85,6 +96,7 @@ public class MiniAppService {
                        (SELECT r.occurred_at FROM issue_reports ir JOIN reports r ON r.id = ir.report_id
                         WHERE ir.issue_id = i.id AND ir.unlinked_at IS NULL
                         ORDER BY ir.linked_at LIMIT 1) AS occurred_at,
+                       i.verification_due_at,
                        (SELECT COUNT(*) FROM issue_participants p WHERE p.issue_id = i.id) AS participants
                 FROM issues i JOIN houses h ON h.id = i.house_id
                 JOIN house_memberships m ON m.house_id = i.house_id
@@ -93,11 +105,13 @@ public class MiniAppService {
                 """, (rs, row) -> new IssueView(rs.getString("id"), rs.getString("house_id"),
                 rs.getString("address"), rs.getString("category"), IssueStatus.valueOf(rs.getString("status")),
                 rs.getString("description"), rs.getString("location"), rs.getString("occurred_at"),
+                rs.getString("verification_due_at"),
                 rs.getInt("participants"), List.of()), issueId, userId);
         if (found.isEmpty()) throw new BusinessException("ISSUE_NOT_FOUND", "Issue is not available");
         IssueView row = found.get(0);
         return new IssueView(row.id(), row.houseId(), row.address(), row.category(), row.status(),
-                row.description(), row.location(), row.occurredAt(), row.participants(), attachments.forIssue(issueId));
+                row.description(), row.location(), row.occurredAt(), row.verificationDueAt(),
+                row.participants(), attachments.forIssue(issueId));
     }
 
     @Transactional
@@ -135,7 +149,7 @@ public class MiniAppService {
         requireDispatcher(houseId, userId);
         List<String> ids = jdbc.query("""
                 SELECT id FROM issues WHERE house_id = ?
-                  AND status IN ('DRAFT', 'OPEN', 'ASSIGNED', 'IN_PROGRESS', 'RESOLVED')
+                  AND status IN ('DRAFT', 'OPEN', 'ASSIGNED', 'IN_PROGRESS', 'VERIFICATION_72H', 'REOPENED')
                 ORDER BY created_at DESC LIMIT 100
                 """, (rs, row) -> rs.getString(1), houseId);
         return ids.stream().map(id -> issue(id, userId)).toList();
@@ -156,21 +170,128 @@ public class MiniAppService {
             case OPEN -> next == IssueStatus.ASSIGNED;
             case ASSIGNED -> next == IssueStatus.IN_PROGRESS;
             case IN_PROGRESS -> next == IssueStatus.RESOLVED;
+            case REOPENED -> next == IssueStatus.ASSIGNED;
             default -> false;
         };
         if (!allowed) throw new BusinessException("INVALID_STATUS_TRANSITION", "This status transition is not allowed");
         String now = Instant.now().toString();
         jdbc.update("UPDATE issues SET status = ?, dispatcher_id = ?, updated_at = ? WHERE id = ?",
                 next.name(), userId, now, issueId);
-        jdbc.update("""
-                INSERT INTO status_events(id, issue_id, from_status, to_status, actor_id, reason, created_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?)
-                """, UUID.randomUUID().toString(), issueId, current.status().name(), next.name(), userId, reason, now);
+        statusEvent(issueId, current.status(), next, userId, reason, now);
         jdbc.update("""
                 INSERT INTO audit_events(id, actor_id, action, entity, entity_id, created_at)
                 VALUES (?, ?, 'ISSUE_STATUS_CHANGED', 'issue', ?, ?)
                 """, UUID.randomUUID().toString(), userId, issueId, now);
+        if (next == IssueStatus.RESOLVED) startVerification(issueId, now);
         return issue(issueId, userId);
+    }
+
+    @Transactional
+    public IssueView verify(String issueId, String userId, boolean confirmed, String comment) {
+        if (!confirmed && (comment == null || comment.isBlank())) {
+            throw new BusinessException("COMMENT_REQUIRED", "Describe what remains unresolved");
+        }
+        List<Map<String, Object>> rows = jdbc.queryForList("""
+                SELECT i.status, i.verification_round, i.verification_due_at FROM issues i
+                JOIN issue_participants p ON p.issue_id = i.id AND p.user_id = ?
+                WHERE i.id = ?
+                """, userId, issueId);
+        if (rows.isEmpty()) throw new BusinessException("ISSUE_NOT_FOUND", "Issue is not available");
+        Map<String, Object> row = rows.get(0);
+        if (!IssueStatus.VERIFICATION_72H.name().equals(row.get("status"))) {
+            throw new BusinessException("VERIFICATION_NOT_OPEN", "Issue is not awaiting verification");
+        }
+        Instant now = Instant.now();
+        if (now.isAfter(Instant.parse((String) row.get("verification_due_at")))) {
+            throw new BusinessException("VERIFICATION_EXPIRED", "Verification period has expired");
+        }
+        int round = ((Number) row.get("verification_round")).intValue();
+        Integer existing = jdbc.queryForObject("""
+                SELECT COUNT(*) FROM issue_verification_responses
+                WHERE issue_id = ? AND verification_round = ? AND user_id = ?
+                """, Integer.class, issueId, round, userId);
+        if (existing != null && existing > 0) {
+            throw new BusinessException("ALREADY_VERIFIED", "Response has already been recorded");
+        }
+        jdbc.update("""
+                INSERT INTO issue_verification_responses
+                    (issue_id, verification_round, user_id, confirmed, comment, created_at)
+                VALUES (?, ?, ?, ?, ?, ?)
+                """, issueId, round, userId, confirmed ? 1 : 0, comment, now.toString());
+        if (!confirmed) {
+            updateVerificationStatus(issueId, IssueStatus.REOPENED, userId, comment, now.toString());
+        } else {
+            Integer waiting = jdbc.queryForObject("""
+                    SELECT COUNT(*) FROM issue_participants p
+                    WHERE p.issue_id = ? AND NOT EXISTS (
+                      SELECT 1 FROM issue_verification_responses r
+                      WHERE r.issue_id = p.issue_id AND r.user_id = p.user_id
+                        AND r.verification_round = ? AND r.confirmed = 1)
+                    """, Integer.class, issueId, round);
+            if (waiting != null && waiting == 0) {
+                updateVerificationStatus(issueId, IssueStatus.CLOSED_CONFIRMED, userId,
+                        "Все участники подтвердили решение", now.toString());
+            }
+        }
+        return issue(issueId, userId);
+    }
+
+    @Transactional
+    public int closeExpiredVerifications() {
+        List<String> expired = jdbc.query("""
+                SELECT id FROM issues WHERE status = 'VERIFICATION_72H'
+                  AND datetime(verification_due_at) <= datetime('now')
+                """, (rs, row) -> rs.getString(1));
+        String now = Instant.now().toString();
+        for (String id : expired) {
+            updateVerificationStatus(id, IssueStatus.CLOSED_UNCONFIRMED, null,
+                    "Срок подтверждения истёк", now);
+        }
+        return expired.size();
+    }
+
+    private void startVerification(String issueId, String now) {
+        String dueAt = Instant.parse(now).plusSeconds(72 * 3600).toString();
+        jdbc.update("""
+                UPDATE issues SET status = 'VERIFICATION_72H', verification_round = verification_round + 1,
+                                  verification_due_at = ?, updated_at = ? WHERE id = ?
+                """, dueAt, now, issueId);
+        statusEvent(issueId, IssueStatus.RESOLVED, IssueStatus.VERIFICATION_72H, null,
+                "Ожидается подтверждение жителей", now);
+        jdbc.update("""
+                INSERT INTO notification_outbox
+                    (id, issue_id, verification_round, recipient_user_id, kind, body, next_attempt_at)
+                SELECT lower(hex(randomblob(16))), i.id, i.verification_round, p.user_id,
+                       'VERIFY_RESULT',
+                       'Работа по заявке «' || COALESCE(json_extract(i.zone_json, '$.label'), i.category, 'Проблема дома') ||
+                       '» отмечена выполненной. Откройте мини-приложение «Пульс дома» и подтвердите результат в течение 72 часов.', ?
+                FROM issues i JOIN issue_participants p ON p.issue_id = i.id
+                JOIN users u ON u.id = p.user_id
+                WHERE i.id = ? AND u.max_user_id IS NOT NULL AND trim(u.max_user_id) != ''
+                """, now, issueId);
+    }
+
+    private void updateVerificationStatus(String issueId, IssueStatus next, String actorId,
+                                          String reason, String now) {
+        jdbc.update("UPDATE issues SET status = ?, verification_due_at = NULL, updated_at = ? WHERE id = ?",
+                next.name(), now, issueId);
+        jdbc.update("""
+                UPDATE notification_outbox SET cancelled_at = ?
+                WHERE issue_id = ? AND sent_at IS NULL AND cancelled_at IS NULL
+                """, now, issueId);
+        statusEvent(issueId, IssueStatus.VERIFICATION_72H, next, actorId, reason, now);
+        jdbc.update("""
+                INSERT INTO audit_events(id, actor_id, action, entity, entity_id, created_at)
+                VALUES (?, ?, 'ISSUE_VERIFIED', 'issue', ?, ?)
+                """, UUID.randomUUID().toString(), actorId, issueId, now);
+    }
+
+    private void statusEvent(String issueId, IssueStatus previous, IssueStatus next,
+                             String actorId, String reason, String now) {
+        jdbc.update("""
+                INSERT INTO status_events(id, issue_id, from_status, to_status, actor_id, reason, created_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+                """, UUID.randomUUID().toString(), issueId, previous.name(), next.name(), actorId, reason, now);
     }
 
     private String issueHouse(String issueId) {

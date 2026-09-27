@@ -62,7 +62,6 @@ class ControllerContractTest {
                 get("/v1/issues/candidates").param("houseId", "house").param("query", "light"),
                 json(post("/v1/issues/issue/merge"), "{\"targetIssueId\":\"target\"}"),
                 json(post("/v1/issues/issue/split"), "{\"reportId\":\"report\",\"reason\":\"test\"}"),
-                json(post("/v1/issues/issue/verify"), "{\"confirmed\":true}"),
                 json(post("/v1/issues/issue/comments"), "{\"text\":\"test\"}"),
                 json(post("/v1/incidents"), "{\"houseId\":\"house\",\"type\":\"FIRE\",\"description\":\"test\"}"),
                 get("/v1/houses/house"),

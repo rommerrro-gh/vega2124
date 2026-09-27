@@ -12,6 +12,8 @@ import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.mock.web.MockMultipartFile;
+import ru.pulsedoma.issues.MiniAppService;
+import ru.pulsedoma.issues.IssueStatus;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -47,6 +49,7 @@ class MiniAppFlowTest {
     @Autowired MockMvc mvc;
     @Autowired ObjectMapper mapper;
     @Autowired JdbcTemplate jdbc;
+    @Autowired MiniAppService issues;
 
     @Test
     void residentExplicitlyCreatesOrJoinsIssueInOwnHouse() throws Exception {
@@ -120,13 +123,72 @@ class MiniAppFlowTest {
         assertEquals(issueId, joined.path("id").asText());
         assertEquals(2, jdbc.queryForObject("SELECT COUNT(*) FROM issue_reports WHERE issue_id = ?", Integer.class, issueId));
         assertTrue(joined.path("address").asText().contains("Баумана"));
+        jdbc.update("UPDATE users SET max_user_id = '123456' WHERE id = 'demo-resident-1'");
+        jdbc.update("INSERT INTO users(id, display_name, status) VALUES ('second-resident', 'Второй житель', 'ACTIVE')");
+        jdbc.update("""
+                INSERT INTO house_memberships(house_id, user_id, role, verification_status)
+                VALUES ('demo-house-1', 'second-resident', 'RESIDENT', 'VERIFIED')
+                """);
+        jdbc.update("""
+                INSERT INTO issue_participants(issue_id, user_id, confirmation_type, confirmed_at)
+                VALUES (?, 'second-resident', 'resident_join', CURRENT_TIMESTAMP)
+                """, issueId);
         for (String next : java.util.List.of("ASSIGNED", "IN_PROGRESS", "RESOLVED")) {
             mvc.perform(patch("/v1/issues/" + issueId + "/status").header("X-Demo-Session", "dispatcher")
                             .contentType("application/json")
                             .content("{\"status\":\"" + next + "\",\"reason\":\"Этап работы\"}"))
                     .andExpect(status().isOk());
         }
-        assertEquals(4, jdbc.queryForObject("SELECT COUNT(*) FROM status_events WHERE issue_id = ?", Integer.class, issueId));
+        assertEquals("VERIFICATION_72H", issues.issue(issueId, "demo-resident-1").status().name());
+        assertEquals(5, jdbc.queryForObject("SELECT COUNT(*) FROM status_events WHERE issue_id = ?", Integer.class, issueId));
+        assertEquals(1, jdbc.queryForObject("SELECT COUNT(*) FROM notification_outbox WHERE issue_id = ?", Integer.class, issueId));
+        mvc.perform(post("/v1/issues/" + issueId + "/verify").header("X-Demo-Session", "dispatcher")
+                        .contentType("application/json").content("{\"confirmed\":true}"))
+                .andExpect(status().isNotFound());
+        JsonNode firstConfirmation = json(mvc.perform(post("/v1/issues/" + issueId + "/verify")
+                .header("X-Demo-Session", "true").contentType("application/json")
+                .content("{\"confirmed\":true}"))
+                .andExpect(status().isOk()).andReturn().getResponse().getContentAsByteArray());
+        assertEquals("VERIFICATION_72H", firstConfirmation.path("status").asText());
+        mvc.perform(post("/v1/issues/" + issueId + "/verify").header("X-Demo-Session", "true")
+                        .contentType("application/json").content("{\"confirmed\":true}"))
+                .andExpect(status().isBadRequest());
+        assertEquals(IssueStatus.REOPENED,
+                issues.verify(issueId, "second-resident", false, "Свет снова погас").status());
+        assertEquals(1, jdbc.queryForObject("""
+                SELECT COUNT(*) FROM notification_outbox
+                WHERE issue_id = ? AND cancelled_at IS NOT NULL
+                """, Integer.class, issueId));
+        for (String next : java.util.List.of("ASSIGNED", "IN_PROGRESS", "RESOLVED")) {
+            mvc.perform(patch("/v1/issues/" + issueId + "/status").header("X-Demo-Session", "dispatcher")
+                            .contentType("application/json")
+                            .content("{\"status\":\"" + next + "\",\"reason\":\"Повторная работа\"}"))
+                    .andExpect(status().isOk());
+        }
+        assertEquals(2, jdbc.queryForObject("SELECT verification_round FROM issues WHERE id = ?", Integer.class, issueId));
+        assertEquals(2, jdbc.queryForObject("SELECT COUNT(*) FROM notification_outbox WHERE issue_id = ?", Integer.class, issueId));
+        mvc.perform(post("/v1/issues/" + issueId + "/verify").header("X-Demo-Session", "true")
+                        .contentType("application/json").content("{\"confirmed\":true}"))
+                .andExpect(status().isOk());
+        assertEquals(IssueStatus.CLOSED_CONFIRMED,
+                issues.verify(issueId, "second-resident", true, null).status());
+        JsonNode mine = json(mvc.perform(get("/v1/me/issues").header("X-Demo-Session", "true"))
+                .andExpect(status().isOk()).andReturn().getResponse().getContentAsByteArray());
+        assertEquals("CLOSED_CONFIRMED", mine.get(0).path("status").asText());
+
+        JsonNode expiringReport = reportAt("Свет моргает на лестнице", "Подъезд 3");
+        JsonNode expiringIssue = json(mvc.perform(post("/v1/issues").header("X-Demo-Session", "true")
+                .contentType("application/json")
+                .content("{\"reportId\":\"" + expiringReport.path("reportId").asText() + "\"}"))
+                .andExpect(status().isOk()).andReturn().getResponse().getContentAsByteArray());
+        String expiringId = expiringIssue.path("id").asText();
+        jdbc.update("""
+                UPDATE issues SET status = 'VERIFICATION_72H', verification_round = 1,
+                                  verification_due_at = '2020-01-01T00:00:00Z' WHERE id = ?
+                """, expiringId);
+        assertEquals(1, issues.closeExpiredVerifications());
+        assertEquals(IssueStatus.CLOSED_UNCONFIRMED,
+                issues.issue(expiringId, "demo-resident-1").status());
 
         mvc.perform(post("/v1/issues").header("X-Demo-Session", "true")
                         .contentType("application/json").content("{\"reportId\":\"" + firstId + "\"}"))

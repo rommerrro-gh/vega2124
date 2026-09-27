@@ -8,6 +8,12 @@ const transitions = {
   OPEN: ["ASSIGNED", "Назначить себе"],
   ASSIGNED: ["IN_PROGRESS", "Начать работу"],
   IN_PROGRESS: ["RESOLVED", "Отметить выполненной"],
+  REOPENED: ["ASSIGNED", "Повторно назначить себе"],
+};
+const statusLabels = {
+  DRAFT: "Новая", OPEN: "Принята", ASSIGNED: "Назначена",
+  IN_PROGRESS: "В работе", VERIFICATION_72H: "Ожидает подтверждения",
+  REOPENED: "Открыта повторно",
 };
 
 async function api(path, options = {}) {
@@ -39,7 +45,7 @@ async function loadQueue() {
     const button = document.createElement("button");
     button.type = "button";
     button.className = "attachment-link";
-    button.textContent = `${issue.status} · ${issue.location || "Место не указано"} · ${issue.description}`;
+    button.textContent = `${statusLabels[issue.status] || issue.status} · ${issue.location || "Место не указано"} · ${issue.description}`;
     button.addEventListener("click", () => showIssue(issue.id));
     list.append(button);
   }
@@ -52,7 +58,7 @@ async function showIssue(id) {
   $("issue-location").textContent = current.location ? `Место: ${current.location}` : "";
   $("issue-time").textContent = current.occurredAt ? `Замечено: ${new Date(current.occurredAt).toLocaleString("ru-RU")}` : "";
   $("issue-description").textContent = current.description;
-  $("issue-status").textContent = current.status;
+  $("issue-status").textContent = statusLabels[current.status] || current.status;
   $("issue-participants").textContent = `Участников: ${current.participants}`;
   const attachments = $("issue-attachments");
   attachments.replaceChildren();
@@ -101,6 +107,7 @@ $("house").addEventListener("change", () => {
   $("issue-detail").hidden = true;
   loadQueue().catch(error => notice(error.message));
 });
+$("refresh-queue").addEventListener("click", () => loadQueue().catch(error => notice(error.message)));
 
 api("/v1/me/houses").then(houses => {
   const select = $("house");

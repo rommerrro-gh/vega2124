@@ -5,6 +5,13 @@ const $ = (id) => document.getElementById(id);
 let reportId = null;
 let reportData = null;
 let uploaded = 0;
+let currentIssue = null;
+const statusLabels = {
+  DRAFT: "Ожидает диспетчера", OPEN: "Принята", ASSIGNED: "Назначена",
+  IN_PROGRESS: "В работе", VERIFICATION_72H: "Ожидает вашего подтверждения",
+  CLOSED_CONFIRMED: "Закрыта после подтверждения",
+  CLOSED_UNCONFIRMED: "Закрыта по истечении срока", REOPENED: "Открыта повторно",
+};
 
 async function api(path, options = {}) {
   const response = await fetch(path, {
@@ -42,13 +49,18 @@ async function loadHouses() {
 }
 
 function showResult(issue) {
-  $("result-title").textContent = issue.status === "DRAFT" ? "Новая заявка сохранена" : "Вы присоединились к заявке";
+  currentIssue = issue;
+  $("result-title").textContent = issue.status === "DRAFT" ? "Новая заявка сохранена" : "Заявка";
   $("result-address").textContent = issue.address;
   $("result-location").textContent = issue.location ? `Место: ${issue.location}` : "";
   $("result-time").textContent = issue.occurredAt ? `Замечено: ${new Date(issue.occurredAt).toLocaleString("ru-RU")}` : "";
   $("result-description").textContent = issue.description;
-  $("result-status").textContent = issue.status === "DRAFT" ? "Ожидает диспетчера" : issue.status;
+  $("result-status").textContent = statusLabels[issue.status] || issue.status;
   $("result-participants").textContent = `Участников: ${issue.participants}`;
+  $("verification").hidden = issue.status !== "VERIFICATION_72H";
+  $("verification-deadline").textContent = issue.verificationDueAt
+    ? `Подтвердите до ${new Date(issue.verificationDueAt).toLocaleString("ru-RU")}` : "";
+  $("verification-comment").value = "";
   const files = $("result-attachments");
   files.replaceChildren();
   for (const attachment of issue.attachments || []) {
@@ -70,6 +82,41 @@ function showResult(issue) {
   }
   notice("");
   step("result-step");
+  loadMyIssues().catch(error => notice(error.message));
+}
+
+async function loadMyIssues() {
+  const issues = await api("/v1/me/issues");
+  const container = $("my-issues");
+  container.replaceChildren();
+  if (!issues.length) {
+    const empty = document.createElement("p");
+    empty.className = "muted";
+    empty.textContent = "Заявок пока нет.";
+    container.append(empty);
+  }
+  for (const issue of issues) {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "attachment-link";
+    button.textContent = `${statusLabels[issue.status] || issue.status} · ${issue.location || issue.address} · ${issue.description}`;
+    button.addEventListener("click", () => showResult(issue));
+    container.append(button);
+  }
+}
+
+async function verifyResult(confirmed) {
+  if (!currentIssue) return;
+  const comment = $("verification-comment").value.trim();
+  if (!confirmed && !comment) { notice("Опишите, что осталось неисправным."); return; }
+  for (const id of ["confirm-result", "reject-result"]) $(id).disabled = true;
+  try {
+    const issue = await api(`/v1/issues/${encodeURIComponent(currentIssue.id)}/verify`, {
+      method: "POST", body: JSON.stringify({ confirmed, comment }),
+    });
+    showResult(issue);
+  } catch (error) { notice(error.message); }
+  finally { for (const id of ["confirm-result", "reject-result"]) $(id).disabled = false; }
 }
 
 async function decide(path, body) {
@@ -149,6 +196,9 @@ $("report-form").addEventListener("submit", async (event) => {
 });
 
 $("new-issue").addEventListener("click", () => decide("/v1/issues", { reportId }));
+$("confirm-result").addEventListener("click", () => verifyResult(true));
+$("reject-result").addEventListener("click", () => verifyResult(false));
+$("refresh-issues").addEventListener("click", () => loadMyIssues().catch(error => notice(error.message)));
 $("again").addEventListener("click", () => {
   reportId = null;
   reportData = null;
@@ -159,4 +209,4 @@ $("again").addEventListener("click", () => {
 });
 const localNow = new Date(Date.now() - new Date().getTimezoneOffset() * 60000);
 $("occurred-at").value = localNow.toISOString().slice(0, 16);
-loadHouses().catch((error) => notice(error.message));
+Promise.all([loadHouses(), loadMyIssues()]).catch((error) => notice(error.message));

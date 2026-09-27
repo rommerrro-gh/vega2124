@@ -57,6 +57,19 @@ paths:
         '400':
           description: Invalid request
         '401': {description: Missing or invalid MAX initData}
+  /v1/me/issues:
+    get:
+      operationId: getMyIssues
+      summary: List issues joined by the current resident
+      responses:
+        '200':
+          description: Current resident's issues
+          content:
+            application/json:
+              schema:
+                type: array
+                items: {$ref: '#/components/schemas/IssueView'}
+        '401': {description: Missing or invalid MAX initData}
   /v1/me/active-house:
     put:
       operationId: setActiveHouse
@@ -398,17 +411,14 @@ paths:
               $ref: '#/components/schemas/VerifyIssueRequest'
       responses:
         '200':
-          description: Accepted or returned
-        '400':
-          description: Invalid request
-        '403':
-          description: Access denied until JWT and house scope are implemented
-        '501':
-          description: Scaffold endpoint pending implementation
+          description: Verification recorded; the issue closes when all participants confirm or reopens after a rejection
           content:
             application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
+              schema: {$ref: '#/components/schemas/IssueView'}
+        '400':
+          description: Invalid request, duplicate response or expired verification window
+        '401': {description: Missing or invalid MAX initData}
+        '404': {description: Issue unavailable to the current user}
   /v1/issues/{id}/comments:
     post:
       operationId: addIssueComment
@@ -586,6 +596,7 @@ components:
         description: {type: string}
         location: {type: string, nullable: true}
         occurredAt: {type: string, format: date-time, nullable: true}
+        verificationDueAt: {type: string, format: date-time, nullable: true}
         participants: {type: integer}
         attachments:
           type: array
