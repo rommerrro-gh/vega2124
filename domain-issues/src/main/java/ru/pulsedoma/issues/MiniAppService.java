@@ -50,6 +50,16 @@ public class MiniAppService {
                 """, (rs, row) -> new HouseView(rs.getString(1), rs.getString(2)), userId);
     }
 
+    public List<HouseView> dispatcherHouses(String userId) {
+        return jdbc.query("""
+                SELECT DISTINCT h.id, h.address FROM houses h
+                JOIN house_memberships m ON m.house_id = h.id
+                WHERE m.user_id = ? AND m.role = 'DISPATCHER'
+                  AND m.verification_status = 'VERIFIED'
+                ORDER BY h.address
+                """, (rs, row) -> new HouseView(rs.getString(1), rs.getString(2)), userId);
+    }
+
     @Transactional
     public HouseView acceptInvitation(String token, String userId) {
         String hash;

@@ -70,6 +70,19 @@ paths:
                 type: array
                 items: {$ref: '#/components/schemas/IssueView'}
         '401': {description: Missing or invalid MAX initData}
+  /v1/me/dispatcher-houses:
+    get:
+      operationId: getDispatcherHouses
+      summary: List houses where the current user is a verified dispatcher
+      responses:
+        '200':
+          description: Dispatcher houses
+          content:
+            application/json:
+              schema:
+                type: array
+                items: {$ref: '#/components/schemas/HouseView'}
+        '401': {description: Missing or invalid MAX initData}
   /v1/me/active-house:
     put:
       operationId: setActiveHouse

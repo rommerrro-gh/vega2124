@@ -59,6 +59,12 @@ class MiniAppFlowTest {
         JsonNode houses = mapper.readTree(mvc.perform(get("/v1/me/houses").header("X-Demo-Session", "true"))
                 .andExpect(status().isOk()).andReturn().getResponse().getContentAsByteArray());
         assertEquals(2, houses.size());
+        assertEquals(0, json(mvc.perform(get("/v1/me/dispatcher-houses")
+                .header("X-Demo-Session", "true")).andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsByteArray()).size());
+        assertEquals(1, json(mvc.perform(get("/v1/me/dispatcher-houses")
+                .header("X-Demo-Session", "dispatcher")).andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsByteArray()).size());
 
         JsonNode first = report("Свет не работает в подъезде на втором этаже");
         String firstId = first.path("reportId").asText();

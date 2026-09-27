@@ -3,6 +3,7 @@ package ru.pulsedoma.bootstrap;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Test;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.jdbc.datasource.SingleConnectionDataSource;
 import org.springframework.mock.env.MockEnvironment;
 import org.springframework.mock.web.MockHttpServletRequest;
 import org.springframework.mock.web.MockHttpServletResponse;
@@ -13,25 +14,23 @@ import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.util.HexFormat;
-import java.util.List;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.anyString;
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.when;
 
 class MaxInitDataFilterTest {
     @Test
     void acceptsSignedInitDataAndRejectsTampering() throws Exception {
-        JdbcTemplate jdbc = mock(JdbcTemplate.class);
-        when(jdbc.query(anyString(), any(org.springframework.jdbc.core.RowMapper.class), any()))
-                .thenReturn(List.of("resident-1"));
+        SingleConnectionDataSource dataSource = new SingleConnectionDataSource("jdbc:sqlite::memory:", true);
+        JdbcTemplate jdbc = new JdbcTemplate(dataSource);
+        jdbc.execute("""
+                CREATE TABLE users(id TEXT PRIMARY KEY, max_user_id TEXT UNIQUE,
+                                   display_name TEXT NOT NULL, status TEXT NOT NULL)
+                """);
         MaxInitDataFilter filter = new MaxInitDataFilter(jdbc, new ObjectMapper(), new MockEnvironment(),
                 "test-bot-token", "", "");
-        String user = "{\"id\":123}";
+        String user = "{\"id\":123,\"first_name\":\"Иван\",\"last_name\":\"Петров\"}";
         String date = Long.toString(Instant.now().getEpochSecond());
         String data = "auth_date=" + date + "\nuser=" + user;
         byte[] key = hmac("WebAppData".getBytes(StandardCharsets.UTF_8), "test-bot-token");
@@ -46,6 +45,8 @@ class MaxInitDataFilterTest {
         filter.doFilter(valid, validResponse, (request, response) -> called.set(true));
         assertTrue(called.get());
         assertEquals(200, validResponse.getStatus());
+        assertEquals("Иван Петров", jdbc.queryForObject(
+                "SELECT display_name FROM users WHERE max_user_id = '123'", String.class));
 
         MockHttpServletRequest tampered = new MockHttpServletRequest("GET", "/v1/me/houses");
         tampered.addHeader("X-Max-Init-Data", initData.replace("123", "124"));
@@ -54,6 +55,7 @@ class MaxInitDataFilterTest {
         filter.doFilter(tampered, denied, (request, response) -> called.set(true));
         assertEquals(401, denied.getStatus());
         assertTrue(!called.get());
+        dataSource.destroy();
     }
 
     private static byte[] hmac(byte[] key, String text) throws Exception {

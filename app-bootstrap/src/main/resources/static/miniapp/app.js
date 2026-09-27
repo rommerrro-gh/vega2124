@@ -199,6 +199,10 @@ $("new-issue").addEventListener("click", () => decide("/v1/issues", { reportId }
 $("confirm-result").addEventListener("click", () => verifyResult(true));
 $("reject-result").addEventListener("click", () => verifyResult(false));
 $("refresh-issues").addEventListener("click", () => loadMyIssues().catch(error => notice(error.message)));
+$("open-dispatcher").addEventListener("click", () => {
+  const launchData = window.location.hash || (initData ? `#WebAppData=${encodeURIComponent(initData)}` : "");
+  window.location.assign(`/dispatcher/index.html${launchData}`);
+});
 $("again").addEventListener("click", () => {
   reportId = null;
   reportData = null;
@@ -209,4 +213,6 @@ $("again").addEventListener("click", () => {
 });
 const localNow = new Date(Date.now() - new Date().getTimezoneOffset() * 60000);
 $("occurred-at").value = localNow.toISOString().slice(0, 16);
-Promise.all([loadHouses(), loadMyIssues()]).catch((error) => notice(error.message));
+Promise.all([loadHouses(), loadMyIssues(), api("/v1/me/dispatcher-houses").then(houses => {
+  $("open-dispatcher").hidden = houses.length === 0;
+})]).catch((error) => notice(error.message));

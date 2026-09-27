@@ -37,6 +37,11 @@ public class IdentityController {
         return miniApp.myIssues(principal.getName());
     }
 
+    @GetMapping("/v1/me/dispatcher-houses")
+    public List<MiniAppService.HouseView> getDispatcherHouses(Principal principal) {
+        return miniApp.dispatcherHouses(principal.getName());
+    }
+
     @PutMapping("/v1/me/active-house")
     public void setActiveHouse(@Valid @RequestBody SetActiveHouseRequest request) {
         throw PendingOperation.notImplemented();

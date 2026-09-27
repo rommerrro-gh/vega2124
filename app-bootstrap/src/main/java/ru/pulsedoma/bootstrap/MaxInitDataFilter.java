@@ -64,13 +64,16 @@ public class MaxInitDataFilter extends OncePerRequestFilter {
                     && "dispatcher".equals(request.getHeader("X-Demo-Session"))) {
                 userId = demoDispatcherId;
             } else {
-                String maxUserId = verify(request.getHeader("X-Max-Init-Data"));
+                VerifiedMaxUser maxUser = verify(request.getHeader("X-Max-Init-Data"));
                 jdbc.update("""
-                        INSERT OR IGNORE INTO users(id, max_user_id, display_name, status)
+                        INSERT INTO users(id, max_user_id, display_name, status)
                         VALUES (?, ?, ?, 'ACTIVE')
-                        """, java.util.UUID.randomUUID().toString(), maxUserId, "MAX user");
+                        ON CONFLICT(max_user_id) DO UPDATE SET display_name = excluded.display_name
+                        WHERE excluded.display_name != 'MAX user'
+                          AND users.display_name != excluded.display_name
+                        """, java.util.UUID.randomUUID().toString(), maxUser.id(), maxUser.displayName());
                 List<String> users = jdbc.query("SELECT id FROM users WHERE max_user_id = ? AND status = 'ACTIVE'",
-                        (rs, row) -> rs.getString(1), maxUserId);
+                        (rs, row) -> rs.getString(1), maxUser.id());
                 if (users.isEmpty()) throw new IllegalArgumentException("MAX user has no account");
                 userId = users.get(0);
             }
@@ -84,7 +87,9 @@ public class MaxInitDataFilter extends OncePerRequestFilter {
         chain.doFilter(request, response);
     }
 
-    private String verify(String initData) throws Exception {
+    private record VerifiedMaxUser(String id, String displayName) {}
+
+    private VerifiedMaxUser verify(String initData) throws Exception {
         if (botToken.isBlank() || initData == null || initData.length() > 8192) {
             throw new IllegalArgumentException("MAX initData missing");
         }
@@ -108,9 +113,13 @@ public class MaxInitDataFilter extends OncePerRequestFilter {
         if (!MessageDigest.isEqual(expected, HexFormat.of().parseHex(supplied))) {
             throw new IllegalArgumentException("Invalid MAX signature");
         }
-        String maxUserId = mapper.readTree(values.get("user")).path("id").asText();
+        var user = mapper.readTree(values.get("user"));
+        String maxUserId = user.path("id").asText();
         if (maxUserId.isBlank()) throw new IllegalArgumentException("MAX user missing");
-        return maxUserId;
+        String firstName = user.path("first_name").asText("").trim();
+        String lastName = user.path("last_name").asText("").trim();
+        String displayName = (firstName + " " + lastName).trim();
+        return new VerifiedMaxUser(maxUserId, displayName.isBlank() ? "MAX user" : displayName);
     }
 
     private static byte[] hmac(byte[] key, String text) throws Exception {

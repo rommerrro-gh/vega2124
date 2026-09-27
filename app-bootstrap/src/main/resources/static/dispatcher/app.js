@@ -108,8 +108,12 @@ $("house").addEventListener("change", () => {
   loadQueue().catch(error => notice(error.message));
 });
 $("refresh-queue").addEventListener("click", () => loadQueue().catch(error => notice(error.message)));
+$("open-resident").addEventListener("click", () => {
+  const launchData = window.location.hash || (initData ? `#WebAppData=${encodeURIComponent(initData)}` : "");
+  window.location.assign(`/miniapp/index.html${launchData}`);
+});
 
-api("/v1/me/houses").then(houses => {
+api("/v1/me/dispatcher-houses").then(houses => {
   const select = $("house");
   select.replaceChildren();
   for (const house of houses) select.add(new Option(house.address, house.id));
