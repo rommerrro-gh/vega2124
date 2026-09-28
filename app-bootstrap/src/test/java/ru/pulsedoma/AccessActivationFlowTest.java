@@ -52,6 +52,12 @@ class AccessActivationFlowTest {
 
     @Test
     void invitationChainRespectsScopeAndRevocation() throws Exception {
+        assertThrows(BusinessException.class, () -> access.revokeAccess(AccessRole.RESIDENT,
+                "demo-admin-1", null, "demo-house-1", "demo-admin-1"));
+        assertEquals("ACTIVE", jdbc.queryForObject("""
+                SELECT access_status FROM house_memberships
+                WHERE house_id = 'demo-house-1' AND user_id = 'demo-admin-1' AND role = 'RESIDENT'
+                """, String.class));
         mvc.perform(get("/v1/access/organizations")).andExpect(status().isUnauthorized());
         mvc.perform(get("/v1/access/organizations").header("X-Demo-Session", "true"))
                 .andExpect(status().isForbidden());

@@ -448,6 +448,7 @@ function Resident() {
 function Admin() {
   const [houses, setHouses] = useState([]);
   const [houseId, setHouseId] = useState("");
+  const [currentUserId, setCurrentUserId] = useState(null);
   const [residents, setResidents] = useState([]);
   const [contacts, setContacts] = useState([]);
   const [invitations, setInvitations] = useState([]);
@@ -471,7 +472,8 @@ function Admin() {
   const base = `/v1/houses/${encodeURIComponent(houseId)}`;
 
   useEffect(() => {
-    request("/v1/me/houses").then(list => {
+    Promise.all([request("/v1/me/houses"), request("/v1/access/me")]).then(([list, access]) => {
+      setCurrentUserId(access[0]?.userId || null);
       const allowed = list.filter(house => house.memberships?.some(access => access.role === "HOUSE_ADMIN" && access.verificationStatus === "VERIFIED"));
       setHouses(allowed); if (allowed.length) setHouseId(allowed[0].id);
       else setNotice("У вас нет подтверждённой роли администратора дома.");
@@ -544,7 +546,7 @@ function Admin() {
         <form onSubmit={createInvitation} className="admin-form"><div className="field-grid"><Field id="invite-days" label="Срок, дней"><input id="invite-days" type="number" min="1" max="30" value={days} onChange={event => setDays(event.target.value)} required /></Field><Field id="invite-limit" label="Число активаций"><input id="invite-limit" type="number" min="1" max="100" value={activationLimit} onChange={event => setActivationLimit(event.target.value)} required /></Field></div><Button mode="primary" className="brand-button" type="submit" stretched disabled={busy}>Создать приглашение</Button></form>
         <InvitationToken token={createdToken} />
         <div className="item-list admin-invitations">{invitations.filter(invitation => invitation.role === "RESIDENT" && invitation.houses.some(house => house.id === houseId)).map(invitation => <div className="admin-row" key={invitation.id}><div><strong>{invitation.revokedAt ? "Отозвано" : new Date(invitation.expiresAt) < new Date() ? "Истекло" : "Активно"}</strong><small>До {passportDate(invitation.expiresAt)} · использовано {invitation.activationCount} из {invitation.activationLimit}</small></div>{!invitation.revokedAt && <button type="button" disabled={busy} onClick={() => revokeInvitation(invitation.id)}>Отозвать</button>}</div>)}</div>
-        <h3>Жители дома</h3><p className="hint">Здесь управляют только ролью жителя. Другие роли пользователя сохраняются.</p><div className="item-list">{residents.map(item => <div className="admin-row" key={item.userId}><div><strong>{item.displayName}</strong><small>{item.status}</small></div>{item.status === "ACTIVE" && <button type="button" disabled={busy} onClick={() => revokeResident(item.userId)}>Отозвать роль жителя</button>}</div>)}</div>
+        <h3>Жители дома</h3><p className="hint">Здесь управляют только ролью жителя. Другие роли пользователя сохраняются.</p><div className="item-list">{residents.map(item => <div className="admin-row" key={item.userId}><div><strong>{item.displayName}</strong><small>{item.status}{item.userId === currentUserId ? " · вы" : ""}</small></div>{item.status === "ACTIVE" && currentUserId && item.userId !== currentUserId && <button type="button" disabled={busy} onClick={() => revokeResident(item.userId)}>Отозвать роль жителя</button>}</div>)}</div>
       </Card>
       <Card><SectionHeading number="04" title="Предварительные опросы" subtitle="Узнайте мнение жителей выбранного дома" />
         <form onSubmit={createPoll} className="admin-form">

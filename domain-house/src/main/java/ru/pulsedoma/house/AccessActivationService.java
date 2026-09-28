@@ -242,6 +242,7 @@ public class AccessActivationService {
     @Transactional
     public void revokeAccess(AccessRole role, String userId, String organizationId, String houseId, String actor) {
         if (role == AccessRole.SYSTEM_ADMIN) throw invalid("System administrator cannot be revoked here");
+        if (actor.equals(userId)) throw invalid("You cannot revoke your own access");
         if (role == AccessRole.UK_ADMIN) {
             if (organizationId == null) throw invalid("Choose organization");
             requireSystemAdmin(actor);
