@@ -103,8 +103,21 @@ function Card({ children, className = "" }) {
   return <section className={`card ${className}`}><Panel mode="secondary" className="card-panel">{children}</Panel></section>;
 }
 
+function DisclosureCard({ title, summary, children, className = "" }) {
+  return <Card className={`disclosure-card ${className}`}><details>
+    <summary><span><strong>{title}</strong><small>{summary}</small></span><span className="disclosure-arrow" aria-hidden="true">⌄</span></summary>
+    <div className="disclosure-content">{children}</div>
+  </details></Card>;
+}
+
 function SectionHeading({ number, title, subtitle }) {
-  return <div className="section-heading"><span className="section-number">{number}</span><div><h2>{title}</h2><p>{subtitle}</p></div></div>;
+  return <div className="section-heading">{number && <span className="section-number">{number}</span>}<div><h2>{title}</h2><p>{subtitle}</p></div></div>;
+}
+
+function countLabel(count, one, few, many) {
+  const mod100 = count % 100;
+  const mod10 = count % 10;
+  return `${count} ${mod100 >= 11 && mod100 <= 14 ? many : mod10 === 1 ? one : mod10 >= 2 && mod10 <= 4 ? few : many}`;
 }
 
 function Field({ id, label, children }) {
@@ -145,11 +158,10 @@ function IssueDetails({ issue, role, onError }) {
   </>;
 }
 
-function HousePassport({ houses, selectedId, onSelect, passport, loading, error }) {
-  if (!houses.length) return null;
-  return <Card className="passport-card">
-    <SectionHeading number="01" title="Паспорт дома" subtitle="Сведения о доме с источником и датой каждого поля" />
-    {houses.length > 1 && <Field id="passport-house" label="Дом"><select id="passport-house" value={selectedId} onChange={event => onSelect(event.target.value)}>{houses.map(house => <option key={house.id} value={house.id}>{house.address}</option>)}</select></Field>}
+function HousePassport({ passport, loading, error }) {
+  const summary = loading ? "Загружаем сведения…" : error ? "Не удалось загрузить сведения" : passport ? `${countLabel(passport.fields.length, "поле", "поля", "полей")} · ${countLabel(passport.contacts?.length || 0, "контакт", "контакта", "контактов")}` : "Сведения о доме";
+  return <DisclosureCard className="passport-card" title="Паспорт дома" summary={summary}>
+    <p className="muted">Сведения о доме с источником и датой каждого поля</p>
     {loading ? <p className="muted">Загружаем сведения о доме…</p> : error ? <p className="notice" role="alert">{error}</p> : passport && <>
       <h3 className="passport-address">{passport.address}</h3>
       {passport.fields.length ? <div className="passport-fields">{passport.fields.map(field => {
@@ -168,7 +180,7 @@ function HousePassport({ houses, selectedId, onSelect, passport, loading, error 
         <div className="passport-field-source">Источник: администратор дома · обновлено {passportDate(contact.updatedAt)}</div>
       </div>)}</div></div>}
     </>}
-  </Card>;
+  </DisclosureCard>;
 }
 
 function PollCard({ poll, onVote, busy }) {
@@ -199,11 +211,13 @@ function Resident() {
   const [dispatcher, setDispatcher] = useState(false);
   const [notice, setNotice] = useState("");
   const [step, setStep] = useState("form");
+  const [showReportForm, setShowReportForm] = useState(false);
   const [reportId, setReportId] = useState(null);
   const [reportData, setReportData] = useState(null);
   const [uploaded, setUploaded] = useState(0);
   const [candidates, setCandidates] = useState([]);
   const [issue, setIssue] = useState(null);
+  const [issueMessage, setIssueMessage] = useState("");
   const [busy, setBusy] = useState(false);
   const [verificationComment, setVerificationComment] = useState("");
   const demoSession = new URLSearchParams(location.search).get("demoSession") === "admin" ? "admin" : "true";
@@ -248,8 +262,8 @@ function Resident() {
     } catch (error) { fail(error); } finally { setPollBusy(false); }
   }
 
-  function showIssue(nextIssue) {
-    setIssue(nextIssue); setVerificationComment(""); setStep("result"); setNotice("");
+  function showIssue(nextIssue, message = "") {
+    setIssue(nextIssue); setIssueMessage(message); setVerificationComment(""); setStep("result"); setNotice("");
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
@@ -263,7 +277,7 @@ function Resident() {
       let id = reportId;
       if (!id) {
         report = await request("/v1/reports", { method: "POST", body: JSON.stringify({
-          houseId: form.elements.house.value, category: form.elements.category.value,
+          houseId: selectedHouseId, category: form.elements.category.value,
           location: form.elements.location.value.trim(),
           occurredAt: new Date(form.elements["occurred-at"].value).toISOString(),
           text: form.elements.description.value.trim(),
@@ -289,7 +303,7 @@ function Resident() {
     setBusy(true); setNotice("");
     try {
       const result = await request(path, { method: "POST", body: JSON.stringify({ reportId }) });
-      showIssue(result);
+      showIssue(result, path === "/v1/issues" ? "Новая заявка сохранена" : "Вы присоединились к заявке");
       await refreshIssues();
     } catch (error) { fail(error); }
     finally { setBusy(false); }
@@ -302,63 +316,68 @@ function Resident() {
       const result = await request(`/v1/issues/${encodeURIComponent(issue.id)}/verify`, {
         method: "POST", body: JSON.stringify({ confirmed, comment: verificationComment.trim() }),
       });
-      showIssue(result);
+      showIssue(result, "Ответ сохранён");
       await refreshIssues();
     } catch (error) { fail(error); }
     finally { setBusy(false); }
   }
 
   function again() {
-    setReportId(null); setReportData(null); setUploaded(0); setCandidates([]); setIssue(null);
-    setStep("form"); setNotice("");
+    setReportId(null); setReportData(null); setUploaded(0); setCandidates([]); setIssue(null); setIssueMessage("");
+    setStep("form"); setShowReportForm(true); setNotice("");
+    localNow.current = new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 16);
     requestAnimationFrame(() => {
       formRef.current?.reset();
       const date = formRef.current?.elements["occurred-at"];
-      if (date) date.value = new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 16);
+      if (date) date.value = localNow.current;
     });
   }
 
   const localNow = useRef(new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 16));
+  const selectedHouse = houses.find(house => house.id === selectedHouseId);
+  const houseIssues = issues.filter(item => item.houseId === selectedHouseId);
+  const awaitingVerification = houseIssues.filter(item => item.status === "VERIFICATION_72H");
+  const openPolls = polls.filter(poll => !poll.closed && !poll.myOptionId);
   return <main className="shell">
-    <Brand role="Жителю" /><Hero /><Notice message={notice} />
-    {dispatcher && <QuickLink />}
-    {houses.some(house => house.memberships?.some(access => access.role === "HOUSE_ADMIN" && access.verificationStatus === "VERIFIED")) && <AdminLink />}
+    <Brand role="Жителю" /><div className="resident-hero"><Hero /></div><Notice message={notice} />
+    {selectedHouse && <div className="house-switcher"><span className="house-switcher-icon" aria-hidden="true">⌂</span><div className="house-switcher-copy"><span>Ваш дом</span>{houses.length > 1 ? <select aria-label="Выбранный дом" value={selectedHouseId} disabled={step !== "form" || !!reportId} onChange={event => setSelectedHouseId(event.target.value)}>{houses.map(house => <option key={house.id} value={house.id}>{house.address}</option>)}</select> : <strong>{selectedHouse.address}</strong>}</div></div>}
+    {!!awaitingVerification.length && step === "form" && <div className="priority-notice"><div><strong>Подтвердите выполнение работ</strong><p>{countLabel(awaitingVerification.length, "заявка ждёт", "заявки ждут", "заявок ждут")} вашего ответа.</p></div><Button mode="secondary" type="button" onClick={() => showIssue(awaitingVerification[0])}>Открыть</Button></div>}
+    {selectedHouse && step === "form" && !showReportForm && <div className="start-action"><div><strong>Заметили проблему?</strong><p>Проверьте похожие заявки и сообщите о новой.</p></div><Button mode="primary" type="button" onClick={() => setShowReportForm(true)}>Сообщить о проблеме <span aria-hidden="true">→</span></Button></div>}
     <div className="content-grid">
-      <HousePassport houses={houses} selectedId={selectedHouseId} onSelect={setSelectedHouseId} passport={passport} loading={passportLoading} error={passportError} />
-      {!!polls.length && <Card><SectionHeading number="02" title="Опросы дома" subtitle="Ваше мнение о делах дома" /><div className="poll-list">{polls.map(poll => <PollCard key={poll.id} poll={poll} onVote={voteInPoll} busy={pollBusy} />)}</div></Card>}
-      <Card className="issues-card">
-        <SectionHeading number="02" title="Мои заявки" subtitle="Следите за тем, как решаются ваши обращения" />
-        <div className="item-list">{issues.length ? issues.map(item => <CellSimple key={item.id} className="issue-cell" title={item.location || item.address} subtitle={item.description} overline={statusLabels[item.status] || item.status} showChevron onClick={() => showIssue(item)} />) : <p className="muted empty">Заявок пока нет.</p>}</div>
-        <Button mode="tertiary" className="quiet-action" type="button" stretched onClick={() => refreshIssues().catch(fail)}>Обновить список</Button>
-      </Card>
-      {step === "form" && <Card className="form-card">
-        <SectionHeading number="03" title="Сообщить о проблеме" subtitle="Заполнение займёт пару минут" />
+      {step === "form" && showReportForm && <Card className="form-card">
+        <div className="form-title"><SectionHeading title="Сообщить о проблеме" subtitle={`Дом: ${selectedHouse?.address || "не выбран"}`} />{!reportId && <button className="form-close" type="button" onClick={() => setShowReportForm(false)}>Отменить</button>}</div>
         <form ref={formRef} onSubmit={submitReport}>
-          <div className="field-grid">
-            <Field id="house" label="Дом"><select id="house" name="house" required disabled={!!reportId} defaultValue={houses.length === 1 ? houses[0].id : ""} key={houses.map(h => h.id).join("|")}><option value="">Выберите дом</option>{houses.map(h => <option value={h.id} key={h.id}>{h.address}</option>)}</select></Field>
-            <Field id="category" label="Категория"><select id="category" name="category" required disabled={!!reportId} defaultValue=""><option value="">Выберите категорию</option><option value="LIGHTING">Освещение</option><option value="WATER">Вода</option><option value="HEATING">Отопление</option><option value="ELEVATOR">Лифт</option><option value="OTHER">Другое</option></select></Field>
-          </div>
+          <Field id="category" label="Категория"><select id="category" name="category" required disabled={!!reportId} defaultValue=""><option value="">Выберите категорию</option><option value="LIGHTING">Освещение</option><option value="WATER">Вода</option><option value="HEATING">Отопление</option><option value="ELEVATOR">Лифт</option><option value="OTHER">Другое</option></select></Field>
           <Field id="location" label="Где именно?"><input id="location" name="location" maxLength="160" placeholder="Например, подъезд 1, этаж 2" required disabled={!!reportId} /></Field>
           <Field id="occurred-at" label="Когда заметили?"><input id="occurred-at" name="occurred-at" type="datetime-local" defaultValue={localNow.current} required disabled={!!reportId} /></Field>
           <Field id="description" label="Что произошло?"><textarea id="description" name="description" maxLength="4000" minLength="8" placeholder="Опишите, что случилось и как это влияет на жителей" required disabled={!!reportId} /></Field>
           <Field id="attachments" label="Фото, видео или документ"><input id="attachments" name="attachments" type="file" accept="image/jpeg,image/png,video/mp4,application/pdf" multiple /></Field>
           <p className="hint">До 5 файлов по 10 МБ. Содержимое файлов не анализируется.</p>
-          <Button mode="primary" className="brand-button" type="submit" stretched disabled={busy}>Проверить похожие заявки <span aria-hidden="true">→</span></Button>
+          <Button mode="primary" className="brand-button" type="submit" stretched disabled={busy || !selectedHouseId}>Проверить похожие заявки <span aria-hidden="true">→</span></Button>
         </form>
       </Card>}
+      {step === "form" && selectedHouse && <DisclosureCard className="issues-card" title="Мои заявки" summary={houseIssues.length ? `${countLabel(houseIssues.length, "заявка", "заявки", "заявок")} по выбранному дому` : "Пока нет заявок"}>
+        <div className="item-list">{houseIssues.length ? houseIssues.map(item => <CellSimple key={item.id} className="issue-cell" title={item.location || item.address} subtitle={item.description} overline={statusLabels[item.status] || item.status} showChevron onClick={() => showIssue(item)} />) : <p className="muted empty">Заявок пока нет.</p>}</div>
+        <Button mode="tertiary" className="quiet-action" type="button" stretched onClick={() => refreshIssues().catch(fail)}>Обновить список</Button>
+      </DisclosureCard>}
+      {step === "form" && !!polls.length && <DisclosureCard title="Опросы дома" summary={openPolls.length ? `${countLabel(openPolls.length, "опрос ждёт", "опроса ждут", "опросов ждут")} вашего ответа` : countLabel(polls.length, "опрос", "опроса", "опросов")}><div className="poll-list">{polls.map(poll => <PollCard key={poll.id} poll={poll} onVote={voteInPoll} busy={pollBusy} />)}</div></DisclosureCard>}
+      {step === "form" && selectedHouse && <HousePassport passport={passport} loading={passportLoading} error={passportError} />}
       {step === "decision" && <Card className="flow-card">
-        <SectionHeading number="04" title="Похожие проблемы" subtitle="Выберите существующую заявку или создайте новую" />
+        <SectionHeading title="Похожие проблемы" subtitle="Выберите существующую заявку или создайте новую" />
         <div className="item-list">{candidates.length ? candidates.map(({ issue: item, score }) => <div className="candidate" key={item.id}><span className="score">{Math.round(score * 100)}% совпадение</span><strong>{item.description || item.category || "Проблема дома"}</strong><p>{item.address} · {item.participants} участников</p><button type="button" disabled={busy} onClick={() => decide(`/v1/issues/${encodeURIComponent(item.id)}/join`)}>Присоединиться</button></div>) : <p className="muted empty">Похожих активных заявок не найдено.</p>}</div>
         <Button mode="primary" className="brand-button" type="button" stretched disabled={busy} onClick={() => decide("/v1/issues")}>Создать новую заявку <span aria-hidden="true">→</span></Button>
       </Card>}
       {step === "result" && issue && <Card className="flow-card">
-        <div className="success-mark" aria-hidden="true">✓</div><p className="eyebrow">ОБРАЩЕНИЕ СОХРАНЕНО</p>
-        <h2>{issue.status === "DRAFT" ? "Новая заявка сохранена" : "Заявка"}</h2>
+        {issueMessage && <div className="success-mark" aria-hidden="true">✓</div>}
+        <h2>{issueMessage || "Заявка"}</h2>
         <IssueDetails issue={issue} role="true" onError={setNotice} />
         {issue.status === "VERIFICATION_72H" && <div className="verification"><h3>Работа выполнена?</h3><p className="muted">{issue.verificationDueAt ? `Подтвердите до ${new Date(issue.verificationDueAt).toLocaleString("ru-RU")}` : ""}</p><Field id="verification-comment" label="Комментарий, если проблема осталась"><textarea id="verification-comment" maxLength="2000" placeholder="Что ещё не исправлено?" value={verificationComment} onChange={event => setVerificationComment(event.target.value)} /></Field><Button mode="primary" className="brand-button" type="button" stretched disabled={busy} onClick={() => verify(true)}>Да, проблема решена</Button><Button mode="secondary" type="button" stretched disabled={busy} onClick={() => verify(false)}>Нет, проблема осталась</Button></div>}
         <Button mode="secondary" className="bottom-action" type="button" stretched onClick={again}>Сообщить о другой проблеме</Button>
+        <Button mode="tertiary" className="quiet-action" type="button" stretched onClick={() => { again(); setShowReportForm(false); }}>На главную</Button>
       </Card>}
     </div>
+    {dispatcher && <QuickLink />}
+    {houses.some(house => house.memberships?.some(access => access.role === "HOUSE_ADMIN" && access.verificationStatus === "VERIFIED")) && <AdminLink />}
     <footer>Пульс дома <span>·</span> Сделаем дом лучше вместе</footer>
   </main>;
 }
