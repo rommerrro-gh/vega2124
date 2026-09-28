@@ -15,6 +15,7 @@ import ru.pulsedoma.duplicates.DuplicateCandidate;
 import ru.pulsedoma.issues.CreateReportCommand;
 import ru.pulsedoma.issues.Report;
 import ru.pulsedoma.issues.ReportService;
+import ru.pulsedoma.issues.MiniAppService;
 
 import java.util.List;
 import java.security.Principal;
@@ -26,9 +27,11 @@ import jakarta.validation.constraints.NotNull;
 @RequestMapping("/v1/reports")
 public class ReportsController {
     private final ReportService reports;
+    private final MiniAppService issues;
 
-    public ReportsController(ReportService reports) {
+    public ReportsController(ReportService reports, MiniAppService issues) {
         this.reports = reports;
+        this.issues = issues;
     }
 
     @PostMapping
@@ -41,8 +44,10 @@ public class ReportsController {
     }
 
     @PostMapping("/{id}/withdraw")
-    public void withdraw(@PathVariable @NotBlank String id, @Valid @RequestBody WithdrawReportRequest request) {
-        throw PendingOperation.notImplemented();
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void withdraw(@PathVariable @NotBlank String id, @Valid @RequestBody WithdrawReportRequest request,
+                         Principal principal) {
+        issues.withdrawReport(id, principal.getName(), request.reason());
     }
 
     public record CreateReportRequest(@NotBlank String houseId,

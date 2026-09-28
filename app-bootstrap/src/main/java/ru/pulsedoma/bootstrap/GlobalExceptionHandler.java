@@ -22,10 +22,11 @@ public class GlobalExceptionHandler {
     ResponseEntity<ErrorResponse> business(BusinessException e) {
         HttpStatus status = switch (e.getCode()) {
             case "HOUSE_ACCESS_DENIED" -> HttpStatus.FORBIDDEN;
-            case "ISSUE_NOT_FOUND", "ATTACHMENT_NOT_FOUND", "HOUSE_NOT_FOUND",
+            case "ISSUE_NOT_FOUND", "REPORT_NOT_FOUND", "ATTACHMENT_NOT_FOUND", "HOUSE_NOT_FOUND",
                  "CONTACT_NOT_FOUND", "INVITATION_NOT_FOUND", "POLL_NOT_FOUND",
                  "POLL_OPTION_NOT_FOUND" -> HttpStatus.NOT_FOUND;
-            case "ALREADY_VOTED", "POLL_CLOSED" -> HttpStatus.CONFLICT;
+            case "ALREADY_VOTED", "POLL_CLOSED", "REPORT_ALREADY_WITHDRAWN",
+                 "REPORT_WITHDRAWAL_CLOSED", "ISSUE_NOT_ACTIVE", "TARGET_STATUS_BEHIND" -> HttpStatus.CONFLICT;
             default -> HttpStatus.BAD_REQUEST;
         };
         return ResponseEntity.status(status).body(error(e.getCode(), e.getMessage()));

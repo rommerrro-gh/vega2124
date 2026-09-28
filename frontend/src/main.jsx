@@ -9,6 +9,7 @@ const statusLabels = {
   IN_PROGRESS: "В работе", VERIFICATION_72H: "Ожидает вашего подтверждения",
   CLOSED_CONFIRMED: "Закрыта после подтверждения",
   CLOSED_UNCONFIRMED: "Закрыта по истечении срока", REOPENED: "Открыта повторно",
+  REVIEW_REQUIRED: "Требует решения диспетчера", WITHDRAWN: "Отозвана",
 };
 const categoryLabels = {
   LIGHTING: "Освещение", WATER: "Вода", HEATING: "Отопление",
@@ -18,7 +19,10 @@ const transitions = {
   DRAFT: ["OPEN", "Принять заявку"], OPEN: ["ASSIGNED", "Назначить себе"],
   ASSIGNED: ["IN_PROGRESS", "Начать работу"], IN_PROGRESS: ["RESOLVED", "Отметить выполненной"],
   REOPENED: ["ASSIGNED", "Повторно назначить себе"],
+  REVIEW_REQUIRED: ["WITHDRAWN", "Закрыть отозванную заявку"],
 };
+const editableIssueStatuses = ["DRAFT", "OPEN", "ASSIGNED", "IN_PROGRESS", "REOPENED"];
+const issueStage = { DRAFT: 0, OPEN: 1, ASSIGNED: 2, REOPENED: 2, IN_PROGRESS: 3 };
 const passportLabels = {
   management_company: "Управляющая организация",
   building_year: "Год постройки",
@@ -152,7 +156,7 @@ function AttachmentList({ attachments, role, onError }) {
 function IssueDetails({ issue, role, onError }) {
   return <>
     <div className="detail-lines"><p className="muted">{issue.address}</p>{issue.location && <p className="muted">Место: {issue.location}</p>}{issue.occurredAt && <p className="muted">Замечено: {new Date(issue.occurredAt).toLocaleString("ru-RU")}</p>}</div>
-    <p className="detail-description">{issue.description}</p>
+    <p className="detail-description">{issue.description || "Активных обращений нет."}</p>
     <AttachmentList attachments={issue.attachments} role={role} onError={onError} />
     <div className="result-meta"><span>{statusLabels[issue.status] || issue.status}</span><span>Участников: {issue.participants}</span></div>
   </>;
@@ -220,6 +224,7 @@ function Resident() {
   const [issueMessage, setIssueMessage] = useState("");
   const [busy, setBusy] = useState(false);
   const [verificationComment, setVerificationComment] = useState("");
+  const [withdrawReason, setWithdrawReason] = useState("");
   const demoSession = new URLSearchParams(location.search).get("demoSession") === "admin" ? "admin" : "true";
   const request = (path, options) => api(demoSession, path, options);
   const refreshIssues = async () => setIssues(await request("/v1/me/issues"));
@@ -263,7 +268,7 @@ function Resident() {
   }
 
   function showIssue(nextIssue, message = "") {
-    setIssue(nextIssue); setIssueMessage(message); setVerificationComment(""); setStep("result"); setNotice("");
+    setIssue(nextIssue); setIssueMessage(message); setVerificationComment(""); setWithdrawReason(""); setStep("result"); setNotice("");
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
@@ -322,6 +327,19 @@ function Resident() {
     finally { setBusy(false); }
   }
 
+  async function withdrawReport(id) {
+    if (!withdrawReason.trim()) { setNotice("Укажите причину отзыва обращения."); return; }
+    setBusy(true); setNotice("");
+    try {
+      await request(`/v1/reports/${encodeURIComponent(id)}/withdraw`, {
+        method: "POST", body: JSON.stringify({ reason: withdrawReason.trim() }),
+      });
+      await refreshIssues();
+      again(); setShowReportForm(false); setNotice("Обращение отозвано.");
+    } catch (error) { fail(error); }
+    finally { setBusy(false); }
+  }
+
   function again() {
     setReportId(null); setReportData(null); setUploaded(0); setCandidates([]); setIssue(null); setIssueMessage("");
     setStep("form"); setShowReportForm(true); setNotice("");
@@ -366,11 +384,13 @@ function Resident() {
         <SectionHeading title="Похожие проблемы" subtitle="Выберите существующую заявку или создайте новую" />
         <div className="item-list">{candidates.length ? candidates.map(({ issue: item, score }) => <div className="candidate" key={item.id}><span className="score">{Math.round(score * 100)}% совпадение</span><strong>{item.description || item.category || "Проблема дома"}</strong><p>{item.address} · {item.participants} участников</p><button type="button" disabled={busy} onClick={() => decide(`/v1/issues/${encodeURIComponent(item.id)}/join`)}>Присоединиться</button></div>) : <p className="muted empty">Похожих активных заявок не найдено.</p>}</div>
         <Button mode="primary" className="brand-button" type="button" stretched disabled={busy} onClick={() => decide("/v1/issues")}>Создать новую заявку <span aria-hidden="true">→</span></Button>
+        <div className="secondary-operation"><Field id="withdraw-pending-reason" label="Причина отзыва обращения"><textarea id="withdraw-pending-reason" maxLength="1000" value={withdrawReason} onChange={event => setWithdrawReason(event.target.value)} placeholder="Например, отправлено по ошибке" /></Field><Button mode="tertiary" type="button" stretched disabled={busy || !withdrawReason.trim()} onClick={() => withdrawReport(reportId)}>Отозвать обращение</Button></div>
       </Card>}
       {step === "result" && issue && <Card className="flow-card">
         {issueMessage && <div className="success-mark" aria-hidden="true">✓</div>}
         <h2>{issueMessage || "Заявка"}</h2>
         <IssueDetails issue={issue} role="true" onError={setNotice} />
+        {editableIssueStatuses.includes(issue.status) && !!issue.reports?.length && <div className="secondary-operation"><h3>Мои обращения в заявке</h3><Field id="withdraw-reason" label="Причина отзыва"><textarea id="withdraw-reason" maxLength="1000" value={withdrawReason} onChange={event => setWithdrawReason(event.target.value)} placeholder="Например, проблема уже решена" /></Field>{issue.reports.map(report => <div className="linked-report" key={report.id}><p>{report.description}</p><Button mode="tertiary" type="button" disabled={busy || !withdrawReason.trim()} onClick={() => withdrawReport(report.id)}>Отозвать обращение</Button></div>)}</div>}
         {issue.status === "VERIFICATION_72H" && <div className="verification"><h3>Работа выполнена?</h3><p className="muted">{issue.verificationDueAt ? `Подтвердите до ${new Date(issue.verificationDueAt).toLocaleString("ru-RU")}` : ""}</p><Field id="verification-comment" label="Комментарий, если проблема осталась"><textarea id="verification-comment" maxLength="2000" placeholder="Что ещё не исправлено?" value={verificationComment} onChange={event => setVerificationComment(event.target.value)} /></Field><Button mode="primary" className="brand-button" type="button" stretched disabled={busy} onClick={() => verify(true)}>Да, проблема решена</Button><Button mode="secondary" type="button" stretched disabled={busy} onClick={() => verify(false)}>Нет, проблема осталась</Button></div>}
         <Button mode="secondary" className="bottom-action" type="button" stretched onClick={again}>Сообщить о другой проблеме</Button>
         <Button mode="tertiary" className="quiet-action" type="button" stretched onClick={() => { again(); setShowReportForm(false); }}>На главную</Button>
@@ -498,6 +518,8 @@ function Dispatcher() {
   const [queue, setQueue] = useState([]);
   const [issue, setIssue] = useState(null);
   const [reason, setReason] = useState("");
+  const [mergeTargetId, setMergeTargetId] = useState("");
+  const [splitReason, setSplitReason] = useState("");
   const [notice, setNotice] = useState("");
   const [busy, setBusy] = useState(false);
   const request = (path, options) => api("dispatcher", path, options);
@@ -516,7 +538,7 @@ function Dispatcher() {
   }, [houseId]);
 
   async function showIssue(id) {
-    try { setIssue(await request(`/v1/dispatcher/issues/${encodeURIComponent(id)}`)); setNotice(""); }
+    try { setIssue(await request(`/v1/dispatcher/issues/${encodeURIComponent(id)}`)); setMergeTargetId(""); setSplitReason(""); setNotice(""); }
     catch (error) { fail(error); }
   }
 
@@ -534,18 +556,50 @@ function Dispatcher() {
     finally { setBusy(false); }
   }
 
+  async function mergeIssues() {
+    if (!mergeTargetId) { setNotice("Выберите заявку для объединения."); return; }
+    setBusy(true); setNotice("");
+    try {
+      const merged = await request(`/v1/issues/${encodeURIComponent(issue.id)}/merge`, {
+        method: "POST", body: JSON.stringify({ targetIssueId: mergeTargetId }),
+      });
+      await refreshQueue(houseId);
+      setIssue(merged); setMergeTargetId(""); setSplitReason(""); setNotice("Заявки объединены.");
+    } catch (error) { fail(error); }
+    finally { setBusy(false); }
+  }
+
+  async function splitIssue(reportId) {
+    if (!splitReason.trim()) { setNotice("Укажите причину разделения."); return; }
+    setBusy(true); setNotice("");
+    try {
+      const separated = await request(`/v1/issues/${encodeURIComponent(issue.id)}/split`, {
+        method: "POST", body: JSON.stringify({ reportId, reason: splitReason.trim() }),
+      });
+      await refreshQueue(houseId);
+      setIssue(separated); setMergeTargetId(""); setSplitReason(""); setNotice("Обращение выделено в новую заявку.");
+    } catch (error) { fail(error); }
+    finally { setBusy(false); }
+  }
+
+  const mergeTargets = issue && editableIssueStatuses.includes(issue.status) ? queue.filter(item =>
+    item.id !== issue.id && editableIssueStatuses.includes(item.status)
+      && issueStage[item.status] >= issueStage[issue.status]) : [];
+
   return <main className="shell">
     <Brand role="Диспетчеру" /><Hero dispatcher /><Notice message={notice} /><QuickLink dispatcher />
     <div className="content-grid">
       <Card className="queue-card"><SectionHeading number="01" title="Очередь заявок" subtitle="Обращения жителей по вашему дому" />
         <Field id="house" label="Дом"><select id="house" value={houseId} onChange={event => setHouseId(event.target.value)}><option value="">Выберите дом</option>{houses.map(h => <option value={h.id} key={h.id}>{h.address}</option>)}</select></Field>
-        <div className="item-list">{queue.length ? queue.map(item => <CellSimple key={item.id} className="issue-cell" title={item.location || "Место не указано"} subtitle={item.description} overline={statusLabels[item.status] || item.status} showChevron onClick={() => showIssue(item.id)} />) : <p className="muted empty">Новых заявок пока нет.</p>}</div>
+        <div className="item-list">{queue.length ? queue.map(item => <CellSimple key={item.id} className="issue-cell" title={item.location || "Место не указано"} subtitle={item.description || "Все обращения отозваны"} overline={statusLabels[item.status] || item.status} showChevron onClick={() => showIssue(item.id)} />) : <p className="muted empty">Новых заявок пока нет.</p>}</div>
         <Button mode="tertiary" className="quiet-action" type="button" stretched disabled={!houseId} onClick={() => refreshQueue(houseId).catch(fail)}>Обновить очередь</Button>
       </Card>
       {issue && <Card className="detail-panel"><SectionHeading number="02" title="Карточка заявки" subtitle="Детали обращения и следующий шаг" />
         <h3>{categoryLabels[issue.category] || issue.category || "Проблема дома"}</h3>
         <IssueDetails issue={issue} role="dispatcher" onError={setNotice} />
         {transitions[issue.status] && <><Field id="reason" label="Комментарий к изменению статуса"><textarea id="reason" maxLength="1000" placeholder="Что сделано или кому передана задача" value={reason} onChange={event => setReason(event.target.value)} /></Field><Button mode="primary" className="brand-button" type="button" stretched disabled={busy} onClick={nextStatus}>{transitions[issue.status][1]}</Button></>}
+        {editableIssueStatuses.includes(issue.status) && <div className="secondary-operation"><h3>Обращения в заявке</h3>{issue.reports?.length > 1 && <Field id="split-reason" label="Причина разделения"><textarea id="split-reason" maxLength="1000" value={splitReason} onChange={event => setSplitReason(event.target.value)} placeholder="Например, другая проблема или место" /></Field>}{issue.reports?.map(report => <div className="linked-report" key={report.id}><small>{report.author}</small><p>{report.description}</p>{issue.reports.length > 1 && <Button mode="tertiary" type="button" disabled={busy || !splitReason.trim()} onClick={() => splitIssue(report.id)}>Выделить в новую заявку</Button>}</div>)}</div>}
+        {!!mergeTargets.length && <div className="secondary-operation"><h3>Объединить заявки</h3><p className="hint">Обращения из этой заявки перейдут в выбранную. Выберите заявку на той же или более поздней стадии работы.</p><Field id="merge-target" label="Основная заявка"><select id="merge-target" value={mergeTargetId} onChange={event => setMergeTargetId(event.target.value)}><option value="">Выберите заявку</option>{mergeTargets.map(item => <option key={item.id} value={item.id}>{item.location || item.address} · {statusLabels[item.status] || item.status} · {item.id.slice(0, 8)}</option>)}</select></Field><Button mode="secondary" type="button" stretched disabled={busy || !mergeTargetId} onClick={mergeIssues}>Объединить с выбранной заявкой</Button></div>}
       </Card>}
     </div>
     <footer>Пульс дома <span>·</span> Кабинет диспетчера</footer>

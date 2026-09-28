@@ -45,7 +45,7 @@ class ControllerContractTest {
         report.correlationId = "correlation-id";
         when(reportService.createReport(any())).thenReturn(report);
         mvc = standaloneSetup(new MaxWebhookController(new ObjectMapper(), queue, "test-secret"),
-                new IdentityController(miniApp), new ReportsController(reportService), new IssuesController(miniApp),
+                new IdentityController(miniApp), new ReportsController(reportService, miniApp), new IssuesController(miniApp),
                 new IncidentsController(), new HousesController(mock(HousePassportService.class),
                 mock(HousePollService.class)), new ConnectorsController())
                 .setValidator(validator)
@@ -61,10 +61,7 @@ class ControllerContractTest {
     void everyPendingOpenApiRouteIsMapped() throws Exception {
         List<MockHttpServletRequestBuilder> requests = List.of(
                 json(put("/v1/me/active-house"), "{\"houseId\":\"house\"}"),
-                json(post("/v1/reports/report/withdraw"), "{\"reason\":\"duplicate\"}"),
                 get("/v1/issues/candidates").param("houseId", "house").param("query", "light"),
-                json(post("/v1/issues/issue/merge"), "{\"targetIssueId\":\"target\"}"),
-                json(post("/v1/issues/issue/split"), "{\"reportId\":\"report\",\"reason\":\"test\"}"),
                 json(post("/v1/issues/issue/comments"), "{\"text\":\"test\"}"),
                 json(post("/v1/incidents"), "{\"houseId\":\"house\",\"type\":\"FIRE\",\"description\":\"test\"}"),
                 get("/v1/houses/house/events"),
@@ -73,6 +70,16 @@ class ControllerContractTest {
         for (MockHttpServletRequestBuilder request : requests) {
             mvc.perform(request).andExpect(status().isNotImplemented());
         }
+    }
+
+    @Test
+    void reorganizationRoutesAreMapped() throws Exception {
+        mvc.perform(json(post("/v1/reports/report/withdraw"), "{\"reason\":\"duplicate\"}")
+                .principal(() -> "user")).andExpect(status().isNoContent());
+        mvc.perform(json(post("/v1/issues/issue/merge"), "{\"targetIssueId\":\"target\"}")
+                .principal(() -> "dispatcher")).andExpect(status().isOk());
+        mvc.perform(json(post("/v1/issues/issue/split"), "{\"reportId\":\"report\",\"reason\":\"test\"}")
+                .principal(() -> "dispatcher")).andExpect(status().isOk());
     }
 
     @Test

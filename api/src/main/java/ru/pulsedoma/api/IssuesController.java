@@ -49,13 +49,15 @@ public class IssuesController {
     }
 
     @PostMapping("/{id}/merge")
-    public void merge(@PathVariable @NotBlank String id, @Valid @RequestBody MergeIssueRequest request) {
-        throw PendingOperation.notImplemented();
+    public MiniAppService.IssueView merge(@PathVariable @NotBlank String id,
+                                          @Valid @RequestBody MergeIssueRequest request, Principal principal) {
+        return miniApp.mergeIssues(id, request.targetIssueId(), principal.getName());
     }
 
     @PostMapping("/{id}/split")
-    public void split(@PathVariable @NotBlank String id, @Valid @RequestBody SplitIssueRequest request) {
-        throw PendingOperation.notImplemented();
+    public MiniAppService.IssueView split(@PathVariable @NotBlank String id,
+                                          @Valid @RequestBody SplitIssueRequest request, Principal principal) {
+        return miniApp.splitIssue(id, request.reportId(), request.reason(), principal.getName());
     }
 
     @PatchMapping("/{id}/status")

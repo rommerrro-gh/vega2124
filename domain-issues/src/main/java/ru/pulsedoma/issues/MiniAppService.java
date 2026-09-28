@@ -30,10 +30,12 @@ public class MiniAppService {
 
     public record MembershipAccess(MembershipRole role, VerificationStatus verificationStatus) {}
     public record HouseView(String id, String address, List<MembershipAccess> memberships) {}
+    public record LinkedReportView(String id, String description, String author, String createdAt) {}
     public record IssueView(String id, String houseId, String address, String category,
                             IssueStatus status, String description, String location,
                             String occurredAt, String verificationDueAt, int participants,
-                            List<AttachmentService.AttachmentView> attachments) {}
+                            List<AttachmentService.AttachmentView> attachments,
+                            List<LinkedReportView> reports) {}
 
     public List<IssueView> myIssues(String userId) {
         List<String> ids = jdbc.query("""
@@ -110,11 +112,11 @@ public class MiniAppService {
                 SELECT i.id, i.house_id, h.address, i.category, i.status,
                        json_extract(i.zone_json, '$.label') AS location,
                        COALESCE((SELECT r.raw_text FROM issue_reports ir JOIN reports r ON r.id = ir.report_id
-                                 WHERE ir.issue_id = i.id AND ir.unlinked_at IS NULL
-                                 ORDER BY ir.linked_at LIMIT 1), '') AS description,
+                                 WHERE ir.issue_id = i.id AND ir.unlinked_at IS NULL AND r.withdrawn_at IS NULL
+                                 ORDER BY ir.linked_at, ir.id LIMIT 1), '') AS description,
                        (SELECT r.occurred_at FROM issue_reports ir JOIN reports r ON r.id = ir.report_id
-                        WHERE ir.issue_id = i.id AND ir.unlinked_at IS NULL
-                        ORDER BY ir.linked_at LIMIT 1) AS occurred_at,
+                        WHERE ir.issue_id = i.id AND ir.unlinked_at IS NULL AND r.withdrawn_at IS NULL
+                        ORDER BY ir.linked_at, ir.id LIMIT 1) AS occurred_at,
                        i.verification_due_at,
                        (SELECT COUNT(*) FROM issue_participants p WHERE p.issue_id = i.id) AS participants
                 FROM issues i JOIN houses h ON h.id = i.house_id
@@ -125,12 +127,24 @@ public class MiniAppService {
                 rs.getString("address"), rs.getString("category"), IssueStatus.valueOf(rs.getString("status")),
                 rs.getString("description"), rs.getString("location"), rs.getString("occurred_at"),
                 rs.getString("verification_due_at"),
-                rs.getInt("participants"), List.of()), issueId, userId);
+                rs.getInt("participants"), List.of(), List.of()), issueId, userId);
         if (found.isEmpty()) throw new BusinessException("ISSUE_NOT_FOUND", "Issue is not available");
         IssueView row = found.get(0);
+        List<LinkedReportView> reports = jdbc.query("""
+                SELECT r.id, r.raw_text, u.display_name, r.created_at
+                FROM issue_reports ir JOIN reports r ON r.id = ir.report_id
+                JOIN users u ON u.id = r.author_id
+                WHERE ir.issue_id = ? AND ir.unlinked_at IS NULL AND r.withdrawn_at IS NULL
+                  AND (r.author_id = ? OR EXISTS (
+                    SELECT 1 FROM house_memberships m WHERE m.house_id = r.house_id
+                      AND m.user_id = ? AND m.role = 'DISPATCHER'
+                      AND m.verification_status = 'VERIFIED'))
+                ORDER BY r.created_at, r.id
+                """, (rs, index) -> new LinkedReportView(rs.getString("id"), rs.getString("raw_text"),
+                rs.getString("display_name"), rs.getString("created_at")), issueId, userId, userId);
         return new IssueView(row.id(), row.houseId(), row.address(), row.category(), row.status(),
                 row.description(), row.location(), row.occurredAt(), row.verificationDueAt(),
-                row.participants(), attachments.forIssue(issueId));
+                row.participants(), attachments.forIssue(issueId), reports);
     }
 
     @Transactional
@@ -164,11 +178,139 @@ public class MiniAppService {
         return issue(issueId, userId);
     }
 
+    @Transactional
+    public void withdrawReport(String reportId, String userId, String reason) {
+        List<Map<String, Object>> rows = jdbc.queryForList("""
+                SELECT id, withdrawn_at FROM reports WHERE id = ? AND author_id = ?
+                """, reportId, userId);
+        if (rows.isEmpty()) throw new BusinessException("REPORT_NOT_FOUND", "Report is not available");
+        if (rows.get(0).get("withdrawn_at") != null) {
+            throw new BusinessException("REPORT_ALREADY_WITHDRAWN", "Report was already withdrawn");
+        }
+        List<String> linked = jdbc.query("""
+                SELECT issue_id FROM issue_reports WHERE report_id = ? AND unlinked_at IS NULL
+                """, (rs, index) -> rs.getString(1), reportId);
+        String issueId = linked.isEmpty() ? null : linked.get(0);
+        IssueStatus previous = issueId == null ? null : issue(issueId, userId).status();
+        if (previous != null && !editableIssue(previous)) {
+            throw new BusinessException("REPORT_WITHDRAWAL_CLOSED", "Report cannot be withdrawn after verification begins");
+        }
+        String now = Instant.now().toString();
+        jdbc.update("UPDATE reports SET withdrawn_at = ?, withdraw_reason = ? WHERE id = ?",
+                now, reason, reportId);
+        if (issueId != null) {
+            jdbc.update("UPDATE issue_reports SET unlinked_at = ? WHERE report_id = ? AND unlinked_at IS NULL",
+                    now, reportId);
+            removeOrphanParticipant(issueId, userId);
+            updateAfterReportRemoval(issueId, previous, userId, now);
+        }
+        jdbc.update("""
+                INSERT INTO audit_events(id, actor_id, action, entity, entity_id, after_json, created_at)
+                VALUES (?, ?, 'REPORT_WITHDRAWN', 'report', ?, json_object('issueId', ?, 'reason', ?), ?)
+                """, UUID.randomUUID().toString(), userId, reportId, issueId, reason, now);
+    }
+
+    @Transactional
+    public IssueView mergeIssues(String sourceId, String targetId, String userId) {
+        String houseId = issueHouse(sourceId);
+        requireDispatcher(houseId, userId);
+        if (sourceId.equals(targetId)) throw new BusinessException("SAME_ISSUE", "Choose another issue");
+        if (!houseId.equals(issueHouse(targetId))) {
+            throw new BusinessException("HOUSE_MISMATCH", "Issues belong to different houses");
+        }
+        IssueView source = issue(sourceId, userId);
+        IssueView target = issue(targetId, userId);
+        if (!editableIssue(source.status()) || !editableIssue(target.status())) {
+            throw new BusinessException("ISSUE_NOT_ACTIVE", "Only active issues can be merged");
+        }
+        if (statusRank(source.status()) > statusRank(target.status())) {
+            throw new BusinessException("TARGET_STATUS_BEHIND", "Choose a target issue at the same or later work stage");
+        }
+        if (activeReportCount(sourceId) == 0 || activeReportCount(targetId) == 0) {
+            throw new BusinessException("ISSUE_EMPTY", "Both issues need active reports");
+        }
+        String now = Instant.now().toString();
+        List<String> movedReports = jdbc.query("""
+                SELECT report_id FROM issue_reports WHERE issue_id = ? AND unlinked_at IS NULL
+                """, (rs, index) -> rs.getString(1), sourceId);
+        jdbc.update("UPDATE issue_reports SET unlinked_at = ? WHERE issue_id = ? AND unlinked_at IS NULL",
+                now, sourceId);
+        for (String reportId : movedReports) {
+            jdbc.update("""
+                    INSERT INTO issue_reports(id, issue_id, report_id, link_reason, score, linked_at)
+                    VALUES (?, ?, ?, 'dispatcher_merge', 1.0, ?)
+                    """, UUID.randomUUID().toString(), targetId, reportId, now);
+        }
+        jdbc.update("""
+                INSERT OR IGNORE INTO issue_participants(issue_id, user_id, confirmation_type, confirmed_at)
+                SELECT ?, user_id, confirmation_type, confirmed_at
+                FROM issue_participants WHERE issue_id = ?
+                """, targetId, sourceId);
+        jdbc.update("DELETE FROM issue_participants WHERE issue_id = ?", sourceId);
+        jdbc.update("UPDATE issues SET status = 'WITHDRAWN', updated_at = ? WHERE id = ?", now, sourceId);
+        jdbc.update("UPDATE issues SET updated_at = ? WHERE id = ?", now, targetId);
+        statusEvent(sourceId, source.status(), IssueStatus.WITHDRAWN, userId,
+                "Объединена с заявкой " + targetId, now);
+        jdbc.update("""
+                INSERT INTO audit_events(id, actor_id, action, entity, entity_id, after_json, created_at)
+                VALUES (?, ?, 'ISSUES_MERGED', 'issue', ?, json_object('targetIssueId', ?), ?)
+                """, UUID.randomUUID().toString(), userId, sourceId, targetId, now);
+        return issue(targetId, userId);
+    }
+
+    @Transactional
+    public IssueView splitIssue(String sourceId, String reportId, String reason, String userId) {
+        requireDispatcher(issueHouse(sourceId), userId);
+        IssueView source = issue(sourceId, userId);
+        if (!editableIssue(source.status())) {
+            throw new BusinessException("ISSUE_NOT_ACTIVE", "Only active issues can be split");
+        }
+        if (activeReportCount(sourceId) < 2) {
+            throw new BusinessException("ISSUE_NOT_SPLITTABLE", "At least two reports are needed to split an issue");
+        }
+        List<Map<String, Object>> rows = jdbc.queryForList("""
+                SELECT r.house_id, r.author_id, r.category, r.zone_json, r.search_text
+                FROM issue_reports ir JOIN reports r ON r.id = ir.report_id
+                WHERE ir.issue_id = ? AND ir.report_id = ? AND ir.unlinked_at IS NULL
+                  AND r.withdrawn_at IS NULL
+                """, sourceId, reportId);
+        if (rows.isEmpty()) throw new BusinessException("REPORT_NOT_FOUND", "Report is not linked to this issue");
+        Map<String, Object> report = rows.get(0);
+        String newId = UUID.randomUUID().toString();
+        String now = Instant.now().toString();
+        jdbc.update("""
+                INSERT INTO issues(id, house_id, category, zone_json, status, priority, sla_due_at,
+                                   normalized_text, search_text, created_at, updated_at)
+                VALUES (?, ?, ?, ?, 'DRAFT', 'NORMAL', ?, ?, ?, ?, ?)
+                """, newId, report.get("house_id"), report.get("category"), report.get("zone_json"),
+                Instant.now().plusSeconds(72 * 3600).toString(), report.get("search_text"),
+                report.get("search_text"), now, now);
+        jdbc.update("UPDATE issue_reports SET unlinked_at = ? WHERE issue_id = ? AND report_id = ? AND unlinked_at IS NULL",
+                now, sourceId, reportId);
+        jdbc.update("""
+                INSERT INTO issue_reports(id, issue_id, report_id, link_reason, score, linked_at)
+                VALUES (?, ?, ?, 'dispatcher_split', 1.0, ?)
+                """, UUID.randomUUID().toString(), newId, reportId, now);
+        String authorId = (String) report.get("author_id");
+        jdbc.update("""
+                INSERT INTO issue_participants(issue_id, user_id, confirmation_type, confirmed_at)
+                VALUES (?, ?, 'dispatcher_split', ?)
+                """, newId, authorId, now);
+        removeOrphanParticipant(sourceId, authorId);
+        refreshIssueFromPrimaryReport(sourceId);
+        jdbc.update("UPDATE issues SET updated_at = ? WHERE id = ?", now, sourceId);
+        jdbc.update("""
+                INSERT INTO audit_events(id, actor_id, action, entity, entity_id, after_json, created_at)
+                VALUES (?, ?, 'ISSUE_SPLIT', 'issue', ?, json_object('newIssueId', ?, 'reportId', ?, 'reason', ?), ?)
+                """, UUID.randomUUID().toString(), userId, sourceId, newId, reportId, reason, now);
+        return issue(newId, userId);
+    }
+
     public List<IssueView> dispatcherQueue(String houseId, String userId) {
         requireDispatcher(houseId, userId);
         List<String> ids = jdbc.query("""
                 SELECT id FROM issues WHERE house_id = ?
-                  AND status IN ('DRAFT', 'OPEN', 'ASSIGNED', 'IN_PROGRESS', 'VERIFICATION_72H', 'REOPENED')
+                  AND status IN ('DRAFT', 'OPEN', 'ASSIGNED', 'IN_PROGRESS', 'VERIFICATION_72H', 'REOPENED', 'REVIEW_REQUIRED')
                 ORDER BY created_at DESC LIMIT 100
                 """, (rs, row) -> rs.getString(1), houseId);
         return ids.stream().map(id -> issue(id, userId)).toList();
@@ -190,6 +332,7 @@ public class MiniAppService {
             case ASSIGNED -> next == IssueStatus.IN_PROGRESS;
             case IN_PROGRESS -> next == IssueStatus.RESOLVED;
             case REOPENED -> next == IssueStatus.ASSIGNED;
+            case REVIEW_REQUIRED -> next == IssueStatus.WITHDRAWN;
             default -> false;
         };
         if (!allowed) throw new BusinessException("INVALID_STATUS_TRANSITION", "This status transition is not allowed");
@@ -311,6 +454,71 @@ public class MiniAppService {
                 INSERT INTO status_events(id, issue_id, from_status, to_status, actor_id, reason, created_at)
                 VALUES (?, ?, ?, ?, ?, ?, ?)
                 """, UUID.randomUUID().toString(), issueId, previous.name(), next.name(), actorId, reason, now);
+    }
+
+    private boolean editableIssue(IssueStatus status) {
+        return status == IssueStatus.DRAFT || status == IssueStatus.OPEN
+                || status == IssueStatus.ASSIGNED || status == IssueStatus.IN_PROGRESS
+                || status == IssueStatus.REOPENED;
+    }
+
+    private int statusRank(IssueStatus status) {
+        return switch (status) {
+            case DRAFT -> 0;
+            case OPEN -> 1;
+            case ASSIGNED, REOPENED -> 2;
+            case IN_PROGRESS -> 3;
+            default -> Integer.MAX_VALUE;
+        };
+    }
+
+    private int activeReportCount(String issueId) {
+        return jdbc.queryForObject("""
+                SELECT COUNT(*) FROM issue_reports ir JOIN reports r ON r.id = ir.report_id
+                WHERE ir.issue_id = ? AND ir.unlinked_at IS NULL AND r.withdrawn_at IS NULL
+                """, Integer.class, issueId);
+    }
+
+    private void removeOrphanParticipant(String issueId, String userId) {
+        jdbc.update("""
+                DELETE FROM issue_participants WHERE issue_id = ? AND user_id = ?
+                  AND NOT EXISTS (
+                    SELECT 1 FROM issue_reports ir JOIN reports r ON r.id = ir.report_id
+                    WHERE ir.issue_id = ? AND ir.unlinked_at IS NULL AND r.withdrawn_at IS NULL
+                      AND r.author_id = ?)
+                """, issueId, userId, issueId, userId);
+    }
+
+    private void updateAfterReportRemoval(String issueId, IssueStatus previous, String actorId, String now) {
+        if (activeReportCount(issueId) == 0) {
+            IssueStatus next = previous == IssueStatus.DRAFT || previous == IssueStatus.OPEN
+                    ? IssueStatus.WITHDRAWN : IssueStatus.REVIEW_REQUIRED;
+            jdbc.update("UPDATE issues SET status = ?, updated_at = ? WHERE id = ?",
+                    next.name(), now, issueId);
+            statusEvent(issueId, previous, next, actorId, "Последнее обращение отозвано", now);
+        } else {
+            refreshIssueFromPrimaryReport(issueId);
+            jdbc.update("UPDATE issues SET updated_at = ? WHERE id = ?", now, issueId);
+        }
+    }
+
+    private void refreshIssueFromPrimaryReport(String issueId) {
+        jdbc.update("""
+                UPDATE issues SET
+                  category = (SELECT r.category FROM issue_reports ir JOIN reports r ON r.id = ir.report_id
+                    WHERE ir.issue_id = ? AND ir.unlinked_at IS NULL AND r.withdrawn_at IS NULL
+                    ORDER BY ir.linked_at, ir.id LIMIT 1),
+                  zone_json = (SELECT r.zone_json FROM issue_reports ir JOIN reports r ON r.id = ir.report_id
+                    WHERE ir.issue_id = ? AND ir.unlinked_at IS NULL AND r.withdrawn_at IS NULL
+                    ORDER BY ir.linked_at, ir.id LIMIT 1),
+                  normalized_text = (SELECT r.search_text FROM issue_reports ir JOIN reports r ON r.id = ir.report_id
+                    WHERE ir.issue_id = ? AND ir.unlinked_at IS NULL AND r.withdrawn_at IS NULL
+                    ORDER BY ir.linked_at, ir.id LIMIT 1),
+                  search_text = (SELECT r.search_text FROM issue_reports ir JOIN reports r ON r.id = ir.report_id
+                    WHERE ir.issue_id = ? AND ir.unlinked_at IS NULL AND r.withdrawn_at IS NULL
+                    ORDER BY ir.linked_at, ir.id LIMIT 1)
+                WHERE id = ?
+                """, issueId, issueId, issueId, issueId, issueId);
     }
 
     private String issueHouse(String issueId) {

@@ -129,7 +129,7 @@ paths:
   /v1/reports/{id}/withdraw:
     post:
       operationId: withdrawReport
-      summary: withdrawReport
+      summary: Withdraw the current user's report and detach it from an active issue
       parameters:
         - name: id
           in: path
@@ -143,18 +143,11 @@ paths:
             schema:
               $ref: '#/components/schemas/WithdrawReportRequest'
       responses:
-        '200':
-          description: Accepted or returned
-        '400':
-          description: Invalid request
-        '403':
-          description: Access denied until JWT and house scope are implemented
-        '501':
-          description: Scaffold endpoint pending implementation
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
+        '204': {description: Report withdrawn and hidden from active issue}
+        '400': {description: Invalid request}
+        '401': {description: Missing or invalid MAX initData}
+        '404': {description: Report is not owned by the current user}
+        '409': {description: Already withdrawn or issue verification has begun}
   /v1/reports/{reportId}/attachments:
     post:
       operationId: uploadReportAttachment
@@ -289,7 +282,7 @@ paths:
   /v1/issues/{id}/merge:
     post:
       operationId: mergeIssues
-      summary: mergeIssues
+      summary: Move active reports from this issue into another issue in the same house as dispatcher
       parameters:
         - name: id
           in: path
@@ -304,21 +297,19 @@ paths:
               $ref: '#/components/schemas/MergeIssueRequest'
       responses:
         '200':
-          description: Accepted or returned
-        '400':
-          description: Invalid request
-        '403':
-          description: Access denied until JWT and house scope are implemented
-        '501':
-          description: Scaffold endpoint pending implementation
+          description: Target issue after merge
           content:
             application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
+              schema: {$ref: '#/components/schemas/IssueView'}
+        '400': {description: Invalid request or different houses}
+        '401': {description: Missing or invalid MAX initData}
+        '403': {description: Verified dispatcher role required for the source house}
+        '404': {description: Issue not found}
+        '409': {description: Inactive issue or target is at an earlier work stage}
   /v1/issues/{id}/split:
     post:
       operationId: splitIssue
-      summary: splitIssue
+      summary: Detach one report into a new draft issue as dispatcher
       parameters:
         - name: id
           in: path
@@ -333,17 +324,15 @@ paths:
               $ref: '#/components/schemas/SplitIssueRequest'
       responses:
         '200':
-          description: Accepted or returned
-        '400':
-          description: Invalid request
-        '403':
-          description: Access denied until JWT and house scope are implemented
-        '501':
-          description: Scaffold endpoint pending implementation
+          description: New draft issue containing the detached report
           content:
             application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
+              schema: {$ref: '#/components/schemas/IssueView'}
+        '400': {description: Invalid request or issue has fewer than two active reports}
+        '401': {description: Missing or invalid MAX initData}
+        '403': {description: Verified dispatcher role required for the issue house}
+        '404': {description: Issue or report not found}
+        '409': {description: Issue is no longer active}
   /v1/issues/{id}/status:
     patch:
       operationId: changeIssueStatus
@@ -866,7 +855,7 @@ components:
         confidence: {type: [number, 'null'], minimum: 0, maximum: 1}
     IssueView:
       type: object
-      required: [id, houseId, address, status, description, participants, attachments]
+      required: [id, houseId, address, status, description, participants, attachments, reports]
       properties:
         id: {type: string}
         houseId: {type: string}
@@ -881,6 +870,18 @@ components:
         attachments:
           type: array
           items: {$ref: '#/components/schemas/AttachmentView'}
+        reports:
+          type: array
+          description: Active reports visible to the current user; residents see only their own, dispatchers see all
+          items: {$ref: '#/components/schemas/LinkedReportView'}
+    LinkedReportView:
+      type: object
+      required: [id, description, author, createdAt]
+      properties:
+        id: {type: string}
+        description: {type: string}
+        author: {type: string}
+        createdAt: {type: string}
     AttachmentView:
       type: object
       required: [id, mime]
