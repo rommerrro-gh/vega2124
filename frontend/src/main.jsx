@@ -203,7 +203,7 @@ function AttachmentList({ attachments, role, onError }) {
 
 function IssueDetails({ issue, role, onError }) {
   return <>
-    <div className="detail-lines"><p className="muted">{issue.address}</p>{issue.location && <p className="muted">Место: {issue.location}</p>}{issue.occurredAt && <p className="muted">Замечено: {new Date(issue.occurredAt).toLocaleString("ru-RU")}</p>}</div>
+    <div className="detail-lines"><p className="muted">{issue.address}</p>{issue.category && <p className="muted">Категория: {categoryLabels[issue.category] || issue.category}</p>}{issue.location && <p className="muted">Место: {issue.location}</p>}{issue.occurredAt && <p className="muted">Замечено: {new Date(issue.occurredAt).toLocaleString("ru-RU")}</p>}</div>
     <p className="detail-description">{issue.description || "Активных обращений нет."}</p>
     {issue.plannedDate && <div className={`planned-date ${issueOverdue(issue) ? "planned-date-overdue" : ""}`}>
       <strong>{issueOverdue(issue) ? "Плановый срок прошёл" : "Планируем выполнить до"} {passportDate(`${issue.plannedDate}T12:00:00`)}</strong>
@@ -286,6 +286,7 @@ function Resident() {
   const [busy, setBusy] = useState(false);
   const [verificationComment, setVerificationComment] = useState("");
   const [withdrawReason, setWithdrawReason] = useState("");
+  const [withdrawTargetId, setWithdrawTargetId] = useState(null);
   const demoSession = new URLSearchParams(location.search).get("demoSession") === "admin" ? "admin" : "true";
   const request = (path, options) => api(demoSession, path, options);
   const refreshIssues = async () => setIssues(await request("/v1/me/issues"));
@@ -335,7 +336,7 @@ function Resident() {
   }
 
   function showIssue(nextIssue, message = "") {
-    setIssue(nextIssue); setIssueMessage(message); setVerificationComment(""); setWithdrawReason(""); setStep("result"); setNotice("");
+    setIssue(nextIssue); setIssueMessage(message); setVerificationComment(""); setWithdrawReason(""); setWithdrawTargetId(null); setStep("result"); setNotice("");
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
@@ -394,22 +395,22 @@ function Resident() {
     finally { setBusy(false); }
   }
 
-  async function withdrawReport(id) {
-    if (!withdrawReason.trim()) { setNotice("Укажите причину отзыва обращения."); return; }
+  async function withdrawReport(id, reason = withdrawReason, successMessage = "Обращение отозвано.") {
+    if (!reason.trim()) { setNotice("Укажите причину отзыва обращения."); return; }
     setBusy(true); setNotice("");
     try {
       await request(`/v1/reports/${encodeURIComponent(id)}/withdraw`, {
-        method: "POST", body: JSON.stringify({ reason: withdrawReason.trim() }),
+        method: "POST", body: JSON.stringify({ reason: reason.trim() }),
       });
       await refreshIssues();
-      again(); setShowReportForm(false); setNotice("Обращение отозвано.");
+      again(); setShowReportForm(false); setNotice(successMessage);
     } catch (error) { fail(error); }
     finally { setBusy(false); }
   }
 
   function again() {
     setReportId(null); setReportData(null); setUploaded(0); setCandidates([]); setIssue(null); setIssueMessage("");
-    setStep("form"); setShowReportForm(true); setNotice("");
+    setStep("form"); setShowReportForm(true); setWithdrawReason(""); setWithdrawTargetId(null); setNotice("");
     localNow.current = new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 16);
     requestAnimationFrame(() => {
       formRef.current?.reset();
@@ -432,7 +433,7 @@ function Resident() {
     {selectedHouse && canReport && step === "form" && !showReportForm && <div className="start-action"><div><strong>Заметили проблему?</strong><p>Проверьте похожие заявки и сообщите о новой.</p></div><Button mode="primary" type="button" onClick={() => setShowReportForm(true)}>Сообщить о проблеме <span aria-hidden="true">→</span></Button></div>}
     <div className="content-grid">
       {step === "form" && showReportForm && canReport && <Card className="form-card">
-        <div className="form-title"><SectionHeading title="Сообщить о проблеме" subtitle={`Дом: ${selectedHouse?.address || "не выбран"}`} />{!reportId && <button className="form-close" type="button" onClick={() => setShowReportForm(false)}>Отменить</button>}</div>
+        <div className="form-title"><SectionHeading title="Сообщить о проблеме" subtitle={`Дом: ${selectedHouse?.address || "не выбран"}`} /><button className="form-close" type="button" disabled={busy} onClick={() => reportId ? withdrawReport(reportId, "Создание заявки отменено пользователем", "Создание заявки отменено.") : setShowReportForm(false)}>Отмена</button></div>
         <form ref={formRef} onSubmit={submitReport}>
           <Field id="category" label="Категория"><select id="category" name="category" required disabled={!!reportId} defaultValue=""><option value="">Выберите категорию</option><option value="LIGHTING">Освещение</option><option value="WATER">Вода</option><option value="HEATING">Отопление</option><option value="ELEVATOR">Лифт</option><option value="OTHER">Другое</option></select></Field>
           <Field id="location" label="Где именно?"><input id="location" name="location" maxLength="160" placeholder="Например, подъезд 1, этаж 2" required disabled={!!reportId} /></Field>
@@ -453,13 +454,13 @@ function Resident() {
         <SectionHeading title="Похожие проблемы" subtitle="Выберите существующую заявку или создайте новую" />
         <div className="item-list">{candidates.length ? candidates.map(({ issue: item, score }) => <div className="candidate" key={item.id}><span className="score">{Math.round(score * 100)}% совпадение</span><strong>{item.description || item.category || "Проблема дома"}</strong><p>{item.address} · {item.participants} участников</p><button type="button" disabled={busy} onClick={() => decide(`/v1/issues/${encodeURIComponent(item.id)}/join`)}>Присоединиться</button></div>) : <p className="muted empty">Похожих активных заявок не найдено.</p>}</div>
         <Button mode="primary" className="brand-button" type="button" stretched disabled={busy} onClick={() => decide("/v1/issues")}>Создать новую заявку <span aria-hidden="true">→</span></Button>
-        <div className="secondary-operation"><Field id="withdraw-pending-reason" label="Причина отзыва обращения"><textarea id="withdraw-pending-reason" maxLength="1000" value={withdrawReason} onChange={event => setWithdrawReason(event.target.value)} placeholder="Например, отправлено по ошибке" /></Field><Button mode="tertiary" type="button" stretched disabled={busy || !withdrawReason.trim()} onClick={() => withdrawReport(reportId)}>Отозвать обращение</Button></div>
+        <Button mode="tertiary" className="decision-cancel" type="button" stretched disabled={busy} onClick={() => withdrawReport(reportId, "Создание заявки отменено пользователем", "Создание заявки отменено.")}>Отмена</Button>
       </Card>}
       {step === "result" && issue && <Card className="flow-card">
         {issueMessage && <div className="success-mark" aria-hidden="true">✓</div>}
         <h2>{issueMessage || "Заявка"}</h2>
         <IssueDetails issue={issue} role="true" onError={setNotice} />
-        {editableIssueStatuses.includes(issue.status) && !!issue.reports?.length && <div className="secondary-operation"><h3>Мои обращения в заявке</h3><Field id="withdraw-reason" label="Причина отзыва"><textarea id="withdraw-reason" maxLength="1000" value={withdrawReason} onChange={event => setWithdrawReason(event.target.value)} placeholder="Например, проблема уже решена" /></Field>{issue.reports.map(report => <div className="linked-report" key={report.id}><p>{report.description}</p><Button mode="tertiary" type="button" disabled={busy || !withdrawReason.trim()} onClick={() => withdrawReport(report.id)}>Отозвать обращение</Button></div>)}</div>}
+        {editableIssueStatuses.includes(issue.status) && !!issue.reports?.length && <div className="secondary-operation"><h3>Мои обращения в заявке</h3>{issue.reports.map(report => <div className="report-entry" key={report.id}><div className="linked-report"><small>Текст вашего обращения</small><p>{report.description}</p></div>{withdrawTargetId === report.id ? <div className="withdraw-panel"><Field id={`withdraw-reason-${report.id}`} label="Причина отзыва"><textarea id={`withdraw-reason-${report.id}`} maxLength="1000" value={withdrawReason} onChange={event => setWithdrawReason(event.target.value)} placeholder="Например, проблема уже решена" /></Field><div className="withdraw-actions"><Button mode="secondary" type="button" disabled={busy || !withdrawReason.trim()} onClick={() => withdrawReport(report.id)}>Подтвердить отзыв</Button><Button mode="tertiary" type="button" disabled={busy} onClick={() => { setWithdrawTargetId(null); setWithdrawReason(""); }}>Отмена</Button></div></div> : <Button mode="tertiary" className="withdraw-trigger" type="button" disabled={busy} onClick={() => { setWithdrawTargetId(report.id); setWithdrawReason(""); }}>{issue.participants === 1 && issue.reports.length === 1 ? "Отозвать заявку" : "Отозвать обращение"}</Button>}</div>)}</div>}
         {issue.status === "VERIFICATION_72H" && <div className="verification"><h3>Работа выполнена?</h3><p className="muted">{issue.verificationDueAt ? `Подтвердите до ${new Date(issue.verificationDueAt).toLocaleString("ru-RU")}` : ""}</p><Field id="verification-comment" label="Комментарий, если проблема осталась"><textarea id="verification-comment" maxLength="2000" placeholder="Что ещё не исправлено?" value={verificationComment} onChange={event => setVerificationComment(event.target.value)} /></Field><Button mode="primary" className="brand-button" type="button" stretched disabled={busy} onClick={() => verify(true)}>Да, проблема решена</Button><Button mode="secondary" type="button" stretched disabled={busy} onClick={() => verify(false)}>Нет, проблема осталась</Button></div>}
         <Button mode="secondary" className="bottom-action" type="button" stretched onClick={again}>Сообщить о другой проблеме</Button>
         <Button mode="tertiary" className="quiet-action" type="button" stretched onClick={() => { again(); setShowReportForm(false); }}>На главную</Button>
