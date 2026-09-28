@@ -78,7 +78,9 @@ async function api(role, path, options = {}) {
     const error = await response.json().catch(() => ({}));
     throw new Error(error.message || `Ошибка ${response.status}`);
   }
-  return response.status === 204 ? null : response.json();
+  if (response.status === 204) return null;
+  const body = await response.text();
+  return body ? JSON.parse(body) : null;
 }
 
 function navigate(path) {
@@ -145,7 +147,7 @@ function Card({ children, className = "" }) {
 
 function DisclosureCard({ title, summary, children, className = "" }) {
   return <Card className={`disclosure-card ${className}`}><details>
-    <summary><span><strong>{title}</strong><small>{summary}</small></span><span className="disclosure-arrow" aria-hidden="true">⌄</span></summary>
+    <summary><span><strong>{title}</strong><small>{summary}</small></span><span className="disclosure-arrow" aria-hidden="true" /></summary>
     <div className="disclosure-content">{children}</div>
   </details></Card>;
 }
@@ -191,8 +193,8 @@ function InvitationToken({ token, role = "admin" }) {
   const link = username ? `https://max.ru/${username}?startapp=${encodeURIComponent(token)}` : "";
   return <div className="invite-token" role="status"><strong>Приглашение создано</strong>
     {link ? <><code>{link}</code><Button mode="secondary" type="button" onClick={() => navigator.clipboard.writeText(link)}>Скопировать ссылку</Button></>
-      : <><code>{token}</code><p>Укажите MAX_BOT_USERNAME на стенде, чтобы здесь появилась готовая ссылка. Пока добавьте токен к ссылке бота как параметр startapp.</p></>}
-    <p>Ссылка показывается только сейчас.</p></div>;
+      : <><code>{token}</code><Button mode="secondary" type="button" onClick={() => navigator.clipboard.writeText(token)}>Скопировать токен</Button><p>Укажите MAX_BOT_USERNAME на стенде, чтобы здесь появилась готовая ссылка. Пока добавьте токен к ссылке бота как параметр startapp.</p></>}
+    <p>Сохраните ссылку сейчас: из соображений безопасности она показывается один раз. Если потеряли её, отзовите приглашение и создайте новое.</p></div>;
 }
 
 function AttachmentList({ attachments, role, onError }) {
@@ -325,6 +327,13 @@ function Resident() {
     } catch (error) { fail(error); } finally { setPollBusy(false); }
   }
 
+  async function refreshPolls() {
+    if (!selectedHouseId) return;
+    setPollBusy(true); setNotice("");
+    try { setPolls(await request(`/v1/houses/${encodeURIComponent(selectedHouseId)}/polls`)); }
+    catch (error) { fail(error); } finally { setPollBusy(false); }
+  }
+
   function showIssue(nextIssue, message = "") {
     setIssue(nextIssue); setIssueMessage(message); setVerificationComment(""); setWithdrawReason(""); setStep("result"); setNotice("");
     window.scrollTo({ top: 0, behavior: "smooth" });
@@ -437,7 +446,7 @@ function Resident() {
         <div className="item-list">{houseIssues.length ? houseIssues.map(item => <CellSimple key={item.id} className="issue-cell" title={item.location || item.address} subtitle={item.description} overline={statusLabels[item.status] || item.status} showChevron onClick={() => showIssue(item)} />) : <p className="muted empty">Заявок пока нет.</p>}</div>
         <Button mode="tertiary" className="quiet-action" type="button" stretched onClick={() => refreshIssues().catch(fail)}>Обновить список</Button>
       </DisclosureCard>}
-      {step === "form" && !!polls.length && <DisclosureCard title="Опросы дома" summary={openPolls.length ? `${countLabel(openPolls.length, "опрос ждёт", "опроса ждут", "опросов ждут")} вашего ответа` : countLabel(polls.length, "опрос", "опроса", "опросов")}><div className="poll-list">{polls.map(poll => <PollCard key={poll.id} poll={poll} onVote={voteInPoll} busy={pollBusy} />)}</div></DisclosureCard>}
+      {step === "form" && canReport && <DisclosureCard title="Опросы дома" summary={openPolls.length ? `${countLabel(openPolls.length, "опрос ждёт", "опроса ждут", "опросов ждут")} вашего ответа` : polls.length ? countLabel(polls.length, "опрос", "опроса", "опросов") : "Опросов пока нет"}><div className="poll-list">{polls.map(poll => <PollCard key={poll.id} poll={poll} onVote={voteInPoll} busy={pollBusy} />)}{!polls.length && <p className="muted">В выбранном доме пока нет опросов.</p>}<Button mode="secondary" type="button" disabled={pollBusy} onClick={refreshPolls}>Обновить опросы</Button></div></DisclosureCard>}
       {step === "form" && selectedHouse && <HousePassport passport={passport} loading={passportLoading} error={passportError} />}
       {step === "decision" && <Card className="flow-card">
         <SectionHeading title="Похожие проблемы" subtitle="Выберите существующую заявку или создайте новую" />
@@ -789,7 +798,7 @@ function SystemAdmin() {
       <Field id="org-select" label="УК"><select id="org-select" value={organizationId} onChange={event => { setOrganizationId(event.target.value); setSelected([]); }}><option value="">Выберите УК</option>{organizations.map(item => <option value={item.id} key={item.id}>{item.name}</option>)}</select></Field>
       <form onSubmit={event => { event.preventDefault(); run(async () => { await request("/v1/access/houses", { method: "POST", body: JSON.stringify({ address: houseAddress.trim() }) }); setHouseAddress(""); }); }}><Field id="house-address" label="Новый дом"><input id="house-address" value={houseAddress} maxLength="300" required onChange={event => setHouseAddress(event.target.value)} /></Field><Button mode="secondary" type="submit" disabled={busy}>Добавить дом</Button></form>
       {org && <><Field id="house-link" label="Закрепить дом за УК"><select id="house-link" value={houseId} onChange={event => setHouseId(event.target.value)}><option value="">Выберите дом</option>{houses.map(house => <option value={house.id} key={house.id}>{house.address}</option>)}</select></Field><Button mode="secondary" type="button" disabled={busy || !houseId} onClick={() => run(() => request(`/v1/access/organizations/${organizationId}/houses/${houseId}`, { method: "PUT", body: JSON.stringify({ active: true }) }))}>Закрепить</Button>
-        <div className="item-list">{org.houses.map(house => <div className="admin-row" key={house.id}><span>{house.address}</span><button type="button" disabled={busy} onClick={() => { if (window.confirm("Приостановить доступ УК и её сотрудников к дому?")) run(() => request(`/v1/access/organizations/${organizationId}/houses/${house.id}`, { method: "PUT", body: JSON.stringify({ active: false }) })); }}>Приостановить</button></div>)}</div></>}
+        <div className="item-list linked-house-list">{org.houses.map(house => <div className="admin-row" key={house.id}><span>{house.address}</span><button type="button" disabled={busy} onClick={() => { if (window.confirm("Приостановить доступ УК и её сотрудников к дому?")) run(() => request(`/v1/access/organizations/${organizationId}/houses/${house.id}`, { method: "PUT", body: JSON.stringify({ active: false }) })); }}>Приостановить</button></div>)}</div></>}
     </Card><Card><SectionHeading title="Пригласить администратора УК" subtitle="Одноразовая ссылка на 72 часа" />
       {org && <form onSubmit={event => { event.preventDefault(); run(async () => { const result = await request("/v1/access/invitations", { method: "POST", body: JSON.stringify({ role: "UK_ADMIN", organizationId, houseIds: selected, days: 3, activationLimit: 1 }) }); setToken(result.token); setInvitations(await request("/v1/access/invitations")); }); }}><HouseChecks houses={org.houses} selected={selected} onChange={setSelected} /><Button mode="primary" type="submit" disabled={busy || !selected.length}>Создать приглашение</Button></form>}
       <InvitationToken token={token} />

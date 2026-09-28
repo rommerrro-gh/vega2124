@@ -71,6 +71,11 @@ class HousePollFlowTest {
         assertEquals(1, jdbc.queryForObject("SELECT COUNT(*) FROM audit_events WHERE entity_id = ? AND action = 'HOUSE_POLL_CREATED'",
                 Integer.class, pollId));
 
+        jdbc.update("UPDATE house_memberships SET access_status = 'REVOKED' WHERE house_id = 'demo-house-1' AND user_id = 'demo-admin-1' AND role = 'RESIDENT'");
+        mvc.perform(get("/v1/houses/demo-house-1/polls").header("X-Demo-Session", "admin"))
+                .andExpect(status().isOk());
+        jdbc.update("UPDATE house_memberships SET access_status = 'ACTIVE' WHERE house_id = 'demo-house-1' AND user_id = 'demo-admin-1' AND role = 'RESIDENT'");
+
         mvc.perform(get("/v1/houses/demo-house-1/polls").header("X-Demo-Session", "dispatcher"))
                 .andExpect(status().isNotFound());
         mvc.perform(get("/v1/houses/demo-house-2/polls").header("X-Demo-Session", "true"))

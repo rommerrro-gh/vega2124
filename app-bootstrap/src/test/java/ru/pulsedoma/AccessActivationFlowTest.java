@@ -124,4 +124,16 @@ class AccessActivationFlowTest {
         assertTrue(access.myOrganizations("new-uk-admin").isEmpty());
         assertThrows(BusinessException.class, () -> access.preview(pending.token(), "new-dispatcher"));
     }
+
+    @Test
+    void demoUkAdminCanCreateAndRevokeStaffInvitationOverHttp() throws Exception {
+        String created = mvc.perform(post("/v1/access/invitations").header("X-Demo-Session", "admin")
+                        .contentType("application/json")
+                        .content("{\"role\":\"DISPATCHER\",\"organizationId\":\"demo-uk-1\",\"houseIds\":[\"demo-house-1\"],\"days\":3,\"activationLimit\":1}"))
+                .andExpect(status().isCreated()).andReturn().getResponse().getContentAsString();
+        String id = new com.fasterxml.jackson.databind.ObjectMapper().readTree(created).path("invitation").path("id").asText();
+        mvc.perform(post("/v1/access/invitations/" + id + "/revoke").header("X-Demo-Session", "admin"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.revokedAt").isNotEmpty());
+    }
 }

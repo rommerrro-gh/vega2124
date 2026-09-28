@@ -27,7 +27,7 @@ public class HousePollService {
                            boolean resultsVisible, String myOptionId, List<OptionView> options) {}
 
     public List<PollView> list(String houseId, String userId) {
-        requireResident(houseId, userId);
+        requireReader(houseId, userId);
         return jdbc.query("SELECT id FROM polls WHERE house_id = ? ORDER BY created_at DESC, id DESC",
                 (rs, row) -> rs.getString(1), houseId).stream()
                 .map(id -> view(houseId, id, userId)).toList();
@@ -118,6 +118,15 @@ public class HousePollService {
         Integer count = jdbc.queryForObject("""
                 SELECT COUNT(*) FROM house_memberships WHERE house_id = ? AND user_id = ?
                   AND role = 'RESIDENT' AND verification_status = 'VERIFIED' AND access_status = 'ACTIVE'
+                """, Integer.class, houseId, userId);
+        if (count == null || count == 0) throw new BusinessException("HOUSE_NOT_FOUND", "House is not available");
+    }
+
+    private void requireReader(String houseId, String userId) {
+        Integer count = jdbc.queryForObject("""
+                SELECT COUNT(*) FROM house_memberships WHERE house_id = ? AND user_id = ?
+                  AND role IN ('RESIDENT', 'HOUSE_ADMIN')
+                  AND verification_status = 'VERIFIED' AND access_status = 'ACTIVE'
                 """, Integer.class, houseId, userId);
         if (count == null || count == 0) throw new BusinessException("HOUSE_NOT_FOUND", "House is not available");
     }

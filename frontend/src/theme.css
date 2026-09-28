@@ -69,6 +69,13 @@ button{cursor:pointer}
 .field input:disabled,.field select:disabled,.field textarea:disabled{opacity:.65;background:#f2f5f2}
 .field textarea{min-height:112px;resize:vertical;line-height:1.5}.field input[type=file]{font-size:12px;padding:11px}
 .field input::placeholder,.field textarea::placeholder{color:#9bab9e}
+.field select,.house-switcher select{appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20' fill='none'%3E%3Cpath d='m5 7 5 5 5-5' stroke='%2316855e' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 13px center;background-size:18px;padding-right:38px}
+.house-switcher select{background-position:right center}
+.disclosure-arrow::before{content:"";width:8px;height:8px;border-right:2px solid currentColor;border-bottom:2px solid currentColor;transform:translateY(-2px) rotate(45deg)}
+.poll-option-edit-row input{display:block;width:100%;border:1px solid #d9e5dc;border-radius:13px;background:#fbfdfb;color:#19312d;padding:13px 14px;min-height:48px;outline:none}
+.poll-option-edit-row input:focus{border-color:#35a978;box-shadow:0 0 0 3px #25a76b22}
+.poll-option-edit-row input::placeholder{color:#9bab9e}
+.linked-house-list{margin-top:18px}
 .hint,.muted{color:#809189;font-size:13px;line-height:1.5}.hint{margin:-7px 0 20px}
 .brand-button{background:#18865e!important;color:#fff!important;box-shadow:0 8px 16px #16845e28!important}
 .brand-button:hover{background:#116e4d!important}
@@ -145,4 +152,6 @@ footer{font-size:11px;color:#a0afa5;text-align:center;padding:28px 0 5px}footer 
   .issue-cell [class*="CellSimple__title"],.issue-cell [class*="CellSimple__subtitle"]{color:#edf6ef!important}
   .issue-cell [class*="CellSimple__overline"],.issue-cell [class*="CellSimple__chevron"]{color:#a8c5b1!important}
   .field input,.field select,.field textarea{color-scheme:dark}
+  .field select{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20' fill='none'%3E%3Cpath d='m5 7 5 5 5-5' stroke='%239be4b3' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E")!important;background-repeat:no-repeat!important;background-position:right 13px center!important;background-size:18px!important}
+  .poll-option-edit-row input{background:#1c2d24;color:#edf6ef;border-color:#34503e;color-scheme:dark}
 }
