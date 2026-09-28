@@ -46,7 +46,8 @@ public class ReportService {
         }
         Integer allowed = jdbc.queryForObject("""
                 SELECT count(*) FROM house_memberships
-                WHERE house_id = ? AND user_id = ? AND verification_status = 'VERIFIED'
+                WHERE house_id = ? AND user_id = ? AND role = 'RESIDENT'
+                  AND verification_status = 'VERIFIED' AND access_status = 'ACTIVE'
                 """, Integer.class, command.houseId(), command.authorId());
         if (allowed == null || allowed == 0) {
             throw new BusinessException("HOUSE_ACCESS_DENIED", "Author is not a verified house member");

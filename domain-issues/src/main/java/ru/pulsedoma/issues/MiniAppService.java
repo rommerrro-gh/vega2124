@@ -32,6 +32,7 @@ public class MiniAppService {
 
     public record MembershipAccess(MembershipRole role, VerificationStatus verificationStatus) {}
     public record HouseView(String id, String address, List<MembershipAccess> memberships) {}
+    public record LegacyInvitationView(String houseId, String address, String expiresAt) {}
     public record LinkedReportView(String id, String description, String author, String createdAt) {}
     public record PlannedDateChange(String previousDate, String newDate, boolean previousDateMissed,
                                     String reason, String changedAt) {}
@@ -47,7 +48,8 @@ public class MiniAppService {
                 SELECT i.id FROM issues i JOIN issue_participants p ON p.issue_id = i.id
                 WHERE p.user_id = ? AND EXISTS (
                   SELECT 1 FROM house_memberships m WHERE m.house_id = i.house_id
-                    AND m.user_id = p.user_id AND m.verification_status = 'VERIFIED')
+                    AND m.user_id = p.user_id AND m.role = 'RESIDENT'
+                    AND m.verification_status = 'VERIFIED' AND m.access_status = 'ACTIVE')
                 ORDER BY i.updated_at DESC LIMIT 100
                 """, (rs, row) -> rs.getString(1), userId);
         return ids.stream().map(id -> issue(id, userId)).toList();
@@ -58,7 +60,7 @@ public class MiniAppService {
         jdbc.query("""
                 SELECT h.id, h.address, m.role, m.verification_status FROM houses h
                 JOIN house_memberships m ON m.house_id = h.id
-                WHERE m.user_id = ? AND m.verification_status = 'VERIFIED'
+                WHERE m.user_id = ? AND m.verification_status = 'VERIFIED' AND m.access_status = 'ACTIVE'
                 ORDER BY h.address, m.role
                 """, rs -> {
             String id = rs.getString("id");
@@ -74,6 +76,18 @@ public class MiniAppService {
     public List<HouseView> dispatcherHouses(String userId) {
         return houses(userId).stream().filter(house -> house.memberships().stream()
                 .anyMatch(access -> access.role() == MembershipRole.DISPATCHER)).toList();
+    }
+
+    public String activeHouse(String userId) {
+        return jdbc.query("SELECT active_house_id FROM users WHERE id = ?", (rs, row) -> rs.getString(1), userId)
+                .stream().findFirst().orElse(null);
+    }
+
+    public void setActiveHouse(String houseId, String userId) {
+        if (houses(userId).stream().noneMatch(house -> house.id().equals(houseId))) {
+            throw new BusinessException("HOUSE_ACCESS_DENIED", "House access required");
+        }
+        jdbc.update("UPDATE users SET active_house_id = ? WHERE id = ?", houseId, userId);
     }
 
     @Transactional
@@ -112,6 +126,23 @@ public class MiniAppService {
                 .orElseThrow(() -> new BusinessException("INVITATION_INVALID", "House unavailable"));
     }
 
+    public LegacyInvitationView legacyInvitation(String token) {
+        String hash;
+        try {
+            hash = HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256")
+                    .digest(token.getBytes(StandardCharsets.UTF_8)));
+        } catch (NoSuchAlgorithmException e) {
+            throw new IllegalStateException(e);
+        }
+        return jdbc.query("""
+                SELECT h.id, h.address, i.expires_at FROM house_invitations i
+                JOIN houses h ON h.id = i.house_id WHERE i.token_hash = ? AND i.revoked_at IS NULL
+                  AND datetime(i.expires_at) > datetime('now')
+                  AND i.activation_count < i.activation_limit
+                """, (rs, row) -> new LegacyInvitationView(rs.getString(1), rs.getString(2), rs.getString(3)), hash)
+                .stream().findFirst().orElseThrow(() -> new BusinessException("INVITATION_INVALID", "Invitation is expired or unavailable"));
+    }
+
     public IssueView issue(String issueId, String userId) {
         List<IssueView> found = jdbc.query("""
                 SELECT i.id, i.house_id, h.address, i.category, i.status,
@@ -127,6 +158,9 @@ public class MiniAppService {
                 FROM issues i JOIN houses h ON h.id = i.house_id
                 JOIN house_memberships m ON m.house_id = i.house_id
                 WHERE i.id = ? AND m.user_id = ? AND m.verification_status = 'VERIFIED'
+                  AND m.access_status = 'ACTIVE' AND
+                  (m.role = 'DISPATCHER' OR (m.role = 'RESIDENT' AND EXISTS
+                    (SELECT 1 FROM issue_participants p WHERE p.issue_id = i.id AND p.user_id = m.user_id)))
                 LIMIT 1
                 """, (rs, row) -> new IssueView(rs.getString("id"), rs.getString("house_id"),
                 rs.getString("address"), rs.getString("category"), IssueStatus.valueOf(rs.getString("status")),
@@ -143,7 +177,7 @@ public class MiniAppService {
                   AND (r.author_id = ? OR EXISTS (
                     SELECT 1 FROM house_memberships m WHERE m.house_id = r.house_id
                       AND m.user_id = ? AND m.role = 'DISPATCHER'
-                      AND m.verification_status = 'VERIFIED'))
+                      AND m.verification_status = 'VERIFIED' AND m.access_status = 'ACTIVE'))
                 ORDER BY r.created_at, r.id
                 """, (rs, index) -> new LinkedReportView(rs.getString("id"), rs.getString("raw_text"),
                 rs.getString("display_name"), rs.getString("created_at")), issueId, userId, userId);
@@ -177,12 +211,15 @@ public class MiniAppService {
     @Transactional
     public IssueView joinIssue(String issueId, String reportId, String userId) {
         Map<String, Object> report = reportForDecision(reportId, userId);
-        IssueView target = issue(issueId, userId);
-        if (!target.houseId().equals(report.get("house_id"))) {
+        List<Map<String, Object>> targets = jdbc.queryForList("SELECT house_id, status FROM issues WHERE id = ?", issueId);
+        if (targets.isEmpty()) throw new BusinessException("ISSUE_NOT_FOUND", "Issue is not available");
+        Map<String, Object> target = targets.get(0);
+        if (!target.get("house_id").equals(report.get("house_id"))) {
             throw new BusinessException("HOUSE_MISMATCH", "Report and issue belong to different houses");
         }
-        if (target.status() != IssueStatus.OPEN && target.status() != IssueStatus.ASSIGNED
-                && target.status() != IssueStatus.IN_PROGRESS) {
+        IssueStatus status = IssueStatus.valueOf((String) target.get("status"));
+        if (status != IssueStatus.OPEN && status != IssueStatus.ASSIGNED
+                && status != IssueStatus.IN_PROGRESS) {
             throw new BusinessException("ISSUE_NOT_ACTIVE", "Issue is not open for joining");
         }
         link(issueId, reportId, userId, "resident_join", Instant.now().toString());
@@ -599,7 +636,7 @@ public class MiniAppService {
         Integer count = jdbc.queryForObject("""
                 SELECT COUNT(*) FROM house_memberships
                 WHERE house_id = ? AND user_id = ? AND role = 'DISPATCHER'
-                  AND verification_status = 'VERIFIED'
+                  AND verification_status = 'VERIFIED' AND access_status = 'ACTIVE'
                 """, Integer.class, houseId, userId);
         if (count == null || count == 0) throw new BusinessException("HOUSE_ACCESS_DENIED", "Dispatcher access required");
     }
@@ -609,7 +646,8 @@ public class MiniAppService {
                 SELECT r.house_id, r.category, r.search_text, r.zone_json FROM reports r
                 JOIN house_memberships m ON m.house_id = r.house_id
                 WHERE r.id = ? AND r.author_id = ? AND r.withdrawn_at IS NULL
-                  AND m.user_id = ? AND m.verification_status = 'VERIFIED'
+                  AND m.user_id = ? AND m.role = 'RESIDENT'
+                  AND m.verification_status = 'VERIFIED' AND m.access_status = 'ACTIVE'
                   AND NOT EXISTS (SELECT 1 FROM issue_reports ir WHERE ir.report_id = r.id AND ir.unlinked_at IS NULL)
                 LIMIT 1
                 """, reportId, userId, userId);

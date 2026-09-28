@@ -26,6 +26,8 @@ def main():
     admin = commands.add_parser("admin", help="Выдать роль администратора дома вошедшему пользователю")
     admin.add_argument("--house-id", required=True)
     admin.add_argument("--max-user-id", required=True)
+    system_admin = commands.add_parser("system-admin", help="Однократно назначить первого системного администратора")
+    system_admin.add_argument("--max-user-id", required=True)
     args = parser.parse_args()
 
     if not args.db.is_file():
@@ -53,6 +55,20 @@ def main():
                     WHERE max_user_id IS NOT NULL ORDER BY created_at DESC
                     """):
                 print(max_id, name)
+        elif args.command == "system-admin":
+            if db.execute("SELECT COUNT(*) FROM system_administrators").fetchone()[0]:
+                parser.error("системный администратор уже существует")
+            row = db.execute("SELECT id FROM users WHERE max_user_id = ? AND status = 'ACTIVE'",
+                             (args.max_user_id,)).fetchone()
+            if not row:
+                parser.error("пользователь ещё не входил в mini app или неактивен")
+            db.execute("INSERT INTO system_administrators(user_id, created_at) VALUES (?, ?)",
+                       (row[0], datetime.datetime.now(datetime.timezone.utc).isoformat()))
+            db.execute("""
+                INSERT INTO audit_events(id, actor_id, action, entity, entity_id, after_json)
+                VALUES (?, NULL, 'SYSTEM_ADMIN_BOOTSTRAPPED', 'user', ?, '{}')
+                """, (str(uuid.uuid4()), row[0]))
+            print("Первый системный администратор назначен")
         elif args.command in ("dispatcher", "admin"):
             row = db.execute("SELECT id FROM users WHERE max_user_id = ? AND status = 'ACTIVE'",
                              (args.max_user_id,)).fetchone()

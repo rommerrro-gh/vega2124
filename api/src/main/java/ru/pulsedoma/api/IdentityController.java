@@ -27,6 +27,11 @@ public class IdentityController {
         return miniApp.acceptInvitation(token, principal.getName());
     }
 
+    @GetMapping("/v1/invitations/{token}")
+    public MiniAppService.LegacyInvitationView legacyInvitation(@PathVariable @NotBlank String token) {
+        return miniApp.legacyInvitation(token);
+    }
+
     @GetMapping("/v1/me/houses")
     public List<MiniAppService.HouseView> getMyHouses(Principal principal) {
         return miniApp.houses(principal.getName());
@@ -43,9 +48,15 @@ public class IdentityController {
     }
 
     @PutMapping("/v1/me/active-house")
-    public void setActiveHouse(@Valid @RequestBody SetActiveHouseRequest request) {
-        throw PendingOperation.notImplemented();
+    public void setActiveHouse(@Valid @RequestBody SetActiveHouseRequest request, Principal principal) {
+        miniApp.setActiveHouse(request.houseId(), principal.getName());
+    }
+
+    @GetMapping("/v1/me/active-house")
+    public ActiveHouseView activeHouse(Principal principal) {
+        return new ActiveHouseView(miniApp.activeHouse(principal.getName()));
     }
 
     public record SetActiveHouseRequest(@NotBlank String houseId) {}
+    public record ActiveHouseView(String houseId) {}
 }

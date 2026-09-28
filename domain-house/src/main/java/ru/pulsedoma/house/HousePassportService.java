@@ -32,7 +32,7 @@ public class HousePassportService {
                 WHERE h.id = ? AND EXISTS (
                   SELECT 1 FROM house_memberships m
                   WHERE m.house_id = h.id AND m.user_id = ?
-                    AND m.verification_status = 'VERIFIED')
+                    AND m.verification_status = 'VERIFIED' AND m.access_status = 'ACTIVE')
                 """, (rs, row) -> rs.getString(1), houseId, userId);
         if (addresses.isEmpty()) {
             throw new BusinessException("HOUSE_NOT_FOUND", "House is not available");

@@ -25,6 +25,8 @@ spring:
       port: ${REDIS_PORT:6379}
       timeout: ${REDIS_TIMEOUT:200ms}
 max:
+  bot:
+    username: ${MAX_BOT_USERNAME:}
   webhook:
     secret: ${MAX_WEBHOOK_SECRET:local-dev-secret}
     queue-key: ${MAX_WEBHOOK_QUEUE_KEY:max:webhook:updates}

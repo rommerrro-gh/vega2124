@@ -36,7 +36,7 @@ public class AttachmentService {
         Integer count = jdbc.queryForObject("""
                 SELECT COUNT(*) FROM reports r JOIN house_memberships m ON m.house_id = r.house_id
                 WHERE r.id = ? AND r.author_id = ? AND m.user_id = ?
-                  AND m.verification_status = 'VERIFIED' AND r.withdrawn_at IS NULL
+                  AND m.verification_status = 'VERIFIED' AND m.access_status = 'ACTIVE' AND r.withdrawn_at IS NULL
                   AND NOT EXISTS (SELECT 1 FROM issue_reports ir WHERE ir.report_id = r.id AND ir.unlinked_at IS NULL)
                 """, Integer.class, reportId, userId, userId);
         if (count == null || count == 0) throw new BusinessException("REPORT_NOT_AVAILABLE", "Report is not available for upload");
@@ -67,7 +67,7 @@ public class AttachmentService {
                     WHERE ir.report_id = r.id AND ir.unlinked_at IS NULL AND p.user_id = ?
                   ) OR EXISTS (
                     SELECT 1 FROM house_memberships m WHERE m.house_id = r.house_id
-                    AND m.user_id = ? AND m.role = 'DISPATCHER' AND m.verification_status = 'VERIFIED'
+                    AND m.user_id = ? AND m.role = 'DISPATCHER' AND m.verification_status = 'VERIFIED' AND m.access_status = 'ACTIVE'
                   ))
                 """, id, userId, userId, userId);
         if (rows.isEmpty()) throw new BusinessException("ATTACHMENT_NOT_FOUND", "Attachment is not available");

@@ -35,6 +35,7 @@ public class SecurityConfig {
                         .requestMatchers("/miniapp/**").permitAll()
                         .requestMatchers("/dispatcher/**").permitAll()
                         .requestMatchers("/admin/**").permitAll()
+                        .requestMatchers("/system/**", "/uk/**").permitAll()
                         .requestMatchers("/actuator/health", "/v3/api-docs/**", "/swagger-ui/**").permitAll()
                         .anyRequest().denyAll())
                 .httpBasic(Customizer.withDefaults())

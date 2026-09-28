@@ -6,7 +6,7 @@
 
 1. Использовать выданного организаторами тестового бота MAX и его токен. Токен хранить только в локальном `.env` стенда или в хранилище секретов, не в Git и не в переписке.
 2. Подготовить публичный домен с HTTPS и доверенным сертификатом. Прокси должен передавать все пути на backend `127.0.0.1:8080`: приложение, `/v1/**`, `/webhooks/max` и `/actuator/health`. [MAX требует HTTPS для webhook](https://dev.max.ru/docs-api/methods/POST/subscriptions) и [для URL мини-приложения](https://dev.max.ru/docs/webapps/introduction).
-3. В `.env` стенда задать `MAX_BOT_TOKEN`, `MAX_WEBHOOK_SECRET`, `MAX_PUBLIC_URL=https://...`, `HOST_BIND_IP=127.0.0.1` и `SPRING_PROFILES_ACTIVE=` (профиль `demo` предназначен только для локального просмотра). Секрет webhook должен состоять из 5–256 букв, цифр, `_` или `-`. `MAX_PUBLIC_URL` — базовый адрес без завершающего `/`.
+3. В `.env` стенда задать `MAX_BOT_TOKEN`, `MAX_BOT_USERNAME`, `MAX_WEBHOOK_SECRET`, `MAX_PUBLIC_URL=https://...`, `HOST_BIND_IP=127.0.0.1` и `SPRING_PROFILES_ACTIVE=` (профиль `demo` предназначен только для локального просмотра). Секрет webhook должен состоять из 5–256 букв, цифр, `_` или `-`. `MAX_PUBLIC_URL` — базовый адрес без завершающего `/`.
 
 ## Запуск и подключение
 
@@ -22,31 +22,16 @@ python3 scripts/max_staging.py subscribe
 
 ## Тестовый дом и роли
 
-После запуска Flyway создать тестовый дом и приглашение в БД стенда:
-
-```sh
-docker compose run --rm staging-seed --db /app/data/pulse-doma.db house --address "Тестовый дом"
-docker compose run --rm staging-seed --db /app/data/pulse-doma.db invite --house-id <house_id>
-```
-
-Приглашение действует 7 дней и допускает 10 активаций. Токен из вывода передать двум тестовым участникам приватно. Они открывают мини-приложение по [диплинку MAX](https://dev.max.ru/docs/webapps/introduction): `https://max.ru/<имя_бота>?startapp=<токен>`.
-
-После первого входа будущего диспетчера найти его MAX ID и выдать роль в тестовом доме:
+Будущий системный администратор сначала открывает mini app из MAX. Его профиль создаётся без доступа. Затем однократно назначьте роль по его MAX ID:
 
 ```sh
 docker compose run --rm staging-seed --db /app/data/pulse-doma.db users
-docker compose run --rm staging-seed --db /app/data/pulse-doma.db dispatcher --house-id <house_id> --max-user-id <max_user_id>
+docker compose run --rm staging-seed --db /app/data/pulse-doma.db system-admin --max-user-id <max_user_id>
 ```
 
-После повторного открытия мини-приложения диспетчер должен увидеть кнопку «Открыть кабинет диспетчера».
+После повторного открытия mini app он переходит в кабинет `/system/index.html`, создаёт тестовую УК и дом, закрепляет дом за УК и приглашает администратора УК. Тот принимает ссылку в MAX, открывает `/uk/index.html` и приглашает диспетчера и администратора дома. Администратор дома приглашает двух тестовых жильцов. Каждая ссылка открывается через [диплинк MAX](https://dev.max.ru/docs/webapps/introduction) и требует подтверждения роли и дома перед активацией. Готовая ссылка формируется в кабинете при заданном `MAX_BOT_USERNAME`.
 
-Для проверки администратора дома после его первого входа назначьте роль отдельному пользователю:
-
-```sh
-docker compose run --rm staging-seed --db /app/data/pulse-doma.db admin --house-id <house_id> --max-user-id <max_user_id>
-```
-
-После повторного открытия mini app он увидит кабинет администратора. Там можно добавить публичный контакт и создать приглашение жителю. Приглашение выдаёт только `RESIDENT`; его исходный токен показывается один раз при создании. Отзыв токена делает дальнейшую активацию невозможной.
+Подробные правила, сроки ссылок и отзыв доступа описаны в [активации пользователей](access-activation.md). Старые команды `house`, `invite`, `dispatcher` и `admin` в скрипте остаются для совместимости с прежним стендом; новый сценарий ролей проходит через интерфейсы.
 
 ## Сценарий приёмки
 

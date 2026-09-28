@@ -6,6 +6,135 @@ info:
 servers:
   - url: http://localhost:8080
 paths:
+  /v1/access/config:
+    get:
+      operationId: accessConfig
+      summary: Имя бота для формирования ссылки приглашения
+      responses:
+        '200': {description: Конфигурация ссылки, content: {application/json: {schema: {type: object, properties: {botUsername: {type: string}}}}}}
+  /v1/access/me:
+    get:
+      operationId: myAccess
+      summary: Активные роли текущего пользователя
+      responses:
+        '200': {description: Список ролей, content: {application/json: {schema: {type: array, items: {$ref: '#/components/schemas/AccessView'}}}}}
+  /v1/access/organizations:
+    get:
+      operationId: accessOrganizations
+      summary: УК и их дома для системного администратора
+      responses:
+        '200': {description: Список УК, content: {application/json: {schema: {type: array, items: {$ref: '#/components/schemas/AccessOrganization'}}}}}
+        '403': {description: Нет роли системного администратора}
+    post:
+      operationId: createAccessOrganization
+      summary: Создать УК
+      requestBody: {required: true, content: {application/json: {schema: {type: object, required: [name], properties: {name: {type: string, maxLength: 200}}}}}}
+      responses:
+        '201': {description: УК создана, content: {application/json: {schema: {$ref: '#/components/schemas/AccessOrganization'}}}}
+        '403': {description: Нет роли системного администратора}
+  /v1/access/my-organizations:
+    get:
+      operationId: myAccessOrganizations
+      summary: УК и дома в области текущего администратора
+      responses:
+        '200': {description: Список УК, content: {application/json: {schema: {type: array, items: {$ref: '#/components/schemas/AccessOrganization'}}}}}
+  /v1/access/houses:
+    get:
+      operationId: allAccessHouses
+      summary: Все дома для системного администратора
+      responses:
+        '200': {description: Список домов, content: {application/json: {schema: {type: array, items: {$ref: '#/components/schemas/AccessHouse'}}}}}
+        '403': {description: Нет роли системного администратора}
+    post:
+      operationId: createAccessHouse
+      summary: Создать дом
+      requestBody: {required: true, content: {application/json: {schema: {type: object, required: [address], properties: {address: {type: string, maxLength: 300}}}}}}
+      responses:
+        '201': {description: Дом создан, content: {application/json: {schema: {$ref: '#/components/schemas/AccessHouse'}}}}
+        '403': {description: Нет роли системного администратора}
+  /v1/access/organizations/{organizationId}/houses/{houseId}:
+    put:
+      operationId: setAccessOrganizationHouse
+      summary: Закрепить или приостановить дом в УК
+      parameters:
+        - {name: organizationId, in: path, required: true, schema: {type: string}}
+        - {name: houseId, in: path, required: true, schema: {type: string}}
+      requestBody: {required: true, content: {application/json: {schema: {type: object, required: [active], properties: {active: {type: boolean}}}}}}
+      responses:
+        '200': {description: Область УК обновлена, content: {application/json: {schema: {$ref: '#/components/schemas/AccessOrganization'}}}}
+        '403': {description: Нет роли системного администратора}
+  /v1/access/invitations:
+    get:
+      operationId: createdAccessInvitations
+      summary: Приглашения, созданные текущим пользователем
+      responses:
+        '200': {description: Список приглашений, content: {application/json: {schema: {type: array, items: {$ref: '#/components/schemas/AccessInvitation'}}}}}
+    post:
+      operationId: createAccessInvitation
+      summary: Создать приглашение в пределах своей области доступа
+      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/CreateAccessInvitation'}}}}
+      responses:
+        '201': {description: Токен показывается только в этом ответе, content: {application/json: {schema: {type: object, properties: {token: {type: string}, invitation: {$ref: '#/components/schemas/AccessInvitation'}}}}}}
+        '403': {description: Нет права пригласить в выбранные дома}
+  /v1/access/invitations/{token}:
+    get:
+      operationId: previewAccessInvitation
+      summary: Просмотр приглашения перед принятием
+      parameters:
+        - {name: token, in: path, required: true, schema: {type: string}}
+      responses:
+        '200': {description: Роль и область доступа, content: {application/json: {schema: {$ref: '#/components/schemas/AccessInvitation'}}}}
+        '400': {description: Приглашение недействительно}
+  /v1/access/invitations/{token}/accept:
+    post:
+      operationId: acceptAccessInvitation
+      summary: Принять приглашение после входа через MAX
+      parameters:
+        - {name: token, in: path, required: true, schema: {type: string}}
+      responses:
+        '200': {description: Доступ назначен, content: {application/json: {schema: {$ref: '#/components/schemas/AccessInvitation'}}}}
+        '400': {description: Приглашение недействительно}
+  /v1/access/invitations/{id}/revoke:
+    post:
+      operationId: revokeAccessInvitation
+      summary: Отозвать приглашение
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string}}
+      responses:
+        '200': {description: Приглашение отозвано, content: {application/json: {schema: {$ref: '#/components/schemas/AccessInvitation'}}}}
+        '403': {description: Нет права отзыва}
+  /v1/access/organizations/{organizationId}/assignments:
+    get:
+      operationId: ukStaffAssignments
+      summary: Диспетчеры и администраторы домов в области администратора УК
+      parameters:
+        - {name: organizationId, in: path, required: true, schema: {type: string}}
+      responses:
+        '200': {description: Назначения, content: {application/json: {schema: {type: array, items: {$ref: '#/components/schemas/AccessView'}}}}}
+  /v1/access/organizations/{organizationId}/admins:
+    get:
+      operationId: ukAdminAssignments
+      summary: Администраторы УК для системного администратора
+      parameters:
+        - {name: organizationId, in: path, required: true, schema: {type: string}}
+      responses:
+        '200': {description: Назначения, content: {application/json: {schema: {type: array, items: {$ref: '#/components/schemas/AccessView'}}}}}
+  /v1/access/houses/{houseId}/residents:
+    get:
+      operationId: houseResidentAssignments
+      summary: Жители для администратора дома
+      parameters:
+        - {name: houseId, in: path, required: true, schema: {type: string}}
+      responses:
+        '200': {description: Назначения, content: {application/json: {schema: {type: array, items: {$ref: '#/components/schemas/AccessView'}}}}}
+  /v1/access/assignments/revoke:
+    post:
+      operationId: revokeAccessAssignment
+      summary: Отозвать роль в своей области доступа
+      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/RevokeAccessRequest'}}}}
+      responses:
+        '204': {description: Доступ отозван}
+        '403': {description: Нет права отзыва}
   /webhooks/max:
     post:
       operationId: maxWebhook
@@ -42,6 +171,15 @@ paths:
         '400':
           description: Invalid request
         '401': {description: Missing or invalid MAX initData}
+  /v1/invitations/{token}:
+    get:
+      operationId: previewLegacyInvitation
+      summary: Просмотр ранее выданного приглашения жителя
+      parameters:
+        - {name: token, in: path, required: true, schema: {type: string}}
+      responses:
+        '200': {description: Дом и срок действия, content: {application/json: {schema: {type: object, properties: {houseId: {type: string}, address: {type: string}, expiresAt: {type: string}}}}}}
+        '400': {description: Приглашение недействительно}
   /v1/me/houses:
     get:
       operationId: getMyHouses
@@ -84,9 +222,14 @@ paths:
                 items: {$ref: '#/components/schemas/HouseView'}
         '401': {description: Missing or invalid MAX initData}
   /v1/me/active-house:
+    get:
+      operationId: getActiveHouse
+      summary: Последний выбранный дом
+      responses:
+        '200': {description: Выбранный дом, content: {application/json: {schema: {type: object, properties: {houseId: {type: [string, 'null']}}}}}}
     put:
       operationId: setActiveHouse
-      summary: setActiveHouse
+      summary: Сохранить выбранный дом
       requestBody:
         required: true
         content:
@@ -95,17 +238,11 @@ paths:
               $ref: '#/components/schemas/SetActiveHouseRequest'
       responses:
         '200':
-          description: Accepted or returned
+          description: Дом сохранён
         '400':
           description: Invalid request
         '403':
-          description: Access denied until JWT and house scope are implemented
-        '501':
-          description: Scaffold endpoint pending implementation
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
+          description: Нет подтверждённого доступа к дому
   /v1/reports:
     post:
       operationId: createReport
@@ -772,6 +909,59 @@ paths:
                 $ref: '#/components/schemas/ErrorResponse'
 components:
   schemas:
+    AccessHouse:
+      type: object
+      properties:
+        id: {type: string}
+        address: {type: string}
+    AccessOrganization:
+      type: object
+      properties:
+        id: {type: string}
+        name: {type: string}
+        houses: {type: array, items: {$ref: '#/components/schemas/AccessHouse'}}
+    AccessView:
+      type: object
+      properties:
+        role: {type: string, enum: [SYSTEM_ADMIN, UK_ADMIN, DISPATCHER, HOUSE_ADMIN, RESIDENT]}
+        organizationId: {type: [string, 'null']}
+        organizationName: {type: [string, 'null']}
+        houseId: {type: [string, 'null']}
+        houseAddress: {type: [string, 'null']}
+        status: {type: string, enum: [ACTIVE, SUSPENDED, REVOKED]}
+        userId: {type: [string, 'null']}
+        displayName: {type: [string, 'null']}
+    AccessInvitation:
+      type: object
+      properties:
+        id: {type: string}
+        role: {type: string, enum: [UK_ADMIN, DISPATCHER, HOUSE_ADMIN, RESIDENT]}
+        organizationId: {type: [string, 'null']}
+        organizationName: {type: [string, 'null']}
+        houses: {type: array, items: {$ref: '#/components/schemas/AccessHouse'}}
+        inviter: {type: string}
+        expiresAt: {type: string, format: date-time}
+        activationLimit: {type: integer}
+        activationCount: {type: integer}
+        revokedAt: {type: [string, 'null'], format: date-time}
+        acceptedByMe: {type: boolean}
+    CreateAccessInvitation:
+      type: object
+      required: [role, houseIds, days, activationLimit]
+      properties:
+        role: {type: string, enum: [UK_ADMIN, DISPATCHER, HOUSE_ADMIN, RESIDENT]}
+        organizationId: {type: [string, 'null']}
+        houseIds: {type: array, minItems: 1, items: {type: string}}
+        days: {type: integer, minimum: 1, maximum: 30}
+        activationLimit: {type: integer, minimum: 1, maximum: 100}
+    RevokeAccessRequest:
+      type: object
+      required: [role, userId]
+      properties:
+        role: {type: string, enum: [UK_ADMIN, DISPATCHER, HOUSE_ADMIN, RESIDENT]}
+        userId: {type: string}
+        organizationId: {type: [string, 'null']}
+        houseId: {type: [string, 'null']}
     HouseView:
       type: object
       required: [id, address, memberships]

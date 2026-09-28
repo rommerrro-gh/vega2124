@@ -80,6 +80,10 @@ async function api(role, path, options = {}) {
 function navigate(path) {
   const initData = window.WebApp?.initData;
   const launchData = window.location.hash || (initData ? `#WebAppData=${encodeURIComponent(initData)}` : "");
+  const pathname = new URL(path, location.origin).pathname;
+  if (["/miniapp/index.html", "/dispatcher/index.html", "/admin/index.html", "/uk/index.html", "/system/index.html"].includes(pathname)) {
+    localStorage.setItem("pulse-last-mode", pathname);
+  }
   window.location.assign(`${path}${launchData}`);
 }
 
@@ -158,6 +162,17 @@ function AdminLink() {
   </div>;
 }
 
+function InvitationToken({ token, role = "admin" }) {
+  const [username, setUsername] = useState("");
+  useEffect(() => { api(role, "/v1/access/config").then(config => setUsername(config.botUsername || "")).catch(() => {}); }, []);
+  if (!token) return null;
+  const link = username ? `https://max.ru/${username}?startapp=${encodeURIComponent(token)}` : "";
+  return <div className="invite-token" role="status"><strong>Приглашение создано</strong>
+    {link ? <><code>{link}</code><Button mode="secondary" type="button" onClick={() => navigator.clipboard.writeText(link)}>Скопировать ссылку</Button></>
+      : <><code>{token}</code><p>Укажите MAX_BOT_USERNAME на стенде, чтобы здесь появилась готовая ссылка. Пока добавьте токен к ссылке бота как параметр startapp.</p></>}
+    <p>Ссылка показывается только сейчас.</p></div>;
+}
+
 function AttachmentList({ attachments, role, onError }) {
   if (!attachments?.length) return null;
   return <div className="item-list">{attachments.map(file => <button className="attachment-link" type="button" key={file.id} onClick={() => downloadAttachment(role, file, onError)}>Открыть вложение · {file.mime}</button>)}</div>;
@@ -234,6 +249,7 @@ function Resident() {
   const [pollBusy, setPollBusy] = useState(false);
   const [issues, setIssues] = useState([]);
   const [dispatcher, setDispatcher] = useState(false);
+  const [access, setAccess] = useState([]);
   const [notice, setNotice] = useState("");
   const [step, setStep] = useState("form");
   const [showReportForm, setShowReportForm] = useState(false);
@@ -253,14 +269,13 @@ function Resident() {
 
   useEffect(() => {
     async function load() {
-      const invitation = new URLSearchParams(location.search).get("invite") || window.WebApp?.initDataUnsafe?.start_param;
-      if (invitation) await request(`/v1/invitations/${encodeURIComponent(invitation)}/accept`, { method: "POST" });
-      const [myHouses, myIssues, dispatcherHouses] = await Promise.all([
+      const [myHouses, myIssues, dispatcherHouses, roles, selected] = await Promise.all([
         request("/v1/me/houses"), request("/v1/me/issues"), request("/v1/me/dispatcher-houses"),
+        request("/v1/access/me"), request("/v1/me/active-house"),
       ]);
-      setHouses(myHouses); setIssues(myIssues); setDispatcher(dispatcherHouses.length > 0);
-      if (myHouses.length) setSelectedHouseId(myHouses[0].id);
-      if (!myHouses.length) setNotice("У вас пока нет подтверждённого доступа к дому. Попросите приглашение у администратора.");
+      setHouses(myHouses); setIssues(myIssues); setDispatcher(dispatcherHouses.length > 0); setAccess(roles);
+      if (myHouses.length) setSelectedHouseId(myHouses.find(house => house.id === selected.houseId)?.id || myHouses[0].id);
+      if (!roles.length) setNotice("Профиль создан. Чтобы получить доступ, откройте приглашение от администратора.");
     }
     load().catch(fail);
   }, []);
@@ -269,7 +284,7 @@ function Resident() {
     if (!selectedHouseId) return;
     let active = true;
     const membership = houses.find(house => house.id === selectedHouseId)?.memberships || [];
-    const canVote = membership.some(access => ["RESIDENT", "HOUSE_ADMIN"].includes(access.role) && access.verificationStatus === "VERIFIED");
+    const canVote = membership.some(access => access.role === "RESIDENT" && access.verificationStatus === "VERIFIED");
     setPassport(null); setPolls([]); setPassportError(""); setPassportLoading(true);
     Promise.all([request(`/v1/houses/${encodeURIComponent(selectedHouseId)}`),
       canVote ? request(`/v1/houses/${encodeURIComponent(selectedHouseId)}/polls`) : Promise.resolve([])])
@@ -374,16 +389,17 @@ function Resident() {
 
   const localNow = useRef(new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 16));
   const selectedHouse = houses.find(house => house.id === selectedHouseId);
+  const canReport = selectedHouse?.memberships?.some(item => item.role === "RESIDENT" && item.verificationStatus === "VERIFIED");
   const houseIssues = issues.filter(item => item.houseId === selectedHouseId);
   const awaitingVerification = houseIssues.filter(item => item.status === "VERIFICATION_72H");
   const openPolls = polls.filter(poll => !poll.closed && !poll.myOptionId);
   return <main className="shell">
     <Brand role="Жителю" /><div className="resident-hero"><Hero /></div><Notice message={notice} />
-    {selectedHouse && <div className="house-switcher"><span className="house-switcher-icon" aria-hidden="true">⌂</span><div className="house-switcher-copy"><span>Ваш дом</span>{houses.length > 1 ? <select aria-label="Выбранный дом" value={selectedHouseId} disabled={step !== "form" || !!reportId} onChange={event => setSelectedHouseId(event.target.value)}>{houses.map(house => <option key={house.id} value={house.id}>{house.address}</option>)}</select> : <strong>{selectedHouse.address}</strong>}</div></div>}
+    {selectedHouse && <div className="house-switcher"><span className="house-switcher-icon" aria-hidden="true">⌂</span><div className="house-switcher-copy"><span>Ваш дом</span>{houses.length > 1 ? <select aria-label="Выбранный дом" value={selectedHouseId} disabled={step !== "form" || !!reportId} onChange={event => { setSelectedHouseId(event.target.value); request("/v1/me/active-house", { method: "PUT", body: JSON.stringify({ houseId: event.target.value }) }).catch(fail); }}>{houses.map(house => <option key={house.id} value={house.id}>{house.address}</option>)}</select> : <strong>{selectedHouse.address}</strong>}</div></div>}
     {!!awaitingVerification.length && step === "form" && <div className="priority-notice"><div><strong>Подтвердите выполнение работ</strong><p>{countLabel(awaitingVerification.length, "заявка ждёт", "заявки ждут", "заявок ждут")} вашего ответа.</p></div><Button mode="secondary" type="button" onClick={() => showIssue(awaitingVerification[0])}>Открыть</Button></div>}
-    {selectedHouse && step === "form" && !showReportForm && <div className="start-action"><div><strong>Заметили проблему?</strong><p>Проверьте похожие заявки и сообщите о новой.</p></div><Button mode="primary" type="button" onClick={() => setShowReportForm(true)}>Сообщить о проблеме <span aria-hidden="true">→</span></Button></div>}
+    {selectedHouse && canReport && step === "form" && !showReportForm && <div className="start-action"><div><strong>Заметили проблему?</strong><p>Проверьте похожие заявки и сообщите о новой.</p></div><Button mode="primary" type="button" onClick={() => setShowReportForm(true)}>Сообщить о проблеме <span aria-hidden="true">→</span></Button></div>}
     <div className="content-grid">
-      {step === "form" && showReportForm && <Card className="form-card">
+      {step === "form" && showReportForm && canReport && <Card className="form-card">
         <div className="form-title"><SectionHeading title="Сообщить о проблеме" subtitle={`Дом: ${selectedHouse?.address || "не выбран"}`} />{!reportId && <button className="form-close" type="button" onClick={() => setShowReportForm(false)}>Отменить</button>}</div>
         <form ref={formRef} onSubmit={submitReport}>
           <Field id="category" label="Категория"><select id="category" name="category" required disabled={!!reportId} defaultValue=""><option value="">Выберите категорию</option><option value="LIGHTING">Освещение</option><option value="WATER">Вода</option><option value="HEATING">Отопление</option><option value="ELEVATOR">Лифт</option><option value="OTHER">Другое</option></select></Field>
@@ -419,6 +435,8 @@ function Resident() {
     </div>
     {dispatcher && <QuickLink />}
     {houses.some(house => house.memberships?.some(access => access.role === "HOUSE_ADMIN" && access.verificationStatus === "VERIFIED")) && <AdminLink />}
+    {access.some(item => item.role === "UK_ADMIN") && <div className="quick-link"><strong>Кабинет УК</strong><Button mode="tertiary" onClick={() => navigate("/uk/index.html")}>Открыть</Button></div>}
+    {access.some(item => item.role === "SYSTEM_ADMIN") && <div className="quick-link"><strong>Управление системой</strong><Button mode="tertiary" onClick={() => navigate("/system/index.html")}>Открыть</Button></div>}
     <footer>Пульс дома <span>·</span> Сделаем дом лучше вместе</footer>
   </main>;
 }
@@ -426,6 +444,7 @@ function Resident() {
 function Admin() {
   const [houses, setHouses] = useState([]);
   const [houseId, setHouseId] = useState("");
+  const [residents, setResidents] = useState([]);
   const [contacts, setContacts] = useState([]);
   const [invitations, setInvitations] = useState([]);
   const [polls, setPolls] = useState([]);
@@ -457,8 +476,8 @@ function Admin() {
   useEffect(() => {
     if (!houseId) return;
     setCreatedToken(""); setNotice("");
-    Promise.all([request(`${base}/contacts`), request(`${base}/invitations`), request(`${base}/polls`)])
-      .then(([nextContacts, nextInvitations, nextPolls]) => { setContacts(nextContacts); setInvitations(nextInvitations); setPolls(nextPolls); })
+    Promise.all([request(`${base}/contacts`), request("/v1/access/invitations"), request(`${base}/polls`), request(`/v1/access/houses/${houseId}/residents`)])
+      .then(([nextContacts, nextInvitations, nextPolls, nextResidents]) => { setContacts(nextContacts); setInvitations(nextInvitations); setPolls(nextPolls); setResidents(nextResidents); })
       .catch(fail);
   }, [houseId]);
 
@@ -480,13 +499,18 @@ function Admin() {
   async function createInvitation(event) {
     event.preventDefault(); setBusy(true); setNotice(""); setCreatedToken("");
     try {
-      const result = await request(`${base}/invitations`, { method: "POST", body: JSON.stringify({ days: Number(days), activationLimit: Number(activationLimit) }) });
-      setCreatedToken(result.token); setInvitations(await request(`${base}/invitations`));
+      const result = await request("/v1/access/invitations", { method: "POST", body: JSON.stringify({ role: "RESIDENT", houseIds: [houseId], days: Number(days), activationLimit: Number(activationLimit) }) });
+      setCreatedToken(result.token); setInvitations(await request("/v1/access/invitations"));
     } catch (error) { fail(error); } finally { setBusy(false); }
   }
   async function revokeInvitation(id) {
     setBusy(true); setNotice("");
-    try { await request(`${base}/invitations/${encodeURIComponent(id)}/revoke`, { method: "POST" }); setInvitations(await request(`${base}/invitations`)); }
+    try { await request(`/v1/access/invitations/${encodeURIComponent(id)}/revoke`, { method: "POST" }); setInvitations(await request("/v1/access/invitations")); }
+    catch (error) { fail(error); } finally { setBusy(false); }
+  }
+  async function revokeResident(userId) {
+    setBusy(true); setNotice("");
+    try { await request("/v1/access/assignments/revoke", { method: "POST", body: JSON.stringify({ role: "RESIDENT", userId, houseId }) }); setResidents(await request(`/v1/access/houses/${houseId}/residents`)); }
     catch (error) { fail(error); } finally { setBusy(false); }
   }
   async function createPoll(event) {
@@ -514,8 +538,9 @@ function Admin() {
       </Card>
       <Card><SectionHeading number="03" title="Приглашения" subtitle="Ссылка добавляет жителя только в выбранный дом" />
         <form onSubmit={createInvitation} className="admin-form"><div className="field-grid"><Field id="invite-days" label="Срок, дней"><input id="invite-days" type="number" min="1" max="30" value={days} onChange={event => setDays(event.target.value)} required /></Field><Field id="invite-limit" label="Число активаций"><input id="invite-limit" type="number" min="1" max="100" value={activationLimit} onChange={event => setActivationLimit(event.target.value)} required /></Field></div><Button mode="primary" className="brand-button" type="submit" stretched disabled={busy}>Создать приглашение</Button></form>
-        {createdToken && <div className="invite-token" role="status"><strong>Токен приглашения</strong><code>{createdToken}</code><p>Передайте его жителю приватно и добавьте к ссылке бота MAX как параметр <code>startapp</code>. После обновления страницы токен больше не отображается.</p></div>}
-        <div className="item-list admin-invitations">{invitations.map(invitation => <div className="admin-row" key={invitation.id}><div><strong>{invitation.revokedAt ? "Отозвано" : new Date(invitation.expiresAt) < new Date() ? "Истекло" : "Активно"}</strong><small>До {passportDate(invitation.expiresAt)} · использовано {invitation.activationCount} из {invitation.activationLimit}</small></div>{!invitation.revokedAt && <button type="button" disabled={busy} onClick={() => revokeInvitation(invitation.id)}>Отозвать</button>}</div>)}</div>
+        <InvitationToken token={createdToken} />
+        <div className="item-list admin-invitations">{invitations.filter(invitation => invitation.role === "RESIDENT" && invitation.houses.some(house => house.id === houseId)).map(invitation => <div className="admin-row" key={invitation.id}><div><strong>{invitation.revokedAt ? "Отозвано" : new Date(invitation.expiresAt) < new Date() ? "Истекло" : "Активно"}</strong><small>До {passportDate(invitation.expiresAt)} · использовано {invitation.activationCount} из {invitation.activationLimit}</small></div>{!invitation.revokedAt && <button type="button" disabled={busy} onClick={() => revokeInvitation(invitation.id)}>Отозвать</button>}</div>)}</div>
+        <h3>Жители дома</h3><div className="item-list">{residents.map(item => <div className="admin-row" key={item.userId}><div><strong>{item.displayName}</strong><small>{item.status}</small></div>{item.status === "ACTIVE" && <button type="button" disabled={busy} onClick={() => revokeResident(item.userId)}>Отозвать доступ</button>}</div>)}</div>
       </Card>
       <Card><SectionHeading number="04" title="Предварительные опросы" subtitle="Узнайте мнение жителей выбранного дома" />
         <form onSubmit={createPoll} className="admin-form">
@@ -648,6 +673,143 @@ function Dispatcher() {
   </main>;
 }
 
+const accessRoleLabels = {
+  SYSTEM_ADMIN: "Системный администратор", UK_ADMIN: "Администратор УК",
+  HOUSE_ADMIN: "Администратор дома", DISPATCHER: "Диспетчер", RESIDENT: "Житель",
+};
+
+function InvitationGate() {
+  const [token, setToken] = useState(() => new URLSearchParams(location.search).get("invite") || window.WebApp?.initDataUnsafe?.start_param || "");
+  const [dismissed, setDismissed] = useState(false);
+  const [invitation, setInvitation] = useState(null);
+  const [legacy, setLegacy] = useState(false);
+  const [notice, setNotice] = useState("");
+  const [busy, setBusy] = useState(false);
+  const role = new URLSearchParams(location.search).get("demoSession") === "admin" ? "admin" : "true";
+  useEffect(() => {
+    if (!token) return;
+    api(role, `/v1/access/invitations/${encodeURIComponent(token)}`)
+      .then(setInvitation).catch(async () => {
+        try {
+          const old = await api(role, `/v1/invitations/${encodeURIComponent(token)}`);
+          setLegacy(true);
+          setInvitation({ role: "RESIDENT", inviter: "Администратор дома", organizationName: "",
+            houses: [{ id: old.houseId, address: old.address }], expiresAt: old.expiresAt, acceptedByMe: false });
+        } catch (error) { setNotice(error.message || String(error)); }
+      });
+  }, [token]);
+  useEffect(() => {
+    if (!token && !dismissed) {
+      const lastMode = localStorage.getItem("pulse-last-mode");
+      if (lastMode && lastMode !== "/miniapp/index.html") navigate(lastMode);
+    }
+  }, [token, dismissed]);
+  if (!token) return <Resident />;
+  function continueToRole() {
+    if (invitation.role === "UK_ADMIN") { navigate("/uk/index.html"); return; }
+    if (invitation.role === "HOUSE_ADMIN") { navigate("/admin/index.html"); return; }
+    if (invitation.role === "DISPATCHER") { navigate("/dispatcher/index.html"); return; }
+    setDismissed(true); setToken(""); localStorage.setItem("pulse-last-mode", "/miniapp/index.html");
+    const url = new URL(location.href); url.searchParams.delete("invite"); history.replaceState(null, "", url);
+  }
+  async function accept() {
+    setBusy(true); setNotice("");
+    try {
+      await api(role, legacy ? `/v1/invitations/${encodeURIComponent(token)}/accept`
+        : `/v1/access/invitations/${encodeURIComponent(token)}/accept`, { method: "POST" });
+      continueToRole();
+    } catch (error) { setNotice(error.message || String(error)); } finally { setBusy(false); }
+  }
+  return <main className="shell"><Brand role="Активация" /><section className="hero"><div className="hero-copy"><h1>Приглашение<br />в Пульс дома</h1><p>Проверьте роль и дома перед подтверждением доступа.</p></div></section>
+    <Notice message={notice} />
+    {invitation && <Card><SectionHeading title={accessRoleLabels[invitation.role]} subtitle={invitation.organizationName || "Доступ к дому"} />
+      <p>Пригласил: {invitation.inviter}</p><p>Дома: {invitation.houses.map(house => house.address).join(", ")}</p>
+      <p>Приглашение действует до {new Date(invitation.expiresAt).toLocaleString("ru-RU")}.</p>
+      <Button mode="primary" type="button" stretched disabled={busy} onClick={invitation.acceptedByMe ? continueToRole : accept}>
+        {invitation.acceptedByMe ? "Перейти в приложение" : "Принять приглашение"}</Button></Card>}
+    {notice && <Button mode="tertiary" type="button" onClick={() => { setDismissed(true); setToken(""); }}>Открыть мои доступы</Button>}
+  </main>;
+}
+
+function HouseChecks({ houses, selected, onChange }) {
+  return <div className="house-checks">{houses.map(house => <label key={house.id}><input type="checkbox" checked={selected.includes(house.id)} onChange={event => onChange(event.target.checked ? [...selected, house.id] : selected.filter(id => id !== house.id))} /> {house.address}</label>)}</div>;
+}
+
+function IssuedInvitations({ items, onRevoke, busy }) {
+  return <div className="item-list admin-invitations">{items.map(item => <div className="admin-row" key={item.id}><div><strong>{accessRoleLabels[item.role]} · {item.revokedAt ? "отозвано" : new Date(item.expiresAt) < new Date() ? "истекло" : "активно"}</strong><small>{item.houses.map(house => house.address).join(", ")} · использовано {item.activationCount} из {item.activationLimit}</small></div>{!item.revokedAt && <button type="button" disabled={busy} onClick={() => onRevoke(item.id)}>Отозвать</button>}</div>)}</div>;
+}
+
+function SystemAdmin() {
+  const [organizations, setOrganizations] = useState([]);
+  const [houses, setHouses] = useState([]);
+  const [admins, setAdmins] = useState([]);
+  const [invitations, setInvitations] = useState([]);
+  const [organizationId, setOrganizationId] = useState("");
+  const [organizationName, setOrganizationName] = useState("");
+  const [houseAddress, setHouseAddress] = useState("");
+  const [houseId, setHouseId] = useState("");
+  const [selected, setSelected] = useState([]);
+  const [token, setToken] = useState("");
+  const [notice, setNotice] = useState("");
+  const [busy, setBusy] = useState(false);
+  const request = (path, options) => api("admin", path, options);
+  const refresh = async () => { const [orgs, homes] = await Promise.all([request("/v1/access/organizations"), request("/v1/access/houses")]); setOrganizations(orgs); setHouses(homes); if (!organizationId && orgs.length) setOrganizationId(orgs[0].id); };
+  useEffect(() => { Promise.all([refresh(), request("/v1/access/invitations").then(setInvitations)]).catch(error => setNotice(error.message)); }, []);
+  useEffect(() => { if (organizationId) request(`/v1/access/organizations/${organizationId}/admins`).then(setAdmins).catch(error => setNotice(error.message)); }, [organizationId]);
+  const org = organizations.find(item => item.id === organizationId);
+  async function run(action) { setBusy(true); setNotice(""); try { await action(); await refresh(); } catch (error) { setNotice(error.message); } finally { setBusy(false); } }
+  async function revokeInvitation(id) { await run(async () => { await request(`/v1/access/invitations/${id}/revoke`, { method: "POST" }); setInvitations(await request("/v1/access/invitations")); }); }
+  return <main className="shell"><Brand role="Системному администратору" /><section className="hero"><div className="hero-copy"><h1>УК и доступы</h1><p>Создавайте организации, закрепляйте дома и приглашайте администраторов УК.</p></div></section><Notice message={notice} />
+    <div className="content-grid"><Card><SectionHeading title="Управляющие компании" />
+      <form onSubmit={event => { event.preventDefault(); run(async () => { await request("/v1/access/organizations", { method: "POST", body: JSON.stringify({ name: organizationName.trim() }) }); setOrganizationName(""); }); }}><Field id="org-name" label="Название УК"><input id="org-name" value={organizationName} maxLength="200" required onChange={event => setOrganizationName(event.target.value)} /></Field><Button mode="primary" type="submit" disabled={busy}>Создать УК</Button></form>
+      <Field id="org-select" label="УК"><select id="org-select" value={organizationId} onChange={event => { setOrganizationId(event.target.value); setSelected([]); }}><option value="">Выберите УК</option>{organizations.map(item => <option value={item.id} key={item.id}>{item.name}</option>)}</select></Field>
+      <form onSubmit={event => { event.preventDefault(); run(async () => { await request("/v1/access/houses", { method: "POST", body: JSON.stringify({ address: houseAddress.trim() }) }); setHouseAddress(""); }); }}><Field id="house-address" label="Новый дом"><input id="house-address" value={houseAddress} maxLength="300" required onChange={event => setHouseAddress(event.target.value)} /></Field><Button mode="secondary" type="submit" disabled={busy}>Добавить дом</Button></form>
+      {org && <><Field id="house-link" label="Закрепить дом за УК"><select id="house-link" value={houseId} onChange={event => setHouseId(event.target.value)}><option value="">Выберите дом</option>{houses.map(house => <option value={house.id} key={house.id}>{house.address}</option>)}</select></Field><Button mode="secondary" type="button" disabled={busy || !houseId} onClick={() => run(() => request(`/v1/access/organizations/${organizationId}/houses/${houseId}`, { method: "PUT", body: JSON.stringify({ active: true }) }))}>Закрепить</Button>
+        <div className="item-list">{org.houses.map(house => <div className="admin-row" key={house.id}><span>{house.address}</span><button type="button" disabled={busy} onClick={() => { if (window.confirm("Приостановить доступ УК и её сотрудников к дому?")) run(() => request(`/v1/access/organizations/${organizationId}/houses/${house.id}`, { method: "PUT", body: JSON.stringify({ active: false }) })); }}>Приостановить</button></div>)}</div></>}
+    </Card><Card><SectionHeading title="Пригласить администратора УК" subtitle="Одноразовая ссылка на 72 часа" />
+      {org && <form onSubmit={event => { event.preventDefault(); run(async () => { const result = await request("/v1/access/invitations", { method: "POST", body: JSON.stringify({ role: "UK_ADMIN", organizationId, houseIds: selected, days: 3, activationLimit: 1 }) }); setToken(result.token); setInvitations(await request("/v1/access/invitations")); }); }}><HouseChecks houses={org.houses} selected={selected} onChange={setSelected} /><Button mode="primary" type="submit" disabled={busy || !selected.length}>Создать приглашение</Button></form>}
+      <InvitationToken token={token} />
+      <IssuedInvitations items={invitations.filter(item => item.role === "UK_ADMIN" && item.organizationId === organizationId)} onRevoke={revokeInvitation} busy={busy} />
+      <h3>Администраторы УК</h3><div className="item-list">{admins.map(item => <div className="admin-row" key={`${item.userId}-${item.houseId}`}><div><strong>{item.displayName}</strong><small>{item.houseAddress || "Без домов"} · {item.status}</small></div>{item.status !== "REVOKED" && <button type="button" disabled={busy} onClick={() => run(async () => { await request("/v1/access/assignments/revoke", { method: "POST", body: JSON.stringify({ role: "UK_ADMIN", userId: item.userId, organizationId }) }); setAdmins(await request(`/v1/access/organizations/${organizationId}/admins`)); })}>Отозвать роль</button>}</div>)}</div>
+    </Card></div><Button mode="tertiary" onClick={() => navigate("/miniapp/index.html?demoSession=admin")}>В мини-приложение</Button></main>;
+}
+
+function UkAdmin() {
+  const [organizations, setOrganizations] = useState([]);
+  const [organizationId, setOrganizationId] = useState("");
+  const [role, setRole] = useState("DISPATCHER");
+  const [selected, setSelected] = useState([]);
+  const [assignments, setAssignments] = useState([]);
+  const [invitations, setInvitations] = useState([]);
+  const [token, setToken] = useState("");
+  const [notice, setNotice] = useState("");
+  const [busy, setBusy] = useState(false);
+  const request = (path, options) => api("admin", path, options);
+  useEffect(() => { Promise.all([request("/v1/access/my-organizations"), request("/v1/access/invitations")]).then(([list, issued]) => { setOrganizations(list); setInvitations(issued); if (list.length) setOrganizationId(list[0].id); else setNotice("Нет доступа администратора УК."); }).catch(error => setNotice(error.message)); }, []);
+  useEffect(() => { if (organizationId) request(`/v1/access/organizations/${organizationId}/assignments`).then(setAssignments).catch(error => setNotice(error.message)); }, [organizationId]);
+  const org = organizations.find(item => item.id === organizationId);
+  async function create(event) {
+    event.preventDefault(); setBusy(true); setNotice("");
+    try { const result = await request("/v1/access/invitations", { method: "POST", body: JSON.stringify({ role, organizationId, houseIds: selected, days: 3, activationLimit: 1 }) }); setToken(result.token); setInvitations(await request("/v1/access/invitations")); }
+    catch (error) { setNotice(error.message); } finally { setBusy(false); }
+  }
+  async function revoke(assignment) {
+    setBusy(true); setNotice("");
+    try { await request("/v1/access/assignments/revoke", { method: "POST", body: JSON.stringify({ role: assignment.role, userId: assignment.userId, organizationId, houseId: assignment.houseId }) }); setAssignments(await request(`/v1/access/organizations/${organizationId}/assignments`)); }
+    catch (error) { setNotice(error.message); } finally { setBusy(false); }
+  }
+  async function revokeInvitation(id) {
+    setBusy(true); setNotice("");
+    try { await request(`/v1/access/invitations/${id}/revoke`, { method: "POST" }); setInvitations(await request("/v1/access/invitations")); }
+    catch (error) { setNotice(error.message); } finally { setBusy(false); }
+  }
+  return <main className="shell"><Brand role="Администратору УК" /><section className="hero"><div className="hero-copy"><h1>Команда УК</h1><p>Приглашайте диспетчеров и администраторов назначенных домов.</p></div></section><Notice message={notice} />
+    <div className="content-grid"><Card><SectionHeading title="Пригласить сотрудника" /><Field id="uk-org" label="Управляющая компания"><select id="uk-org" value={organizationId} onChange={event => { setOrganizationId(event.target.value); setSelected([]); }}><option value="">Выберите УК</option>{organizations.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}</select></Field>
+      <form onSubmit={create}><Field id="staff-role" label="Роль"><select id="staff-role" value={role} onChange={event => { setRole(event.target.value); setSelected([]); }}><option value="DISPATCHER">Диспетчер</option><option value="HOUSE_ADMIN">Администратор дома</option></select></Field><HouseChecks houses={org?.houses || []} selected={selected} onChange={setSelected} /><Button mode="primary" type="submit" disabled={busy || !selected.length || (role === "HOUSE_ADMIN" && selected.length !== 1)}>Создать приглашение</Button></form><InvitationToken token={token} /><IssuedInvitations items={invitations.filter(item => item.organizationId === organizationId)} onRevoke={revokeInvitation} busy={busy} /></Card>
+      <Card><SectionHeading title="Назначенные сотрудники" /><div className="item-list">{assignments.map(item => <div className="admin-row" key={`${item.userId}-${item.role}-${item.houseId}`}><div><strong>{item.displayName}</strong><small>{accessRoleLabels[item.role]} · {item.houseAddress} · {item.status}</small></div>{item.status === "ACTIVE" && <button type="button" disabled={busy} onClick={() => revoke(item)}>Отозвать</button>}</div>)}</div></Card>
+    </div><Button mode="tertiary" onClick={() => navigate("/miniapp/index.html?demoSession=admin")}>В мини-приложение</Button></main>;
+}
+
 createRoot(document.getElementById("app")).render(
-  <MaxUI>{document.body.dataset.page === "dispatcher" ? <Dispatcher /> : document.body.dataset.page === "admin" ? <Admin /> : <Resident />}</MaxUI>
+  <MaxUI>{document.body.dataset.page === "dispatcher" ? <Dispatcher /> : document.body.dataset.page === "admin" ? <Admin /> : document.body.dataset.page === "system" ? <SystemAdmin /> : document.body.dataset.page === "uk" ? <UkAdmin /> : <InvitationGate />}</MaxUI>
 );

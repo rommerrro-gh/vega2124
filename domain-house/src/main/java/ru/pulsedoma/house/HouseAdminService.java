@@ -158,7 +158,7 @@ public class HouseAdminService {
     private void requireMember(String houseId, String userId) {
         Integer count = jdbc.queryForObject("""
                 SELECT COUNT(*) FROM house_memberships WHERE house_id = ? AND user_id = ?
-                  AND verification_status = 'VERIFIED'
+                  AND verification_status = 'VERIFIED' AND access_status = 'ACTIVE'
                 """, Integer.class, houseId, userId);
         if (count == null || count == 0) throw new BusinessException("HOUSE_NOT_FOUND", "House is not available");
     }
@@ -166,7 +166,7 @@ public class HouseAdminService {
     private void requireAdmin(String houseId, String userId) {
         Integer count = jdbc.queryForObject("""
                 SELECT COUNT(*) FROM house_memberships WHERE house_id = ? AND user_id = ?
-                  AND role = 'HOUSE_ADMIN' AND verification_status = 'VERIFIED'
+                  AND role = 'HOUSE_ADMIN' AND verification_status = 'VERIFIED' AND access_status = 'ACTIVE'
                 """, Integer.class, houseId, userId);
         if (count == null || count == 0) throw new BusinessException("HOUSE_ACCESS_DENIED", "House admin access required");
     }

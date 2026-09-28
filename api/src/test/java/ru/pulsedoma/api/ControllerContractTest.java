@@ -60,7 +60,6 @@ class ControllerContractTest {
     @Test
     void everyPendingOpenApiRouteIsMapped() throws Exception {
         List<MockHttpServletRequestBuilder> requests = List.of(
-                json(put("/v1/me/active-house"), "{\"houseId\":\"house\"}"),
                 get("/v1/issues/candidates").param("houseId", "house").param("query", "light"),
                 json(post("/v1/issues/issue/comments"), "{\"text\":\"test\"}"),
                 json(post("/v1/incidents"), "{\"houseId\":\"house\",\"type\":\"FIRE\",\"description\":\"test\"}"),
@@ -70,6 +69,12 @@ class ControllerContractTest {
         for (MockHttpServletRequestBuilder request : requests) {
             mvc.perform(request).andExpect(status().isNotImplemented());
         }
+    }
+
+    @Test
+    void activeHouseRouteIsMapped() throws Exception {
+        mvc.perform(json(put("/v1/me/active-house"), "{\"houseId\":\"house\"}")
+                .principal(() -> "user")).andExpect(status().isOk());
     }
 
     @Test
