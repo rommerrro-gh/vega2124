@@ -33,6 +33,7 @@ public class SecurityConfig {
                         .dispatcherTypeMatchers(DispatcherType.ERROR).permitAll()
                         .requestMatchers(HttpMethod.POST, "/webhooks/max").permitAll()
                         .requestMatchers("/v1/**").authenticated()
+                        .requestMatchers("/").permitAll()
                         .requestMatchers("/miniapp/**").permitAll()
                         .requestMatchers("/dispatcher/**").permitAll()
                         .requestMatchers("/admin/**").permitAll()

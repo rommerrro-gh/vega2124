@@ -56,6 +56,9 @@ class AccessActivationFlowTest {
     @Test
     void invitationChainRespectsScopeAndRevocation() throws Exception {
         assertNull(miniApp.activeHouse("demo-resident-1"));
+        mvc.perform(get("/"))
+                .andExpect(status().isFound())
+                .andExpect(header().string("Location", "/miniapp/index.html"));
         assertThrows(BusinessException.class, () -> access.revokeAccess(AccessRole.RESIDENT,
                 "demo-admin-1", null, "demo-house-1", "demo-admin-1"));
         assertEquals("ACTIVE", jdbc.queryForObject("""

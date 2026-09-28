@@ -6,6 +6,12 @@ info:
 servers:
   - url: http://localhost:8080
 paths:
+  /:
+    get:
+      operationId: openMiniApp
+      summary: Перейти с корня сайта в мини-приложение
+      responses:
+        '302': {description: Переход в мини-приложение, headers: {Location: {schema: {type: string}, description: /miniapp/index.html}}}
   /v1/access/config:
     get:
       operationId: accessConfig
