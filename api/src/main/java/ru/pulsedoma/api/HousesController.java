@@ -7,6 +7,7 @@ import jakarta.validation.constraints.NotEmpty;
 import jakarta.validation.constraints.Size;
 import java.time.Instant;
 import java.util.List;
+import java.security.Principal;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -14,14 +15,21 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
+import ru.pulsedoma.house.HousePassportService;
 
 @Validated
 @RestController
 @RequestMapping("/v1/houses")
 public class HousesController {
+    private final HousePassportService passports;
+
+    public HousesController(HousePassportService passports) {
+        this.passports = passports;
+    }
+
     @GetMapping("/{id}")
-    public void getHouse(@PathVariable @NotBlank String id) {
-        throw PendingOperation.notImplemented();
+    public HousePassportService.HousePassport getHouse(@PathVariable @NotBlank String id, Principal principal) {
+        return passports.getPassport(id, principal.getName());
     }
 
     @GetMapping("/{id}/events")

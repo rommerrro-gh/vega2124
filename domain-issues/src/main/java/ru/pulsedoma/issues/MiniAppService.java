@@ -13,6 +13,10 @@ import java.util.HexFormat;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
+import ru.pulsedoma.identity.MembershipRole;
+import ru.pulsedoma.identity.VerificationStatus;
 
 @Service
 public class MiniAppService {
@@ -24,7 +28,8 @@ public class MiniAppService {
         this.attachments = attachments;
     }
 
-    public record HouseView(String id, String address) {}
+    public record MembershipAccess(MembershipRole role, VerificationStatus verificationStatus) {}
+    public record HouseView(String id, String address, List<MembershipAccess> memberships) {}
     public record IssueView(String id, String houseId, String address, String category,
                             IssueStatus status, String description, String location,
                             String occurredAt, String verificationDueAt, int participants,
@@ -42,22 +47,26 @@ public class MiniAppService {
     }
 
     public List<HouseView> houses(String userId) {
-        return jdbc.query("""
-                SELECT DISTINCT h.id, h.address FROM houses h
+        LinkedHashMap<String, HouseView> houses = new LinkedHashMap<>();
+        jdbc.query("""
+                SELECT h.id, h.address, m.role, m.verification_status FROM houses h
                 JOIN house_memberships m ON m.house_id = h.id
                 WHERE m.user_id = ? AND m.verification_status = 'VERIFIED'
-                ORDER BY h.address
-                """, (rs, row) -> new HouseView(rs.getString(1), rs.getString(2)), userId);
+                ORDER BY h.address, m.role
+                """, rs -> {
+            String id = rs.getString("id");
+            String address = rs.getString("address");
+            HouseView house = houses.computeIfAbsent(id,
+                    ignored -> new HouseView(id, address, new ArrayList<>()));
+            house.memberships().add(new MembershipAccess(MembershipRole.valueOf(rs.getString("role")),
+                    VerificationStatus.valueOf(rs.getString("verification_status"))));
+        }, userId);
+        return List.copyOf(houses.values());
     }
 
     public List<HouseView> dispatcherHouses(String userId) {
-        return jdbc.query("""
-                SELECT DISTINCT h.id, h.address FROM houses h
-                JOIN house_memberships m ON m.house_id = h.id
-                WHERE m.user_id = ? AND m.role = 'DISPATCHER'
-                  AND m.verification_status = 'VERIFIED'
-                ORDER BY h.address
-                """, (rs, row) -> new HouseView(rs.getString(1), rs.getString(2)), userId);
+        return houses(userId).stream().filter(house -> house.memberships().stream()
+                .anyMatch(access -> access.role() == MembershipRole.DISPATCHER)).toList();
     }
 
     @Transactional

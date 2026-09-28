@@ -33,18 +33,21 @@ public class MaxInitDataFilter extends OncePerRequestFilter {
     private final String botToken;
     private final String demoUserId;
     private final String demoDispatcherId;
+    private final String demoAdminId;
     private final Environment environment;
 
     public MaxInitDataFilter(JdbcTemplate jdbc, ObjectMapper mapper, Environment environment,
                              @Value("${max.api.token:}") String botToken,
                              @Value("${miniapp.demo-user-id:}") String demoUserId,
-                             @Value("${miniapp.demo-dispatcher-id:}") String demoDispatcherId) {
+                             @Value("${miniapp.demo-dispatcher-id:}") String demoDispatcherId,
+                             @Value("${miniapp.demo-admin-id:}") String demoAdminId) {
         this.jdbc = jdbc;
         this.mapper = mapper;
         this.environment = environment;
         this.botToken = botToken;
         this.demoUserId = demoUserId;
         this.demoDispatcherId = demoDispatcherId;
+        this.demoAdminId = demoAdminId;
     }
 
     @Override
@@ -63,6 +66,9 @@ public class MaxInitDataFilter extends OncePerRequestFilter {
             } else if (environment.acceptsProfiles(Profiles.of("demo")) && !demoDispatcherId.isBlank()
                     && "dispatcher".equals(request.getHeader("X-Demo-Session"))) {
                 userId = demoDispatcherId;
+            } else if (environment.acceptsProfiles(Profiles.of("demo")) && !demoAdminId.isBlank()
+                    && "admin".equals(request.getHeader("X-Demo-Session"))) {
+                userId = demoAdminId;
             } else {
                 VerifiedMaxUser maxUser = verify(request.getHeader("X-Max-Init-Data"));
                 jdbc.update("""

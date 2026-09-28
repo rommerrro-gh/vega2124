@@ -19,6 +19,30 @@ const transitions = {
   ASSIGNED: ["IN_PROGRESS", "Начать работу"], IN_PROGRESS: ["RESOLVED", "Отметить выполненной"],
   REOPENED: ["ASSIGNED", "Повторно назначить себе"],
 };
+const passportLabels = {
+  management_company: "Управляющая организация",
+  building_year: "Год постройки",
+  emergency_contact: "Аварийный контакт",
+};
+
+function passportValue(value) {
+  if (value == null) return "Не указано";
+  if (typeof value === "string" || typeof value === "number") return String(value);
+  if (Array.isArray(value)) return value.map(passportValue).join(", ");
+  return Object.entries(value).map(([key, item]) => `${key}: ${passportValue(item)}`).join(" · ");
+}
+
+function passportDate(value) {
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? value : date.toLocaleDateString("ru-RU");
+}
+
+function safeSourceUrl(value) {
+  try {
+    const url = new URL(value);
+    return ["https:", "http:"].includes(url.protocol) ? url.href : null;
+  } catch { return null; }
+}
 
 function authHeaders(role) {
   const initData = window.WebApp?.initData;
@@ -36,7 +60,7 @@ async function api(role, path, options = {}) {
     const error = await response.json().catch(() => ({}));
     throw new Error(error.message || `Ошибка ${response.status}`);
   }
-  return response.json();
+  return response.status === 204 ? null : response.json();
 }
 
 function navigate(path) {
@@ -99,6 +123,14 @@ function QuickLink({ dispatcher = false }) {
   </div>;
 }
 
+function AdminLink() {
+  return <div className="quick-link">
+    <span className="quick-link-icon" aria-hidden="true">⌂</span>
+    <div><strong>Кабинет администратора дома</strong><small>Контакты и приглашения жителей</small></div>
+    <Button mode="tertiary" type="button" onClick={() => navigate("/admin/index.html")}>Открыть</Button>
+  </div>;
+}
+
 function AttachmentList({ attachments, role, onError }) {
   if (!attachments?.length) return null;
   return <div className="item-list">{attachments.map(file => <button className="attachment-link" type="button" key={file.id} onClick={() => downloadAttachment(role, file, onError)}>Открыть вложение · {file.mime}</button>)}</div>;
@@ -113,9 +145,39 @@ function IssueDetails({ issue, role, onError }) {
   </>;
 }
 
+function HousePassport({ houses, selectedId, onSelect, passport, loading, error }) {
+  if (!houses.length) return null;
+  return <Card className="passport-card">
+    <SectionHeading number="01" title="Паспорт дома" subtitle="Сведения о доме с источником и датой каждого поля" />
+    {houses.length > 1 && <Field id="passport-house" label="Дом"><select id="passport-house" value={selectedId} onChange={event => onSelect(event.target.value)}>{houses.map(house => <option key={house.id} value={house.id}>{house.address}</option>)}</select></Field>}
+    {loading ? <p className="muted">Загружаем сведения о доме…</p> : error ? <p className="notice" role="alert">{error}</p> : passport && <>
+      <h3 className="passport-address">{passport.address}</h3>
+      {passport.fields.length ? <div className="passport-fields">{passport.fields.map(field => {
+        const sourceUrl = safeSourceUrl(field.sourceUrl);
+        return <div className="passport-field" key={field.key}>
+          <div className="passport-field-label">{passportLabels[field.key] || field.key.replaceAll("_", " ")}</div>
+          <div className="passport-field-value">{passportValue(field.value)}</div>
+          <div className="passport-field-source">Источник: {sourceUrl ? <a href={sourceUrl} target="_blank" rel="noopener noreferrer">{field.source}</a> : field.source} · получено {passportDate(field.fetchedAt)}{field.validAt && ` · актуально на ${passportDate(field.validAt)}`}</div>
+        </div>;
+      })}</div> : <p className="muted passport-empty">Поля паспорта пока не заполнены. Данные появятся здесь вместе с источником и датой получения.</p>}
+      {!!passport.contacts?.length && <div className="passport-contacts"><h4>Контакты дома</h4><div className="passport-fields">{passport.contacts.map(contact => <div className="passport-field" key={contact.id}>
+        <div className="passport-field-label">{contact.type === "EMERGENCY" ? "Аварийный контакт" : "Местный контакт"}</div>
+        <div className="passport-field-value">{contact.title}</div>
+        <a className="passport-phone" href={`tel:${contact.phone.replace(/[^+0-9]/g, "")}`}>{contact.phone}</a>
+        {contact.details && <p className="passport-details">{contact.details}</p>}
+        <div className="passport-field-source">Источник: администратор дома · обновлено {passportDate(contact.updatedAt)}</div>
+      </div>)}</div></div>}
+    </>}
+  </Card>;
+}
+
 function Resident() {
   const formRef = useRef(null);
   const [houses, setHouses] = useState([]);
+  const [selectedHouseId, setSelectedHouseId] = useState("");
+  const [passport, setPassport] = useState(null);
+  const [passportLoading, setPassportLoading] = useState(false);
+  const [passportError, setPassportError] = useState("");
   const [issues, setIssues] = useState([]);
   const [dispatcher, setDispatcher] = useState(false);
   const [notice, setNotice] = useState("");
@@ -127,7 +189,8 @@ function Resident() {
   const [issue, setIssue] = useState(null);
   const [busy, setBusy] = useState(false);
   const [verificationComment, setVerificationComment] = useState("");
-  const request = (path, options) => api("true", path, options);
+  const demoSession = new URLSearchParams(location.search).get("demoSession") === "admin" ? "admin" : "true";
+  const request = (path, options) => api(demoSession, path, options);
   const refreshIssues = async () => setIssues(await request("/v1/me/issues"));
   const fail = error => setNotice(error.message || String(error));
 
@@ -139,10 +202,22 @@ function Resident() {
         request("/v1/me/houses"), request("/v1/me/issues"), request("/v1/me/dispatcher-houses"),
       ]);
       setHouses(myHouses); setIssues(myIssues); setDispatcher(dispatcherHouses.length > 0);
+      if (myHouses.length) setSelectedHouseId(myHouses[0].id);
       if (!myHouses.length) setNotice("У вас пока нет подтверждённого доступа к дому. Попросите приглашение у администратора.");
     }
     load().catch(fail);
   }, []);
+
+  useEffect(() => {
+    if (!selectedHouseId) return;
+    let active = true;
+    setPassport(null); setPassportError(""); setPassportLoading(true);
+    request(`/v1/houses/${encodeURIComponent(selectedHouseId)}`)
+      .then(data => { if (active) setPassport(data); })
+      .catch(error => { if (active) setPassportError(error.message || String(error)); })
+      .finally(() => { if (active) setPassportLoading(false); });
+    return () => { active = false; };
+  }, [selectedHouseId]);
 
   function showIssue(nextIssue) {
     setIssue(nextIssue); setVerificationComment(""); setStep("result"); setNotice("");
@@ -218,14 +293,16 @@ function Resident() {
   return <main className="shell">
     <Brand role="Жителю" /><Hero /><Notice message={notice} />
     {dispatcher && <QuickLink />}
+    {houses.some(house => house.memberships?.some(access => access.role === "HOUSE_ADMIN" && access.verificationStatus === "VERIFIED")) && <AdminLink />}
     <div className="content-grid">
+      <HousePassport houses={houses} selectedId={selectedHouseId} onSelect={setSelectedHouseId} passport={passport} loading={passportLoading} error={passportError} />
       <Card className="issues-card">
-        <SectionHeading number="01" title="Мои заявки" subtitle="Следите за тем, как решаются ваши обращения" />
+        <SectionHeading number="02" title="Мои заявки" subtitle="Следите за тем, как решаются ваши обращения" />
         <div className="item-list">{issues.length ? issues.map(item => <CellSimple key={item.id} className="issue-cell" title={item.location || item.address} subtitle={item.description} overline={statusLabels[item.status] || item.status} showChevron onClick={() => showIssue(item)} />) : <p className="muted empty">Заявок пока нет.</p>}</div>
         <Button mode="tertiary" className="quiet-action" type="button" stretched onClick={() => refreshIssues().catch(fail)}>Обновить список</Button>
       </Card>
       {step === "form" && <Card className="form-card">
-        <SectionHeading number="02" title="Сообщить о проблеме" subtitle="Заполнение займёт пару минут" />
+        <SectionHeading number="03" title="Сообщить о проблеме" subtitle="Заполнение займёт пару минут" />
         <form ref={formRef} onSubmit={submitReport}>
           <div className="field-grid">
             <Field id="house" label="Дом"><select id="house" name="house" required disabled={!!reportId} defaultValue={houses.length === 1 ? houses[0].id : ""} key={houses.map(h => h.id).join("|")}><option value="">Выберите дом</option>{houses.map(h => <option value={h.id} key={h.id}>{h.address}</option>)}</select></Field>
@@ -240,7 +317,7 @@ function Resident() {
         </form>
       </Card>}
       {step === "decision" && <Card className="flow-card">
-        <SectionHeading number="03" title="Похожие проблемы" subtitle="Выберите существующую заявку или создайте новую" />
+        <SectionHeading number="04" title="Похожие проблемы" subtitle="Выберите существующую заявку или создайте новую" />
         <div className="item-list">{candidates.length ? candidates.map(({ issue: item, score }) => <div className="candidate" key={item.id}><span className="score">{Math.round(score * 100)}% совпадение</span><strong>{item.description || item.category || "Проблема дома"}</strong><p>{item.address} · {item.participants} участников</p><button type="button" disabled={busy} onClick={() => decide(`/v1/issues/${encodeURIComponent(item.id)}/join`)}>Присоединиться</button></div>) : <p className="muted empty">Похожих активных заявок не найдено.</p>}</div>
         <Button mode="primary" className="brand-button" type="button" stretched disabled={busy} onClick={() => decide("/v1/issues")}>Создать новую заявку <span aria-hidden="true">→</span></Button>
       </Card>}
@@ -253,6 +330,89 @@ function Resident() {
       </Card>}
     </div>
     <footer>Пульс дома <span>·</span> Сделаем дом лучше вместе</footer>
+  </main>;
+}
+
+function Admin() {
+  const [houses, setHouses] = useState([]);
+  const [houseId, setHouseId] = useState("");
+  const [contacts, setContacts] = useState([]);
+  const [invitations, setInvitations] = useState([]);
+  const [createdToken, setCreatedToken] = useState("");
+  const [editingId, setEditingId] = useState("");
+  const [contactType, setContactType] = useState("EMERGENCY");
+  const [title, setTitle] = useState("");
+  const [phone, setPhone] = useState("");
+  const [details, setDetails] = useState("");
+  const [days, setDays] = useState(7);
+  const [activationLimit, setActivationLimit] = useState(10);
+  const [notice, setNotice] = useState("");
+  const [busy, setBusy] = useState(false);
+  const request = (path, options) => api("admin", path, options);
+  const fail = error => setNotice(error.message || String(error));
+  const base = `/v1/houses/${encodeURIComponent(houseId)}`;
+
+  useEffect(() => {
+    request("/v1/me/houses").then(list => {
+      const allowed = list.filter(house => house.memberships?.some(access => access.role === "HOUSE_ADMIN" && access.verificationStatus === "VERIFIED"));
+      setHouses(allowed); if (allowed.length) setHouseId(allowed[0].id);
+      else setNotice("У вас нет подтверждённой роли администратора дома.");
+    }).catch(fail);
+  }, []);
+  useEffect(() => {
+    if (!houseId) return;
+    setCreatedToken(""); setNotice("");
+    Promise.all([request(`${base}/contacts`), request(`${base}/invitations`)])
+      .then(([nextContacts, nextInvitations]) => { setContacts(nextContacts); setInvitations(nextInvitations); })
+      .catch(fail);
+  }, [houseId]);
+
+  function resetContact() { setEditingId(""); setContactType("EMERGENCY"); setTitle(""); setPhone(""); setDetails(""); }
+  async function saveContact(event) {
+    event.preventDefault(); setBusy(true); setNotice("");
+    try {
+      const path = editingId ? `${base}/contacts/${encodeURIComponent(editingId)}` : `${base}/contacts`;
+      await request(path, { method: editingId ? "PUT" : "POST", body: JSON.stringify({ type: contactType, title: title.trim(), phone: phone.trim(), details: details.trim() }) });
+      setContacts(await request(`${base}/contacts`)); resetContact();
+    } catch (error) { fail(error); } finally { setBusy(false); }
+  }
+  async function removeContact(id) {
+    if (!window.confirm("Удалить этот контакт?")) return;
+    setBusy(true); setNotice("");
+    try { await request(`${base}/contacts/${encodeURIComponent(id)}`, { method: "DELETE" }); setContacts(await request(`${base}/contacts`)); if (editingId === id) resetContact(); }
+    catch (error) { fail(error); } finally { setBusy(false); }
+  }
+  async function createInvitation(event) {
+    event.preventDefault(); setBusy(true); setNotice(""); setCreatedToken("");
+    try {
+      const result = await request(`${base}/invitations`, { method: "POST", body: JSON.stringify({ days: Number(days), activationLimit: Number(activationLimit) }) });
+      setCreatedToken(result.token); setInvitations(await request(`${base}/invitations`));
+    } catch (error) { fail(error); } finally { setBusy(false); }
+  }
+  async function revokeInvitation(id) {
+    setBusy(true); setNotice("");
+    try { await request(`${base}/invitations/${encodeURIComponent(id)}/revoke`, { method: "POST" }); setInvitations(await request(`${base}/invitations`)); }
+    catch (error) { fail(error); } finally { setBusy(false); }
+  }
+
+  return <main className="shell">
+    <Brand role="Администратору" />
+    <section className="hero"><div className="hero-copy"><div className="hero-kicker"><span className="live-dot" /> Кабинет дома</div><h1>Информация<br />для жителей</h1><p>Поддерживайте контакты дома и приглашайте новых участников.</p></div></section>
+    <Notice message={notice} />
+    <div className="quick-link"><span className="quick-link-icon" aria-hidden="true">↙</span><div><strong>Мини-приложение жителя</strong><small>Посмотреть паспорт дома</small></div><Button mode="tertiary" type="button" onClick={() => navigate("/miniapp/index.html?demoSession=admin")}>Открыть</Button></div>
+    {!!houses.length && <div className="content-grid">
+      <Card><SectionHeading number="01" title="Дом" subtitle="Изменения доступны только для выбранного дома" /><Field id="admin-house" label="Администрируемый дом"><select id="admin-house" value={houseId} onChange={event => { setHouseId(event.target.value); resetContact(); }}>{houses.map(house => <option key={house.id} value={house.id}>{house.address}</option>)}</select></Field></Card>
+      <Card><SectionHeading number="02" title="Контакты" subtitle="Локальные сведения с датой изменения в паспорте дома" />
+        <div className="item-list">{contacts.map(contact => <div className="admin-row" key={contact.id}><div><strong>{contact.title}</strong><small>{contact.type === "EMERGENCY" ? "Аварийный" : "Местный"} · {contact.phone}</small></div><button type="button" onClick={() => { setEditingId(contact.id); setContactType(contact.type); setTitle(contact.title); setPhone(contact.phone); setDetails(contact.details || ""); }}>Изменить</button><button type="button" disabled={busy} onClick={() => removeContact(contact.id)}>Удалить</button></div>)}</div>
+        <form onSubmit={saveContact} className="admin-form"><h3>{editingId ? "Изменить контакт" : "Добавить контакт"}</h3><p className="hint">Указывайте только публичные телефоны служб дома.</p><Field id="contact-type" label="Тип"><select id="contact-type" value={contactType} onChange={event => setContactType(event.target.value)}><option value="EMERGENCY">Аварийный</option><option value="LOCAL">Местный</option></select></Field><Field id="contact-title" label="Название"><input id="contact-title" value={title} onChange={event => setTitle(event.target.value)} maxLength="120" required /></Field><Field id="contact-phone" label="Телефон"><input id="contact-phone" type="tel" value={phone} onChange={event => setPhone(event.target.value)} maxLength="40" pattern="[+0-9() .-]{2,40}" required /></Field><Field id="contact-details" label="Примечание"><textarea id="contact-details" value={details} onChange={event => setDetails(event.target.value)} maxLength="500" /></Field><Button mode="primary" className="brand-button" type="submit" stretched disabled={busy}>{editingId ? "Сохранить изменения" : "Добавить контакт"}</Button>{editingId && <Button mode="tertiary" type="button" stretched onClick={resetContact}>Отмена</Button>}</form>
+      </Card>
+      <Card><SectionHeading number="03" title="Приглашения" subtitle="Ссылка добавляет жителя только в выбранный дом" />
+        <form onSubmit={createInvitation} className="admin-form"><div className="field-grid"><Field id="invite-days" label="Срок, дней"><input id="invite-days" type="number" min="1" max="30" value={days} onChange={event => setDays(event.target.value)} required /></Field><Field id="invite-limit" label="Число активаций"><input id="invite-limit" type="number" min="1" max="100" value={activationLimit} onChange={event => setActivationLimit(event.target.value)} required /></Field></div><Button mode="primary" className="brand-button" type="submit" stretched disabled={busy}>Создать приглашение</Button></form>
+        {createdToken && <div className="invite-token" role="status"><strong>Токен приглашения</strong><code>{createdToken}</code><p>Передайте его жителю приватно и добавьте к ссылке бота MAX как параметр <code>startapp</code>. После обновления страницы токен больше не отображается.</p></div>}
+        <div className="item-list admin-invitations">{invitations.map(invitation => <div className="admin-row" key={invitation.id}><div><strong>{invitation.revokedAt ? "Отозвано" : new Date(invitation.expiresAt) < new Date() ? "Истекло" : "Активно"}</strong><small>До {passportDate(invitation.expiresAt)} · использовано {invitation.activationCount} из {invitation.activationLimit}</small></div>{!invitation.revokedAt && <button type="button" disabled={busy} onClick={() => revokeInvitation(invitation.id)}>Отозвать</button>}</div>)}</div>
+      </Card>
+    </div>}
+    <footer>Пульс дома <span>·</span> Кабинет администратора</footer>
   </main>;
 }
 
@@ -317,5 +477,5 @@ function Dispatcher() {
 }
 
 createRoot(document.getElementById("app")).render(
-  <MaxUI>{document.body.dataset.page === "dispatcher" ? <Dispatcher /> : <Resident />}</MaxUI>
+  <MaxUI>{document.body.dataset.page === "dispatcher" ? <Dispatcher /> : document.body.dataset.page === "admin" ? <Admin /> : <Resident />}</MaxUI>
 );

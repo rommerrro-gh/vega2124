@@ -20,9 +20,10 @@ public class SecurityConfig {
     public SecurityConfig(JdbcTemplate jdbc, ObjectMapper mapper, Environment environment,
                           @Value("${max.api.token:}") String botToken,
                           @Value("${miniapp.demo-user-id:}") String demoUserId,
-                          @Value("${miniapp.demo-dispatcher-id:}") String demoDispatcherId) {
+                          @Value("${miniapp.demo-dispatcher-id:}") String demoDispatcherId,
+                          @Value("${miniapp.demo-admin-id:}") String demoAdminId) {
         this.maxInitDataFilter = new MaxInitDataFilter(jdbc, mapper, environment, botToken,
-                demoUserId, demoDispatcherId);
+                demoUserId, demoDispatcherId, demoAdminId);
     }
 
     @Bean
@@ -33,6 +34,7 @@ public class SecurityConfig {
                         .requestMatchers("/v1/**").authenticated()
                         .requestMatchers("/miniapp/**").permitAll()
                         .requestMatchers("/dispatcher/**").permitAll()
+                        .requestMatchers("/admin/**").permitAll()
                         .requestMatchers("/actuator/health", "/v3/api-docs/**", "/swagger-ui/**").permitAll()
                         .anyRequest().denyAll())
                 .httpBasic(Customizer.withDefaults())

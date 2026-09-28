@@ -29,7 +29,7 @@ class MaxInitDataFilterTest {
                                    display_name TEXT NOT NULL, status TEXT NOT NULL)
                 """);
         MaxInitDataFilter filter = new MaxInitDataFilter(jdbc, new ObjectMapper(), new MockEnvironment(),
-                "test-bot-token", "", "");
+                "test-bot-token", "", "", "");
         String user = "{\"id\":123,\"first_name\":\"Иван\",\"last_name\":\"Петров\"}";
         String date = Long.toString(Instant.now().getEpochSecond());
         String data = "auth_date=" + date + "\nuser=" + user;

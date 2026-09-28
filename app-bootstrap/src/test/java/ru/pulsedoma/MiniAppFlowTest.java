@@ -22,8 +22,10 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -50,6 +52,112 @@ class MiniAppFlowTest {
     @Autowired ObjectMapper mapper;
     @Autowired JdbcTemplate jdbc;
     @Autowired MiniAppService issues;
+
+    @Test
+    void houseAdminIsScopedToOneHouseAndAuditsContactsAndInvitations() throws Exception {
+        mvc.perform(get("/admin/index.html")).andExpect(status().isOk());
+        JsonNode houses = json(mvc.perform(get("/v1/me/houses").header("X-Demo-Session", "admin"))
+                .andExpect(status().isOk()).andReturn().getResponse().getContentAsByteArray());
+        assertEquals(2, houses.size());
+        assertTrue(houses.get(0).path("memberships").toString().contains("HOUSE_ADMIN"));
+        assertFalse(houses.get(1).path("memberships").toString().contains("HOUSE_ADMIN"));
+
+        String contactBody = "{\"type\":\"EMERGENCY\",\"title\":\"Аварийная служба\",\"phone\":\"112\",\"details\":\"Круглосуточно\"}";
+        mvc.perform(post("/v1/houses/demo-house-1/contacts").header("X-Demo-Session", "true")
+                        .contentType("application/json").content(contactBody))
+                .andExpect(status().isForbidden());
+        mvc.perform(post("/v1/houses/demo-house-2/contacts").header("X-Demo-Session", "admin")
+                        .contentType("application/json").content(contactBody))
+                .andExpect(status().isForbidden());
+        mvc.perform(post("/v1/houses/demo-house-1/contacts").header("X-Demo-Session", "dispatcher")
+                        .contentType("application/json").content(contactBody))
+                .andExpect(status().isForbidden());
+        mvc.perform(post("/v1/houses/demo-house-1/contacts").header("X-Demo-Session", "admin")
+                        .contentType("application/json")
+                        .content("{\"type\":\"EMERGENCY\",\"title\":\"Неверный\",\"phone\":\"abc\"}"))
+                .andExpect(status().isBadRequest());
+        JsonNode created = json(mvc.perform(post("/v1/houses/demo-house-1/contacts")
+                .header("X-Demo-Session", "admin").contentType("application/json").content(contactBody))
+                .andExpect(status().isCreated()).andReturn().getResponse().getContentAsByteArray());
+        String contactId = created.path("id").asText();
+        assertEquals("112", created.path("phone").asText());
+        JsonNode passport = json(mvc.perform(get("/v1/houses/demo-house-1")
+                .header("X-Demo-Session", "true")).andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsByteArray());
+        assertEquals(contactId, passport.path("contacts").get(0).path("id").asText());
+        mvc.perform(put("/v1/houses/demo-house-2/contacts/" + contactId).header("X-Demo-Session", "admin")
+                        .contentType("application/json").content(contactBody))
+                .andExpect(status().isForbidden());
+        JsonNode updated = json(mvc.perform(put("/v1/houses/demo-house-1/contacts/" + contactId)
+                .header("X-Demo-Session", "admin").contentType("application/json")
+                .content("{\"type\":\"LOCAL\",\"title\":\"Консьерж\",\"phone\":\"+7 999 000 00 00\"}"))
+                .andExpect(status().isOk()).andReturn().getResponse().getContentAsByteArray());
+        assertEquals("LOCAL", updated.path("type").asText());
+        mvc.perform(delete("/v1/houses/demo-house-1/contacts/" + contactId)
+                .header("X-Demo-Session", "admin")).andExpect(status().isNoContent());
+        assertEquals(0, json(mvc.perform(get("/v1/houses/demo-house-1/contacts")
+                .header("X-Demo-Session", "true")).andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsByteArray()).size());
+
+        String invitationBody = "{\"days\":7,\"activationLimit\":2}";
+        mvc.perform(post("/v1/houses/demo-house-1/invitations").header("X-Demo-Session", "true")
+                        .contentType("application/json").content(invitationBody))
+                .andExpect(status().isForbidden());
+        mvc.perform(post("/v1/houses/demo-house-2/invitations").header("X-Demo-Session", "admin")
+                        .contentType("application/json").content(invitationBody))
+                .andExpect(status().isForbidden());
+        JsonNode invite = json(mvc.perform(post("/v1/houses/demo-house-1/invitations")
+                .header("X-Demo-Session", "admin").contentType("application/json").content(invitationBody))
+                .andExpect(status().isCreated()).andReturn().getResponse().getContentAsByteArray());
+        String token = invite.path("token").asText();
+        String invitationId = invite.path("invitation").path("id").asText();
+        assertFalse(token.isBlank());
+        JsonNode invitationList = json(mvc.perform(get("/v1/houses/demo-house-1/invitations")
+                .header("X-Demo-Session", "admin")).andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsByteArray());
+        assertFalse(invitationList.toString().contains(token));
+        assertFalse(jdbc.queryForObject("SELECT after_json FROM audit_events WHERE entity_id = ?",
+                String.class, invitationId).contains(token));
+        mvc.perform(post("/v1/houses/demo-house-1/invitations/" + invitationId + "/revoke")
+                .header("X-Demo-Session", "admin")).andExpect(status().isOk());
+        mvc.perform(post("/v1/invitations/" + token + "/accept").header("X-Demo-Session", "true"))
+                .andExpect(status().isBadRequest());
+        assertEquals(5, jdbc.queryForObject("SELECT COUNT(*) FROM audit_events WHERE actor_id = 'demo-admin-1'",
+                Integer.class));
+
+        JsonNode freshInvite = json(mvc.perform(post("/v1/houses/demo-house-1/invitations")
+                .header("X-Demo-Session", "admin").contentType("application/json").content(invitationBody))
+                .andExpect(status().isCreated()).andReturn().getResponse().getContentAsByteArray());
+        jdbc.update("INSERT INTO users(id, display_name, status) VALUES ('new-invited-resident', 'Новый житель', 'ACTIVE')");
+        issues.acceptInvitation(freshInvite.path("token").asText(), "new-invited-resident");
+        assertEquals("RESIDENT", jdbc.queryForObject("""
+                SELECT role FROM house_memberships WHERE house_id = 'demo-house-1' AND user_id = 'new-invited-resident'
+                """, String.class));
+    }
+
+    @Test
+    void passportShowsProvenanceOnlyToVerifiedHouseMembers() throws Exception {
+        mvc.perform(get("/v1/houses/demo-house-1")).andExpect(status().isUnauthorized());
+
+        JsonNode passport = json(mvc.perform(get("/v1/houses/demo-house-1")
+                .header("X-Demo-Session", "true")).andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsByteArray());
+        assertEquals("Казань, ул. Баумана, 12", passport.path("address").asText());
+        assertEquals(2, passport.path("fields").size());
+        assertEquals("building_year", passport.path("fields").get(0).path("key").asText());
+        assertEquals(2005, passport.path("fields").get(0).path("value").asInt());
+        assertEquals("Демо-данные", passport.path("fields").get(0).path("source").asText());
+        assertEquals("2026-09-28T00:00:00Z", passport.path("fields").get(0).path("fetchedAt").asText());
+
+        JsonNode empty = json(mvc.perform(get("/v1/houses/demo-house-2")
+                .header("X-Demo-Session", "true")).andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsByteArray());
+        assertEquals(0, empty.path("fields").size());
+        mvc.perform(get("/v1/houses/demo-house-2").header("X-Demo-Session", "dispatcher"))
+                .andExpect(status().isNotFound());
+        mvc.perform(get("/v1/houses/missing-house").header("X-Demo-Session", "true"))
+                .andExpect(status().isNotFound());
+    }
 
     @Test
     void residentExplicitlyCreatesOrJoinsIssueInOwnHouse() throws Exception {

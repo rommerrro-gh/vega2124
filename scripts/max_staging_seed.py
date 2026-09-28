@@ -4,6 +4,7 @@
 import argparse
 import datetime
 import hashlib
+import json
 import pathlib
 import secrets
 import sqlite3
@@ -22,6 +23,9 @@ def main():
     dispatcher = commands.add_parser("dispatcher", help="Выдать роль диспетчера вошедшему пользователю")
     dispatcher.add_argument("--house-id", required=True)
     dispatcher.add_argument("--max-user-id", required=True)
+    admin = commands.add_parser("admin", help="Выдать роль администратора дома вошедшему пользователю")
+    admin.add_argument("--house-id", required=True)
+    admin.add_argument("--max-user-id", required=True)
     args = parser.parse_args()
 
     if not args.db.is_file():
@@ -49,17 +53,23 @@ def main():
                     WHERE max_user_id IS NOT NULL ORDER BY created_at DESC
                     """):
                 print(max_id, name)
-        elif args.command == "dispatcher":
+        elif args.command in ("dispatcher", "admin"):
             row = db.execute("SELECT id FROM users WHERE max_user_id = ? AND status = 'ACTIVE'",
                              (args.max_user_id,)).fetchone()
             if not row:
                 parser.error("пользователь ещё не входил в mini app или неактивен")
+            role = "DISPATCHER" if args.command == "dispatcher" else "HOUSE_ADMIN"
             db.execute("""
                 INSERT INTO house_memberships(house_id, user_id, role, verification_status)
-                VALUES (?, ?, 'DISPATCHER', 'VERIFIED')
+                VALUES (?, ?, ?, 'VERIFIED')
                 ON CONFLICT(house_id, user_id, role) DO UPDATE SET verification_status = 'VERIFIED'
-                """, (args.house_id, row[0]))
-            print("Роль диспетчера выдана")
+                """, (args.house_id, row[0], role))
+            db.execute("""
+                INSERT INTO audit_events(id, actor_id, action, entity, entity_id, after_json)
+                VALUES (?, NULL, 'ROLE_GRANTED_BY_STAGING_SEED', 'house_membership', ?, ?)
+                """, (str(uuid.uuid4()), args.house_id,
+                      json.dumps({"userId": row[0], "role": role}, ensure_ascii=False)))
+            print("Роль выдана:", role)
 
 
 if __name__ == "__main__":

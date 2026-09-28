@@ -13,6 +13,7 @@ import ru.pulsedoma.common.WebhookQueue;
 import ru.pulsedoma.issues.Report;
 import ru.pulsedoma.issues.ReportService;
 import ru.pulsedoma.issues.MiniAppService;
+import ru.pulsedoma.house.HousePassportService;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
@@ -44,7 +45,7 @@ class ControllerContractTest {
         when(reportService.createReport(any())).thenReturn(report);
         mvc = standaloneSetup(new MaxWebhookController(new ObjectMapper(), queue, "test-secret"),
                 new IdentityController(miniApp), new ReportsController(reportService), new IssuesController(miniApp),
-                new IncidentsController(), new HousesController(), new ConnectorsController())
+                new IncidentsController(), new HousesController(mock(HousePassportService.class)), new ConnectorsController())
                 .setValidator(validator)
                 .build();
     }
@@ -64,7 +65,6 @@ class ControllerContractTest {
                 json(post("/v1/issues/issue/split"), "{\"reportId\":\"report\",\"reason\":\"test\"}"),
                 json(post("/v1/issues/issue/comments"), "{\"text\":\"test\"}"),
                 json(post("/v1/incidents"), "{\"houseId\":\"house\",\"type\":\"FIRE\",\"description\":\"test\"}"),
-                get("/v1/houses/house"),
                 get("/v1/houses/house/events"),
                 json(post("/v1/houses/house/polls"), "{\"question\":\"Test?\",\"options\":[\"Yes\",\"No\"]}"),
                 json(post("/v1/connectors/FIAS/sync"), "{\"houseId\":\"house\"}")
