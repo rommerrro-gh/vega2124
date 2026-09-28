@@ -9,9 +9,9 @@ paths:
   /v1/access/config:
     get:
       operationId: accessConfig
-      summary: Имя бота для формирования ссылки приглашения
+      summary: Конфигурация приглашений и демонстрационного режима
       responses:
-        '200': {description: Конфигурация ссылки, content: {application/json: {schema: {type: object, properties: {botUsername: {type: string}}}}}}
+        '200': {description: Конфигурация ссылки и демонстрационного режима, content: {application/json: {schema: {type: object, properties: {botUsername: {type: string}, demoMode: {type: boolean}}}}}}
   /v1/access/me:
     get:
       operationId: myAccess

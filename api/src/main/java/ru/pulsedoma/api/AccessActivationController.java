@@ -10,6 +10,8 @@ import jakarta.validation.constraints.Size;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.core.env.Environment;
+import org.springframework.core.env.Profiles;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -31,16 +33,19 @@ import java.util.List;
 public class AccessActivationController {
     private final AccessActivationService service;
     private final String botUsername;
+    private final boolean demoMode;
 
     public AccessActivationController(AccessActivationService service,
-                                      @Value("${max.bot.username:}") String botUsername) {
+                                      @Value("${max.bot.username:}") String botUsername,
+                                      Environment environment) {
         this.service = service;
         this.botUsername = botUsername;
+        this.demoMode = environment.acceptsProfiles(Profiles.of("demo"));
     }
 
     @GetMapping("/config")
     public ConfigView config() {
-        return new ConfigView(botUsername);
+        return new ConfigView(botUsername, demoMode);
     }
 
     @GetMapping("/me")
@@ -143,5 +148,5 @@ public class AccessActivationController {
                                     @Min(1) @Max(100) int activationLimit) {}
     public record RevokeRequest(@NotNull AccessRole role, @NotBlank String userId,
                                 String organizationId, String houseId) {}
-    public record ConfigView(String botUsername) {}
+    public record ConfigView(String botUsername, boolean demoMode) {}
 }

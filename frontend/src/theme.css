@@ -6,6 +6,10 @@ button,input,select,textarea{font:inherit}
 button{cursor:pointer}
 [hidden]{display:none!important}
 .shell{max-width:820px;margin:0 auto;padding:0 24px calc(42px + env(safe-area-inset-bottom));min-height:100vh}
+.demo-role-switcher{max-width:772px;margin:16px auto 0;padding:14px 16px;border:1px solid #b7dfc4;border-radius:16px;background:#e6f5ea;color:#19312d;font-size:13px;line-height:1.4}
+.demo-role-switcher strong{margin-right:8px}.demo-role-switcher>div{display:flex;flex-wrap:wrap;gap:7px;margin-top:10px}
+.demo-role-switcher button{padding:7px 10px;border:1px solid #9fceb0;border-radius:9px;background:#fff;color:#126344;font-size:12px;font-weight:700}
+.demo-role-switcher button:hover,.demo-role-switcher button:focus-visible,.demo-role-switcher button.active{background:#18865e;color:#fff;outline:none}
 .topbar{min-height:84px;display:flex;align-items:center;justify-content:space-between;gap:16px}
 .brand{display:flex;align-items:center;gap:11px;font-size:17px;font-weight:800;letter-spacing:-.035em;white-space:nowrap}
 .brand-mark{position:relative;display:grid;place-items:center;width:34px;height:34px;border-radius:12px;background:#123e35;box-shadow:0 5px 13px #123e3526}

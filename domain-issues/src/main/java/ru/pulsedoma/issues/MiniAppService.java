@@ -79,8 +79,9 @@ public class MiniAppService {
     }
 
     public String activeHouse(String userId) {
-        return jdbc.query("SELECT active_house_id FROM users WHERE id = ?", (rs, row) -> rs.getString(1), userId)
-                .stream().findFirst().orElse(null);
+        List<String> values = jdbc.query("SELECT active_house_id FROM users WHERE id = ?",
+                (rs, row) -> rs.getString(1), userId);
+        return values.isEmpty() ? null : values.get(0);
     }
 
     public void setActiveHouse(String houseId, String userId) {

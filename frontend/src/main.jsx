@@ -111,6 +111,24 @@ function Brand({ role }) {
   </header>;
 }
 
+const demoPages = [
+  ["Житель", "/miniapp/index.html"],
+  ["Диспетчер", "/dispatcher/index.html"],
+  ["Администратор дома", "/admin/index.html"],
+  ["Администратор УК", "/uk/index.html"],
+  ["Системный администратор", "/system/index.html"],
+];
+
+function DemoRoleSwitcher() {
+  const [enabled, setEnabled] = useState(false);
+  useEffect(() => { api("true", "/v1/access/config").then(config => setEnabled(config.demoMode === true)).catch(() => {}); }, []);
+  if (!enabled) return null;
+  return <nav className="demo-role-switcher" aria-label="Демонстрационные роли">
+    <strong>Демонстрационный стенд</strong><span>Выберите роль для проверки:</span>
+    <div>{demoPages.map(([label, path]) => <button key={path} type="button" className={location.pathname === path ? "active" : ""} aria-current={location.pathname === path ? "page" : undefined} onClick={() => navigate(path)}>{label}</button>)}</div>
+  </nav>;
+}
+
 function Hero({ dispatcher = false }) {
   return <section className="hero" aria-labelledby="page-title">
     <div className="hero-copy"><div className="hero-kicker"><span className="live-dot" /> {dispatcher ? "Кабинет диспетчера" : "Сервис вашего дома"}</div>
@@ -817,5 +835,5 @@ function UkAdmin() {
 }
 
 createRoot(document.getElementById("app")).render(
-  <MaxUI>{document.body.dataset.page === "dispatcher" ? <Dispatcher /> : document.body.dataset.page === "admin" ? <Admin /> : document.body.dataset.page === "system" ? <SystemAdmin /> : document.body.dataset.page === "uk" ? <UkAdmin /> : <InvitationGate />}</MaxUI>
+  <MaxUI><DemoRoleSwitcher />{document.body.dataset.page === "dispatcher" ? <Dispatcher /> : document.body.dataset.page === "admin" ? <Admin /> : document.body.dataset.page === "system" ? <SystemAdmin /> : document.body.dataset.page === "uk" ? <UkAdmin /> : <InvitationGate />}</MaxUI>
 );

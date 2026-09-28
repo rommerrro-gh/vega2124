@@ -20,10 +20,13 @@ import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 @SpringBootTest
@@ -52,13 +55,19 @@ class AccessActivationFlowTest {
 
     @Test
     void invitationChainRespectsScopeAndRevocation() throws Exception {
+        assertNull(miniApp.activeHouse("demo-resident-1"));
         assertThrows(BusinessException.class, () -> access.revokeAccess(AccessRole.RESIDENT,
                 "demo-admin-1", null, "demo-house-1", "demo-admin-1"));
         assertEquals("ACTIVE", jdbc.queryForObject("""
                 SELECT access_status FROM house_memberships
                 WHERE house_id = 'demo-house-1' AND user_id = 'demo-admin-1' AND role = 'RESIDENT'
                 """, String.class));
-        mvc.perform(get("/v1/access/organizations")).andExpect(status().isUnauthorized());
+        mvc.perform(get("/v1/access/organizations"))
+                .andExpect(status().isUnauthorized())
+                .andExpect(header().doesNotExist("WWW-Authenticate"));
+        mvc.perform(get("/v1/access/config").header("X-Demo-Session", "true"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.demoMode").value(true));
         mvc.perform(get("/v1/access/organizations").header("X-Demo-Session", "true"))
                 .andExpect(status().isForbidden());
         mvc.perform(post("/v1/access/invitations").header("X-Demo-Session", "true")
