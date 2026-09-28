@@ -99,3 +99,46 @@ footer{font-size:11px;color:#a0afa5;text-align:center;padding:28px 0 5px}footer 
 @media(prefers-color-scheme:dark){:root{color:#edf6ef;background:#111d19}body{background:#111d19;color:#edf6ef}.max-chip,.quick-link,.card-panel{background:#1b2b24!important;border-color:#2d4236!important;color:#edf6ef}.hero{background:linear-gradient(115deg,#173f34,#17634e)}.quick-link strong,.section-heading h2,.flow-card h2,.detail-panel h3,.passport-address{color:#edf6ef}.section-heading p,.quick-link small,.hint,.muted,.passport-field-label,.passport-field-source{color:#a2b6a8}.field label,.detail-description{color:#d8e6da}.field input,.field select,.field textarea,.attachment-link,.candidate,.issue-cell,.passport-field,.poll-card,.poll-option{background:#1c2d24!important;color:#edf6ef!important;border-color:#34503e!important}.field input:disabled,.field select:disabled,.field textarea:disabled,.item-list .muted,.passport-empty{background:#23352a}.quiet-action{background:#254c34!important;color:#a4e8bc!important}.quiet-action:hover{background:#306344!important}.notice{background:#443126;border-color:#6d4936;color:#ffccab}.result-meta span,.section-number{background:#204c36;color:#9be4b3}.verification{border-color:#34503e}footer{color:#8ba194}}
 @media(prefers-color-scheme:dark){.house-switcher{background:#1b2b24;border-color:#2d4236}.house-switcher select,.house-switcher-copy strong,.disclosure-card summary strong{color:#edf6ef}.house-switcher-copy>span,.disclosure-card summary small{color:#a2b6a8}.start-action{background:#203c2b;border-color:#345c3d}.priority-notice{background:#473821;border-color:#665333}.start-action p{color:#b4cfb8}.priority-notice p{color:#e3c893}.house-switcher-icon,.disclosure-arrow{background:#204c36;color:#9be4b3}}
 @media(prefers-color-scheme:dark){.secondary-operation{border-color:#34503e}.linked-report{background:#1c2d24;border-color:#34503e}.linked-report small{color:#a2b6a8}}
+
+/* Keep MAX UI controls in the same green palette in every cabinet. */
+.app-button-primary{background:#18865e!important;color:#fff!important}
+.app-button-primary:hover:not(:disabled){background:#116e4d!important;color:#fff!important}
+.app-button-secondary{background:#e1f2e7!important;color:#126344!important;box-shadow:none!important}
+.app-button-secondary:hover:not(:disabled){background:#cde9d7!important;color:#0f5138!important}
+.app-button-tertiary{background:transparent!important;color:#137651!important;box-shadow:none!important}
+.app-button-tertiary:hover:not(:disabled){background:#e6f5ea!important;color:#0f5d40!important}
+.app-button-primary:disabled,.app-button-secondary:disabled,.app-button-tertiary:disabled{opacity:.55;cursor:not-allowed}
+.quick-link .app-button-tertiary{background:#e6f5ea!important;color:#137651!important}
+.quick-link .app-button-tertiary:hover:not(:disabled){background:#d3ebdb!important;color:#0f5d40!important}
+.quick-link-icon{background:#e6f5ea;color:#16845e}
+
+.invite-token{color:#19312d;border:1px solid #b7dfc4}
+.invite-token strong,.invite-token code,.invite-token p{color:#19312d}
+.invite-token code{font-size:13px;line-height:1.45}
+.notice{background:#e7f4ec;border-color:#b9dfc8;color:#194a36}
+.notice-error{background:#fff0ed;border-color:#dfada4;color:#87342d}
+.admin-row small{color:#526d5d}
+.issue-cell [class*="CellSimple__title"],.issue-cell [class*="CellSimple__subtitle"]{color:#234239!important}
+.issue-cell [class*="CellSimple__overline"]{color:#526d5d!important}
+
+@media(prefers-color-scheme:dark){
+  .invite-token{background:#204331;border-color:#3c7650;color:#edf6ef}
+  .invite-token strong,.invite-token code,.invite-token p{color:#edf6ef}
+  .invite-token code{color:#b5f0cc}
+  .notice{background:#214632;border-color:#39714d;color:#dbf3e2}
+  .notice-error{background:#4b2929;border-color:#82504b;color:#ffe1d9}
+  .admin-row small{color:#b2c7b9}
+  .admin-row,.house-checks label{border-color:#42614d}
+  .app-button-secondary{background:#294e38!important;color:#c6f2d5!important}
+  .app-button-secondary:hover:not(:disabled){background:#356447!important;color:#fff!important}
+  .app-button-tertiary{background:transparent!important;color:#b0eac5!important}
+  .app-button-tertiary:hover:not(:disabled){background:#294e38!important;color:#e4f8ea!important}
+  .quick-link .app-button-tertiary{background:#294e38!important;color:#c6f2d5!important}
+  .quick-link .app-button-tertiary:hover:not(:disabled){background:#356447!important;color:#fff!important}
+  .quick-link-icon{background:#204c36;color:#9be4b3}
+  .issue-cell,.issue-cell:hover,.issue-cell:focus-visible{background:#1c2d24!important;border-color:#34503e!important;color:#edf6ef!important}
+  .issue-cell:hover,.issue-cell:focus-visible{background:#274535!important;border-color:#78bd8d!important}
+  .issue-cell [class*="CellSimple__title"],.issue-cell [class*="CellSimple__subtitle"]{color:#edf6ef!important}
+  .issue-cell [class*="CellSimple__overline"],.issue-cell [class*="CellSimple__chevron"]{color:#a8c5b1!important}
+  .field input,.field select,.field textarea{color-scheme:dark}
+}

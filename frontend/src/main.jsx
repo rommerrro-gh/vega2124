@@ -1,8 +1,12 @@
 import React, { useEffect, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
-import { MaxUI, Panel, Button, CellSimple } from "@maxhub/max-ui";
+import { MaxUI, Panel, Button as MaxButton, CellSimple } from "@maxhub/max-ui";
 import "@maxhub/max-ui/dist/styles.css";
 import "./theme.css";
+
+function Button({ mode = "primary", className = "", ...props }) {
+  return <MaxButton mode={mode} className={`app-button-${mode} ${className}`.trim()} {...props} />;
+}
 
 const statusLabels = {
   DRAFT: "Ожидает диспетчера", OPEN: "Принята", ASSIGNED: "Назначена",
@@ -70,7 +74,7 @@ async function api(role, path, options = {}) {
       ? { "Content-Type": "application/json" } : {}) },
   });
   if (!response.ok) {
-    if (response.status === 401) throw new Error("Откройте приложение в MAX. Для локального просмотра запустите сервер с профилем demo.");
+    if (response.status === 401) throw new Error("Нет доступа. Откройте приложение в MAX. Для локального просмотра запустите сервер с профилем demo.");
     const error = await response.json().catch(() => ({}));
     throw new Error(error.message || `Ошибка ${response.status}`);
   }
@@ -143,7 +147,7 @@ function Field({ id, label, children }) {
 }
 
 function Notice({ message }) {
-  return message ? <div className="notice" role="alert">{message}</div> : null;
+  return message ? <div className={`notice${message.startsWith("Нет доступа.") ? " notice-error" : ""}`} role="alert">{message}</div> : null;
 }
 
 function QuickLink({ dispatcher = false }) {
@@ -540,7 +544,7 @@ function Admin() {
         <form onSubmit={createInvitation} className="admin-form"><div className="field-grid"><Field id="invite-days" label="Срок, дней"><input id="invite-days" type="number" min="1" max="30" value={days} onChange={event => setDays(event.target.value)} required /></Field><Field id="invite-limit" label="Число активаций"><input id="invite-limit" type="number" min="1" max="100" value={activationLimit} onChange={event => setActivationLimit(event.target.value)} required /></Field></div><Button mode="primary" className="brand-button" type="submit" stretched disabled={busy}>Создать приглашение</Button></form>
         <InvitationToken token={createdToken} />
         <div className="item-list admin-invitations">{invitations.filter(invitation => invitation.role === "RESIDENT" && invitation.houses.some(house => house.id === houseId)).map(invitation => <div className="admin-row" key={invitation.id}><div><strong>{invitation.revokedAt ? "Отозвано" : new Date(invitation.expiresAt) < new Date() ? "Истекло" : "Активно"}</strong><small>До {passportDate(invitation.expiresAt)} · использовано {invitation.activationCount} из {invitation.activationLimit}</small></div>{!invitation.revokedAt && <button type="button" disabled={busy} onClick={() => revokeInvitation(invitation.id)}>Отозвать</button>}</div>)}</div>
-        <h3>Жители дома</h3><div className="item-list">{residents.map(item => <div className="admin-row" key={item.userId}><div><strong>{item.displayName}</strong><small>{item.status}</small></div>{item.status === "ACTIVE" && <button type="button" disabled={busy} onClick={() => revokeResident(item.userId)}>Отозвать доступ</button>}</div>)}</div>
+        <h3>Жители дома</h3><p className="hint">Здесь управляют только ролью жителя. Другие роли пользователя сохраняются.</p><div className="item-list">{residents.map(item => <div className="admin-row" key={item.userId}><div><strong>{item.displayName}</strong><small>{item.status}</small></div>{item.status === "ACTIVE" && <button type="button" disabled={busy} onClick={() => revokeResident(item.userId)}>Отозвать роль жителя</button>}</div>)}</div>
       </Card>
       <Card><SectionHeading number="04" title="Предварительные опросы" subtitle="Узнайте мнение жителей выбранного дома" />
         <form onSubmit={createPoll} className="admin-form">
@@ -663,7 +667,7 @@ function Dispatcher() {
       {issue && <Card className="detail-panel"><SectionHeading number="02" title="Карточка заявки" subtitle="Детали обращения и следующий шаг" />
         <h3>{categoryLabels[issue.category] || issue.category || "Проблема дома"}</h3>
         <IssueDetails issue={issue} role="dispatcher" onError={setNotice} />
-        {editableIssueStatuses.includes(issue.status) && <div className="secondary-operation"><h3>Плановая дата исполнения</h3><p className="hint">Жители увидят дату и все её изменения. День заканчивается по московскому времени.</p><Field id="planned-date" label="Планируем выполнить до"><input id="planned-date" type="date" min={moscowToday()} value={plannedDate} onChange={event => setPlannedDate(event.target.value)} /></Field>{issue.plannedDate && <Field id="planned-date-reason" label="Причина изменения"><textarea id="planned-date-reason" maxLength="1000" value={plannedDateReason} onChange={event => setPlannedDateReason(event.target.value)} placeholder="Например, ожидаем запчасть" /></Field>}<Button mode="secondary" type="button" stretched disabled={busy || !plannedDate || plannedDate === issue.plannedDate || (!!issue.plannedDate && !plannedDateReason.trim())} onClick={savePlannedDate}>{issue.plannedDate ? "Изменить дату" : "Установить дату"}</Button></div>}
+        {editableIssueStatuses.includes(issue.status) && <div className="secondary-operation"><h3>Плановая дата исполнения</h3><p className="hint">Жители увидят дату и все её изменения. День заканчивается по московскому времени.</p><Field id="planned-date" label="Планируем выполнить до"><input id="planned-date" type="date" min={moscowToday()} value={plannedDate} onChange={event => setPlannedDate(event.target.value)} /></Field>{issue.plannedDate && <Field id="planned-date-reason" label="Причина изменения"><textarea id="planned-date-reason" maxLength="1000" value={plannedDateReason} onChange={event => setPlannedDateReason(event.target.value)} placeholder="Например, ожидаем запчасть" /></Field>}<Button mode="primary" className="brand-button" type="button" stretched disabled={busy || !plannedDate || plannedDate === issue.plannedDate || (!!issue.plannedDate && !plannedDateReason.trim())} onClick={savePlannedDate}>{issue.plannedDate ? "Изменить дату" : "Установить дату"}</Button></div>}
         {transitions[issue.status] && <><Field id="reason" label="Комментарий к изменению статуса"><textarea id="reason" maxLength="1000" placeholder="Что сделано или кому передана задача" value={reason} onChange={event => setReason(event.target.value)} /></Field><Button mode="primary" className="brand-button" type="button" stretched disabled={busy} onClick={nextStatus}>{transitions[issue.status][1]}</Button></>}
         {editableIssueStatuses.includes(issue.status) && <div className="secondary-operation"><h3>Обращения в заявке</h3>{issue.reports?.length > 1 && <Field id="split-reason" label="Причина разделения"><textarea id="split-reason" maxLength="1000" value={splitReason} onChange={event => setSplitReason(event.target.value)} placeholder="Например, другая проблема или место" /></Field>}{issue.reports?.map(report => <div className="linked-report" key={report.id}><small>{report.author}</small><p>{report.description}</p>{issue.reports.length > 1 && <Button mode="tertiary" type="button" disabled={busy || !splitReason.trim()} onClick={() => splitIssue(report.id)}>Выделить в новую заявку</Button>}</div>)}</div>}
         {!!mergeTargets.length && <div className="secondary-operation"><h3>Объединить заявки</h3><p className="hint">Обращения из этой заявки перейдут в выбранную. Выберите заявку на той же или более поздней стадии работы.</p><Field id="merge-target" label="Основная заявка"><select id="merge-target" value={mergeTargetId} onChange={event => setMergeTargetId(event.target.value)}><option value="">Выберите заявку</option>{mergeTargets.map(item => <option key={item.id} value={item.id}>{item.location || item.address} · {statusLabels[item.status] || item.status} · {item.id.slice(0, 8)}</option>)}</select></Field><Button mode="secondary" type="button" stretched disabled={busy || !mergeTargetId} onClick={mergeIssues}>Объединить с выбранной заявкой</Button></div>}
