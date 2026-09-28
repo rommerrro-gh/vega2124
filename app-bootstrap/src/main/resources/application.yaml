@@ -8,7 +8,7 @@ spring:
   datasource:
     url: ${SQLITE_URL:jdbc:sqlite:./data/pulse-doma.db}
     hikari:
-      maximum-pool-size: 1
+      maximum-pool-size: 4
   jpa:
     open-in-view: false
     hibernate:

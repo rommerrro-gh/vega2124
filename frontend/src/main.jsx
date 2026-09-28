@@ -134,10 +134,9 @@ function DemoRoleSwitcher() {
 function Hero({ dispatcher = false }) {
   return <section className="hero" aria-labelledby="page-title">
     <div className="hero-copy"><div className="hero-kicker"><span className="live-dot" /> {dispatcher ? "Кабинет диспетчера" : "Сервис вашего дома"}</div>
-      <h1 id="page-title">{dispatcher ? <>Все обращения<br />под контролем</> : <>Дом становится<br />лучше с вас</>}</h1>
+      <h1 id="page-title">{dispatcher ? <>Все обращения<br />под контролем</> : <>Дом становится<br />лучше с вами</>}</h1>
       <p>{dispatcher ? "Принимайте заявки жителей и ведите их до решения в одном месте." : "Расскажите о проблеме. Мы проверим похожие обращения и поможем отправить заявку."}</p>
     </div>
-    <div className="hero-art" aria-hidden="true"><div className="hero-orbit orbit-one" /><div className="hero-orbit orbit-two" /><div className="hero-core"><span>⌁</span></div><div className="hero-art-label">В ритме вашего дома</div></div>
   </section>;
 }
 
@@ -263,6 +262,7 @@ function PollCard({ poll, onVote, busy }) {
 }
 
 function Resident() {
+  const [initialLoading, setInitialLoading] = useState(true);
   const formRef = useRef(null);
   const [houses, setHouses] = useState([]);
   const [selectedHouseId, setSelectedHouseId] = useState("");
@@ -301,7 +301,7 @@ function Resident() {
       if (myHouses.length) setSelectedHouseId(myHouses.find(house => house.id === selected.houseId)?.id || myHouses[0].id);
       if (!roles.length) setNotice("Профиль создан. Чтобы получить доступ, откройте приглашение от администратора.");
     }
-    load().catch(fail);
+    load().catch(fail).finally(() => setInitialLoading(false));
   }, []);
 
   useEffect(() => {
@@ -424,6 +424,7 @@ function Resident() {
   const houseIssues = issues.filter(item => item.houseId === selectedHouseId);
   const awaitingVerification = houseIssues.filter(item => item.status === "VERIFICATION_72H");
   const openPolls = polls.filter(poll => !poll.closed && !poll.myOptionId);
+  if (initialLoading) return <main className="shell"><Brand role="Жителю" /><div className="resident-hero"><Hero /></div><Card className="loading-card"><p role="status">Загружаем данные вашего дома…</p></Card></main>;
   return <main className="shell">
     <Brand role="Жителю" /><div className="resident-hero"><Hero /></div><Notice message={notice} />
     {selectedHouse && <div className="house-switcher"><span className="house-switcher-icon" aria-hidden="true">⌂</span><div className="house-switcher-copy"><span>Ваш дом</span>{houses.length > 1 ? <select aria-label="Выбранный дом" value={selectedHouseId} disabled={step !== "form" || !!reportId} onChange={event => { setSelectedHouseId(event.target.value); request("/v1/me/active-house", { method: "PUT", body: JSON.stringify({ houseId: event.target.value }) }).catch(fail); }}>{houses.map(house => <option key={house.id} value={house.id}>{house.address}</option>)}</select> : <strong>{selectedHouse.address}</strong>}</div></div>}
@@ -794,17 +795,17 @@ function SystemAdmin() {
   async function revokeInvitation(id) { await run(async () => { await request(`/v1/access/invitations/${id}/revoke`, { method: "POST" }); setInvitations(await request("/v1/access/invitations")); }); }
   return <main className="shell"><Brand role="Системному администратору" /><section className="hero"><div className="hero-copy"><h1>УК и доступы</h1><p>Создавайте организации, закрепляйте дома и приглашайте администраторов УК.</p></div></section><Notice message={notice} />
     <div className="content-grid"><Card><SectionHeading title="Управляющие компании" />
-      <form onSubmit={event => { event.preventDefault(); run(async () => { await request("/v1/access/organizations", { method: "POST", body: JSON.stringify({ name: organizationName.trim() }) }); setOrganizationName(""); }); }}><Field id="org-name" label="Название УК"><input id="org-name" value={organizationName} maxLength="200" required onChange={event => setOrganizationName(event.target.value)} /></Field><Button mode="primary" type="submit" disabled={busy}>Создать УК</Button></form>
+      <form className="system-form" onSubmit={event => { event.preventDefault(); run(async () => { await request("/v1/access/organizations", { method: "POST", body: JSON.stringify({ name: organizationName.trim() }) }); setOrganizationName(""); }); }}><Field id="org-name" label="Название УК"><input id="org-name" value={organizationName} maxLength="200" required onChange={event => setOrganizationName(event.target.value)} /></Field><Button className="system-action" mode="primary" type="submit" disabled={busy}>Создать УК</Button></form>
       <Field id="org-select" label="УК"><select id="org-select" value={organizationId} onChange={event => { setOrganizationId(event.target.value); setSelected([]); }}><option value="">Выберите УК</option>{organizations.map(item => <option value={item.id} key={item.id}>{item.name}</option>)}</select></Field>
-      <form onSubmit={event => { event.preventDefault(); run(async () => { await request("/v1/access/houses", { method: "POST", body: JSON.stringify({ address: houseAddress.trim() }) }); setHouseAddress(""); }); }}><Field id="house-address" label="Новый дом"><input id="house-address" value={houseAddress} maxLength="300" required onChange={event => setHouseAddress(event.target.value)} /></Field><Button mode="secondary" type="submit" disabled={busy}>Добавить дом</Button></form>
-      {org && <><Field id="house-link" label="Закрепить дом за УК"><select id="house-link" value={houseId} onChange={event => setHouseId(event.target.value)}><option value="">Выберите дом</option>{houses.map(house => <option value={house.id} key={house.id}>{house.address}</option>)}</select></Field><Button mode="secondary" type="button" disabled={busy || !houseId} onClick={() => run(() => request(`/v1/access/organizations/${organizationId}/houses/${houseId}`, { method: "PUT", body: JSON.stringify({ active: true }) }))}>Закрепить</Button>
-        <div className="item-list linked-house-list">{org.houses.map(house => <div className="admin-row" key={house.id}><span>{house.address}</span><button type="button" disabled={busy} onClick={() => { if (window.confirm("Приостановить доступ УК и её сотрудников к дому?")) run(() => request(`/v1/access/organizations/${organizationId}/houses/${house.id}`, { method: "PUT", body: JSON.stringify({ active: false }) })); }}>Приостановить</button></div>)}</div></>}
+      <form className="system-form" onSubmit={event => { event.preventDefault(); run(async () => { await request("/v1/access/houses", { method: "POST", body: JSON.stringify({ address: houseAddress.trim() }) }); setHouseAddress(""); }); }}><Field id="house-address" label="Новый дом"><input id="house-address" value={houseAddress} maxLength="300" required onChange={event => setHouseAddress(event.target.value)} /></Field><Button className="system-action" mode="secondary" type="submit" disabled={busy}>Добавить дом</Button></form>
+      {org && <><Field id="house-link" label="Закрепить дом за УК"><select id="house-link" value={houseId} onChange={event => setHouseId(event.target.value)}><option value="">Выберите дом</option>{houses.map(house => <option value={house.id} key={house.id}>{house.address}</option>)}</select></Field><Button className="system-action" mode="secondary" type="button" disabled={busy || !houseId} onClick={() => run(() => request(`/v1/access/organizations/${organizationId}/houses/${houseId}`, { method: "PUT", body: JSON.stringify({ active: true }) }))}>Закрепить</Button>
+        <div className="item-list linked-house-list">{org.houses.map(house => <div className="admin-row linked-house-row" key={house.id}><span>{house.address}</span><button type="button" disabled={busy} onClick={() => { if (window.confirm("Приостановить доступ УК и её сотрудников к дому?")) run(() => request(`/v1/access/organizations/${organizationId}/houses/${house.id}`, { method: "PUT", body: JSON.stringify({ active: false }) })); }}>Приостановить</button></div>)}</div></>}
     </Card><Card><SectionHeading title="Пригласить администратора УК" subtitle="Одноразовая ссылка на 72 часа" />
       {org && <form onSubmit={event => { event.preventDefault(); run(async () => { const result = await request("/v1/access/invitations", { method: "POST", body: JSON.stringify({ role: "UK_ADMIN", organizationId, houseIds: selected, days: 3, activationLimit: 1 }) }); setToken(result.token); setInvitations(await request("/v1/access/invitations")); }); }}><HouseChecks houses={org.houses} selected={selected} onChange={setSelected} /><Button mode="primary" type="submit" disabled={busy || !selected.length}>Создать приглашение</Button></form>}
       <InvitationToken token={token} />
       <IssuedInvitations items={invitations.filter(item => item.role === "UK_ADMIN" && item.organizationId === organizationId)} onRevoke={revokeInvitation} busy={busy} />
       <h3>Администраторы УК</h3><div className="item-list">{admins.map(item => <div className="admin-row" key={`${item.userId}-${item.houseId}`}><div><strong>{item.displayName}</strong><small>{item.houseAddress || "Без домов"} · {item.status}</small></div>{item.status !== "REVOKED" && <button type="button" disabled={busy} onClick={() => run(async () => { await request("/v1/access/assignments/revoke", { method: "POST", body: JSON.stringify({ role: "UK_ADMIN", userId: item.userId, organizationId }) }); setAdmins(await request(`/v1/access/organizations/${organizationId}/admins`)); })}>Отозвать роль</button>}</div>)}</div>
-    </Card></div><Button mode="tertiary" onClick={() => navigate("/miniapp/index.html?demoSession=admin")}>В мини-приложение</Button></main>;
+    </Card></div></main>;
 }
 
 function UkAdmin() {
@@ -840,7 +841,7 @@ function UkAdmin() {
     <div className="content-grid"><Card><SectionHeading title="Пригласить сотрудника" /><Field id="uk-org" label="Управляющая компания"><select id="uk-org" value={organizationId} onChange={event => { setOrganizationId(event.target.value); setSelected([]); }}><option value="">Выберите УК</option>{organizations.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}</select></Field>
       <form onSubmit={create}><Field id="staff-role" label="Роль"><select id="staff-role" value={role} onChange={event => { setRole(event.target.value); setSelected([]); }}><option value="DISPATCHER">Диспетчер</option><option value="HOUSE_ADMIN">Администратор дома</option></select></Field><HouseChecks houses={org?.houses || []} selected={selected} onChange={setSelected} /><Button mode="primary" type="submit" disabled={busy || !selected.length || (role === "HOUSE_ADMIN" && selected.length !== 1)}>Создать приглашение</Button></form><InvitationToken token={token} /><IssuedInvitations items={invitations.filter(item => item.organizationId === organizationId)} onRevoke={revokeInvitation} busy={busy} /></Card>
       <Card><SectionHeading title="Назначенные сотрудники" /><div className="item-list">{assignments.map(item => <div className="admin-row" key={`${item.userId}-${item.role}-${item.houseId}`}><div><strong>{item.displayName}</strong><small>{accessRoleLabels[item.role]} · {item.houseAddress} · {item.status}</small></div>{item.status === "ACTIVE" && <button type="button" disabled={busy} onClick={() => revoke(item)}>Отозвать</button>}</div>)}</div></Card>
-    </div><Button mode="tertiary" onClick={() => navigate("/miniapp/index.html?demoSession=admin")}>В мини-приложение</Button></main>;
+    </div></main>;
 }
 
 createRoot(document.getElementById("app")).render(
