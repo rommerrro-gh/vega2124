@@ -174,10 +174,11 @@ class MiniAppFlowTest {
                 .header("X-Demo-Session", "dispatcher")).andExpect(status().isOk())
                 .andReturn().getResponse().getContentAsByteArray()).size());
 
-        JsonNode first = report("Свет не работает в подъезде на втором этаже");
+        int existingIssues = jdbc.queryForObject("SELECT COUNT(*) FROM issues", Integer.class);
+        JsonNode first = reportAt("Свет не работает в подъезде на втором этаже", "Подъезд 9");
         String firstId = first.path("reportId").asText();
         assertEquals(0, first.path("candidates").size());
-        assertEquals(0, jdbc.queryForObject("SELECT COUNT(*) FROM issues", Integer.class));
+        assertEquals(existingIssues, jdbc.queryForObject("SELECT COUNT(*) FROM issues", Integer.class));
 
         mvc.perform(multipart("/v1/reports/" + firstId + "/attachments")
                         .file(new MockMultipartFile("file", "bad.txt", "text/plain", "bad".getBytes()))
@@ -199,7 +200,7 @@ class MiniAppFlowTest {
         String issueId = created.path("id").asText();
         assertEquals("DRAFT", created.path("status").asText());
         assertEquals(1, created.path("participants").asInt());
-        assertEquals("Подъезд 1", created.path("location").asText());
+        assertEquals("Подъезд 9", created.path("location").asText());
         assertEquals(1, created.path("attachments").size());
 
         mvc.perform(get("/v1/dispatcher/issues").param("houseId", "demo-house-1")
@@ -225,10 +226,10 @@ class MiniAppFlowTest {
                 .andExpect(status().isOk());
         JsonNode differentLocation = reportAt("Свет не работает в подъезде на втором этаже", "Подъезд 2");
         assertEquals(0, differentLocation.path("candidates").size());
-        JsonNode second = report("Свет не работает в подъезде на втором этаже");
+        JsonNode second = reportAt("Свет не работает в подъезде на втором этаже", "Подъезд 9");
         assertFalse(second.path("candidates").isEmpty());
         assertEquals(issueId, second.path("candidates").get(0).path("issueId").asText());
-        assertEquals(1, jdbc.queryForObject("SELECT COUNT(*) FROM issues", Integer.class));
+        assertEquals(existingIssues + 1, jdbc.queryForObject("SELECT COUNT(*) FROM issues", Integer.class));
 
         JsonNode joined = json(mvc.perform(post("/v1/issues/" + issueId + "/join")
                 .header("X-Demo-Session", "true").contentType("application/json")
@@ -317,6 +318,27 @@ class MiniAppFlowTest {
                         .header("X-Demo-Session", "true").contentType("application/json")
                         .content("{\"reportId\":\"" + otherHouse.path("reportId").asText() + "\"}"))
                 .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void residentCanFindAndJoinIdenticalDraftIssue() throws Exception {
+        String description = "Свет мигает у лестницы на пятом этаже";
+        String location = "Подъезд 5, этаж 5";
+        JsonNode first = reportAt(description, location);
+        JsonNode created = json(mvc.perform(post("/v1/issues").header("X-Demo-Session", "true")
+                .contentType("application/json")
+                .content("{\"reportId\":\"" + first.path("reportId").asText() + "\"}"))
+                .andExpect(status().isOk()).andReturn().getResponse().getContentAsByteArray());
+        assertEquals("DRAFT", created.path("status").asText());
+
+        JsonNode second = reportAt(description, location);
+        assertEquals(created.path("id").asText(), second.path("candidates").get(0).path("issueId").asText());
+        JsonNode joined = json(mvc.perform(post("/v1/issues/" + created.path("id").asText() + "/join")
+                .header("X-Demo-Session", "true").contentType("application/json")
+                .content("{\"reportId\":\"" + second.path("reportId").asText() + "\"}"))
+                .andExpect(status().isOk()).andReturn().getResponse().getContentAsByteArray());
+        assertEquals("DRAFT", joined.path("status").asText());
+        assertEquals(2, joined.path("reports").size());
     }
 
     private JsonNode report(String text) throws Exception {

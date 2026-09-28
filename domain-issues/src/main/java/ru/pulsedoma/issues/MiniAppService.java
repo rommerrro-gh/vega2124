@@ -41,7 +41,7 @@ public class MiniAppService {
                             String occurredAt, String verificationDueAt, String plannedDate,
                             List<PlannedDateChange> plannedDateHistory, int participants,
                             List<AttachmentService.AttachmentView> attachments,
-                            List<LinkedReportView> reports) {}
+                            List<LinkedReportView> reports, boolean mergedForMe) {}
 
     public List<IssueView> myIssues(String userId) {
         List<String> ids = jdbc.query("""
@@ -155,7 +155,11 @@ public class MiniAppService {
                         WHERE ir.issue_id = i.id AND ir.unlinked_at IS NULL AND r.withdrawn_at IS NULL
                         ORDER BY ir.linked_at, ir.id LIMIT 1) AS occurred_at,
                        i.verification_due_at, i.planned_date,
-                       (SELECT COUNT(*) FROM issue_participants p WHERE p.issue_id = i.id) AS participants
+                       (SELECT COUNT(*) FROM issue_participants p WHERE p.issue_id = i.id) AS participants,
+                       EXISTS (SELECT 1 FROM issue_reports ir JOIN reports r ON r.id = ir.report_id
+                               WHERE ir.issue_id = i.id AND ir.unlinked_at IS NULL
+                                 AND r.withdrawn_at IS NULL AND ir.link_reason = 'dispatcher_merge'
+                                 AND r.author_id = ?) AS merged_for_me
                 FROM issues i JOIN houses h ON h.id = i.house_id
                 JOIN house_memberships m ON m.house_id = i.house_id
                 WHERE i.id = ? AND m.user_id = ? AND m.verification_status = 'VERIFIED'
@@ -167,7 +171,8 @@ public class MiniAppService {
                 rs.getString("address"), rs.getString("category"), IssueStatus.valueOf(rs.getString("status")),
                 rs.getString("description"), rs.getString("location"), rs.getString("occurred_at"),
                 rs.getString("verification_due_at"), rs.getString("planned_date"), List.of(),
-                rs.getInt("participants"), List.of(), List.of()), issueId, userId);
+                rs.getInt("participants"), List.of(), List.of(), rs.getBoolean("merged_for_me")),
+                userId, issueId, userId);
         if (found.isEmpty()) throw new BusinessException("ISSUE_NOT_FOUND", "Issue is not available");
         IssueView row = found.get(0);
         List<LinkedReportView> reports = jdbc.query("""
@@ -190,7 +195,8 @@ public class MiniAppService {
                 rs.getString("reason"), rs.getString("created_at")), issueId);
         return new IssueView(row.id(), row.houseId(), row.address(), row.category(), row.status(),
                 row.description(), row.location(), row.occurredAt(), row.verificationDueAt(),
-                row.plannedDate(), history, row.participants(), attachments.forIssue(issueId), reports);
+                row.plannedDate(), history, row.participants(), attachments.forIssue(issueId), reports,
+                row.mergedForMe());
     }
 
     @Transactional
@@ -219,8 +225,7 @@ public class MiniAppService {
             throw new BusinessException("HOUSE_MISMATCH", "Report and issue belong to different houses");
         }
         IssueStatus status = IssueStatus.valueOf((String) target.get("status"));
-        if (status != IssueStatus.OPEN && status != IssueStatus.ASSIGNED
-                && status != IssueStatus.IN_PROGRESS) {
+        if (!editableIssue(status)) {
             throw new BusinessException("ISSUE_NOT_ACTIVE", "Issue is not open for joining");
         }
         link(issueId, reportId, userId, "resident_join", Instant.now().toString());

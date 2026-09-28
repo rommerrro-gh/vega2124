@@ -98,6 +98,10 @@ class IssueReorganizationTest {
         String targetReport = report("demo-house-1", "Сломана лампа в подъезде");
         String target = createIssue(targetReport);
         changeStatus(target, "OPEN");
+        JsonNode beforeMerge = json(mvc.perform(get("/v1/issues/" + target)
+                .header("X-Demo-Session", "true")).andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsByteArray());
+        assertFalse(beforeMerge.path("mergedForMe").asBoolean());
         String body = mapper.writeValueAsString(Map.of("targetIssueId", target));
         mvc.perform(post("/v1/issues/" + source + "/merge").header("X-Demo-Session", "true")
                 .contentType("application/json").content(body)).andExpect(status().isForbidden());
@@ -117,6 +121,16 @@ class IssueReorganizationTest {
                 .andExpect(status().isOk()).andReturn().getResponse().getContentAsByteArray());
         assertEquals(target, merged.path("id").asText());
         assertEquals(2, merged.path("reports").size());
+        assertFalse(merged.path("mergedForMe").asBoolean());
+        JsonNode residentIssue = json(mvc.perform(get("/v1/issues/" + target)
+                .header("X-Demo-Session", "true")).andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsByteArray());
+        assertEquals(true, residentIssue.path("mergedForMe").asBoolean());
+        JsonNode residentList = json(mvc.perform(get("/v1/me/issues")
+                .header("X-Demo-Session", "true")).andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsByteArray());
+        assertEquals(true, residentList.findValues("mergedForMe").stream()
+                .anyMatch(JsonNode::asBoolean));
         assertEquals("WITHDRAWN", jdbc.queryForObject("SELECT status FROM issues WHERE id = ?", String.class, source));
         assertEquals(0, count("SELECT COUNT(*) FROM issue_reports WHERE issue_id = ? AND unlinked_at IS NULL", source));
         assertEquals(1, count("SELECT COUNT(*) FROM issue_reports WHERE issue_id = ? AND unlinked_at IS NOT NULL", source));

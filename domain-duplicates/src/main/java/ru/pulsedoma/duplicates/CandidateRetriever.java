@@ -38,7 +38,7 @@ public class CandidateRetriever {
                 SELECT i.id, i.category, i.normalized_text, i.created_at, bm25(issues_fts) AS rank
                 FROM issues_fts JOIN issues i ON i.rowid = issues_fts.rowid
                 WHERE issues_fts MATCH ? AND i.house_id = ?
-                  AND i.status IN ('OPEN', 'IN_PROGRESS', 'ASSIGNED')
+                  AND i.status IN ('DRAFT', 'OPEN', 'IN_PROGRESS', 'ASSIGNED', 'REOPENED')
                   AND (? IS NULL OR i.category = ?)
                   AND (? IS NULL OR json_extract(i.zone_json, '$.key') = ?)
                   AND datetime(i.created_at) >= datetime(?)

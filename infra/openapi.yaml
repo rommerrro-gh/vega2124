@@ -1077,7 +1077,7 @@ components:
         confidence: {type: [number, 'null'], minimum: 0, maximum: 1}
     IssueView:
       type: object
-      required: [id, houseId, address, status, description, participants, attachments, reports, plannedDateHistory]
+      required: [id, houseId, address, status, description, participants, attachments, reports, plannedDateHistory, mergedForMe]
       properties:
         id: {type: string}
         houseId: {type: string}
@@ -1093,6 +1093,7 @@ components:
           type: array
           items: {$ref: '#/components/schemas/PlannedDateChange'}
         participants: {type: integer}
+        mergedForMe: {type: boolean, description: The current resident has an active report moved here by a dispatcher merge}
         attachments:
           type: array
           items: {$ref: '#/components/schemas/AttachmentView'}
