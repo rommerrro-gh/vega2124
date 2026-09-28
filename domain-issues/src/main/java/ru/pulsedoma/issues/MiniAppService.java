@@ -6,6 +6,8 @@ import org.springframework.transaction.annotation.Transactional;
 import ru.pulsedoma.common.BusinessException;
 
 import java.time.Instant;
+import java.time.LocalDate;
+import java.time.ZoneId;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
@@ -31,9 +33,12 @@ public class MiniAppService {
     public record MembershipAccess(MembershipRole role, VerificationStatus verificationStatus) {}
     public record HouseView(String id, String address, List<MembershipAccess> memberships) {}
     public record LinkedReportView(String id, String description, String author, String createdAt) {}
+    public record PlannedDateChange(String previousDate, String newDate, boolean previousDateMissed,
+                                    String reason, String changedAt) {}
     public record IssueView(String id, String houseId, String address, String category,
                             IssueStatus status, String description, String location,
-                            String occurredAt, String verificationDueAt, int participants,
+                            String occurredAt, String verificationDueAt, String plannedDate,
+                            List<PlannedDateChange> plannedDateHistory, int participants,
                             List<AttachmentService.AttachmentView> attachments,
                             List<LinkedReportView> reports) {}
 
@@ -117,7 +122,7 @@ public class MiniAppService {
                        (SELECT r.occurred_at FROM issue_reports ir JOIN reports r ON r.id = ir.report_id
                         WHERE ir.issue_id = i.id AND ir.unlinked_at IS NULL AND r.withdrawn_at IS NULL
                         ORDER BY ir.linked_at, ir.id LIMIT 1) AS occurred_at,
-                       i.verification_due_at,
+                       i.verification_due_at, i.planned_date,
                        (SELECT COUNT(*) FROM issue_participants p WHERE p.issue_id = i.id) AS participants
                 FROM issues i JOIN houses h ON h.id = i.house_id
                 JOIN house_memberships m ON m.house_id = i.house_id
@@ -126,7 +131,7 @@ public class MiniAppService {
                 """, (rs, row) -> new IssueView(rs.getString("id"), rs.getString("house_id"),
                 rs.getString("address"), rs.getString("category"), IssueStatus.valueOf(rs.getString("status")),
                 rs.getString("description"), rs.getString("location"), rs.getString("occurred_at"),
-                rs.getString("verification_due_at"),
+                rs.getString("verification_due_at"), rs.getString("planned_date"), List.of(),
                 rs.getInt("participants"), List.of(), List.of()), issueId, userId);
         if (found.isEmpty()) throw new BusinessException("ISSUE_NOT_FOUND", "Issue is not available");
         IssueView row = found.get(0);
@@ -142,9 +147,15 @@ public class MiniAppService {
                 ORDER BY r.created_at, r.id
                 """, (rs, index) -> new LinkedReportView(rs.getString("id"), rs.getString("raw_text"),
                 rs.getString("display_name"), rs.getString("created_at")), issueId, userId, userId);
+        List<PlannedDateChange> history = jdbc.query("""
+                SELECT previous_date, new_date, previous_date_missed, reason, created_at
+                FROM issue_planned_date_events WHERE issue_id = ? ORDER BY created_at DESC, id DESC
+                """, (rs, index) -> new PlannedDateChange(rs.getString("previous_date"),
+                rs.getString("new_date"), rs.getInt("previous_date_missed") != 0,
+                rs.getString("reason"), rs.getString("created_at")), issueId);
         return new IssueView(row.id(), row.houseId(), row.address(), row.category(), row.status(),
                 row.description(), row.location(), row.occurredAt(), row.verificationDueAt(),
-                row.participants(), attachments.forIssue(issueId), reports);
+                row.plannedDate(), history, row.participants(), attachments.forIssue(issueId), reports);
     }
 
     @Transactional
@@ -345,6 +356,62 @@ public class MiniAppService {
                 VALUES (?, ?, 'ISSUE_STATUS_CHANGED', 'issue', ?, ?)
                 """, UUID.randomUUID().toString(), userId, issueId, now);
         if (next == IssueStatus.RESOLVED) startVerification(issueId, now);
+        return issue(issueId, userId);
+    }
+
+    @Transactional
+    public IssueView setPlannedDate(String issueId, String userId, LocalDate date, String reason) {
+        String houseId = issueHouse(issueId);
+        requireDispatcher(houseId, userId);
+        IssueView current = issue(issueId, userId);
+        if (current.status() == IssueStatus.VERIFICATION_72H
+                || current.status() == IssueStatus.CLOSED_CONFIRMED
+                || current.status() == IssueStatus.CLOSED_UNCONFIRMED
+                || current.status() == IssueStatus.WITHDRAWN) {
+            throw new BusinessException("ISSUE_NOT_EDITABLE", "Planned date cannot be changed at this stage");
+        }
+        LocalDate today = LocalDate.now(ZoneId.of("Europe/Moscow"));
+        if (date == null || date.isBefore(today)) {
+            throw new BusinessException("INVALID_PLANNED_DATE", "Planned date must be today or later");
+        }
+        String previous = current.plannedDate();
+        if (date.toString().equals(previous)) {
+            throw new BusinessException("PLANNED_DATE_UNCHANGED", "Planned date is unchanged");
+        }
+        String trimmedReason = reason == null ? null : reason.trim();
+        if (previous != null && (trimmedReason == null || trimmedReason.isEmpty())) {
+            throw new BusinessException("REASON_REQUIRED", "Reason is required when changing a planned date");
+        }
+        if (trimmedReason != null && trimmedReason.length() > 1000) {
+            throw new BusinessException("REASON_TOO_LONG", "Reason is too long");
+        }
+        String eventId = UUID.randomUUID().toString();
+        String now = Instant.now().toString();
+        boolean missed = previous != null && LocalDate.parse(previous).isBefore(today);
+        jdbc.update("UPDATE issues SET planned_date = ?, updated_at = ? WHERE id = ?",
+                date.toString(), now, issueId);
+        jdbc.update("""
+                INSERT INTO issue_planned_date_events
+                    (id, issue_id, previous_date, new_date, previous_date_missed, actor_id, reason, created_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                """, eventId, issueId, previous, date.toString(), missed ? 1 : 0,
+                userId, trimmedReason, now);
+        jdbc.update("""
+                INSERT INTO audit_events(id, actor_id, action, entity, entity_id, after_json, created_at)
+                VALUES (?, ?, 'ISSUE_PLANNED_DATE_CHANGED', 'issue', ?, ?, ?)
+                """, UUID.randomUUID().toString(), userId, issueId,
+                "{\"plannedDate\":\"" + date + "\"}", now);
+        String message = previous == null
+                ? "По заявке установлен плановый срок: " + date + "."
+                : "Плановый срок по заявке изменён с " + previous + " на " + date
+                    + ". Причина: " + trimmedReason;
+        jdbc.update("""
+                INSERT INTO notification_outbox
+                    (id, issue_id, verification_round, recipient_user_id, kind, body, next_attempt_at)
+                SELECT lower(hex(randomblob(16))), ?, 0, p.user_id, ?, ?, ?
+                FROM issue_participants p JOIN users u ON u.id = p.user_id
+                WHERE p.issue_id = ? AND u.max_user_id IS NOT NULL AND trim(u.max_user_id) != ''
+                """, issueId, "PLANNED_DATE_" + eventId, message, now, issueId);
         return issue(issueId, userId);
     }
 

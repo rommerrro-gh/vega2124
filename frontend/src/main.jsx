@@ -41,6 +41,16 @@ function passportDate(value) {
   return Number.isNaN(date.getTime()) ? value : date.toLocaleDateString("ru-RU");
 }
 
+function moscowToday() {
+  const parts = new Intl.DateTimeFormat("en-GB", { timeZone: "Europe/Moscow", year: "numeric", month: "2-digit", day: "2-digit" }).formatToParts(new Date());
+  const value = Object.fromEntries(parts.map(part => [part.type, part.value]));
+  return `${value.year}-${value.month}-${value.day}`;
+}
+
+function issueOverdue(issue) {
+  return issue?.plannedDate && issue.plannedDate < moscowToday() && editableIssueStatuses.includes(issue.status);
+}
+
 function safeSourceUrl(value) {
   try {
     const url = new URL(value);
@@ -157,6 +167,14 @@ function IssueDetails({ issue, role, onError }) {
   return <>
     <div className="detail-lines"><p className="muted">{issue.address}</p>{issue.location && <p className="muted">Место: {issue.location}</p>}{issue.occurredAt && <p className="muted">Замечено: {new Date(issue.occurredAt).toLocaleString("ru-RU")}</p>}</div>
     <p className="detail-description">{issue.description || "Активных обращений нет."}</p>
+    {issue.plannedDate && <div className={`planned-date ${issueOverdue(issue) ? "planned-date-overdue" : ""}`}>
+      <strong>{issueOverdue(issue) ? "Плановый срок прошёл" : "Планируем выполнить до"} {passportDate(`${issue.plannedDate}T12:00:00`)}</strong>
+      <small>Дата указана по московскому времени</small>
+    </div>}
+    {!!issue.plannedDateHistory?.length && <details className="date-history"><summary>История плановых сроков</summary><ol>{issue.plannedDateHistory.map((change, index) =>
+      <li key={`${change.changedAt}-${index}`}><strong>{change.previousDate ? `С ${passportDate(`${change.previousDate}T12:00:00`)} на ${passportDate(`${change.newDate}T12:00:00`)}` : `Установлен срок ${passportDate(`${change.newDate}T12:00:00`)}`}</strong>
+        <span>{passportDate(change.changedAt)}{change.previousDateMissed ? " · предыдущий срок прошёл" : ""}</span>
+        {change.reason && <p>Причина: {change.reason}</p>}</li>)}</ol></details>}
     <AttachmentList attachments={issue.attachments} role={role} onError={onError} />
     <div className="result-meta"><span>{statusLabels[issue.status] || issue.status}</span><span>Участников: {issue.participants}</span></div>
   </>;
@@ -189,14 +207,17 @@ function HousePassport({ passport, loading, error }) {
 
 function PollCard({ poll, onVote, busy }) {
   const [optionId, setOptionId] = useState("");
+  const totalVotes = poll.resultsVisible ? poll.options.reduce((total, option) => total + option.votes, 0) : 0;
   return <div className="poll-card">
     <div className="poll-heading"><strong>{poll.question}</strong><span>{poll.closed ? "Завершён" : `До ${passportDate(poll.closesAt)}`}</span></div>
     <p className="hint">Предварительный опрос жителей · не является официальным голосованием собственников</p>
-    <div className="poll-options">{poll.options.map(option => <label key={option.id} className="poll-option">
+    <div className="poll-options">{poll.options.map(option => <label key={option.id} className={`poll-option ${poll.myOptionId === option.id ? "poll-option-selected" : ""}`}>
       {!poll.myOptionId && !poll.closed && onVote && <input type="radio" name={`poll-${poll.id}`} value={option.id} checked={optionId === option.id} onChange={() => setOptionId(option.id)} />}
-      <span>{option.label}{poll.myOptionId === option.id ? " · ваш выбор" : ""}</span>
-      {poll.resultsVisible && <small>{option.votes}</small>}
+      <span className="poll-option-content"><span className="poll-option-top"><span>{option.label}{poll.myOptionId === option.id ? " · ваш выбор" : ""}</span>
+      {poll.resultsVisible && <strong>{totalVotes ? Math.round(option.votes * 100 / totalVotes) : 0}%</strong>}</span>
+      {poll.resultsVisible && <span className="poll-progress" role="img" aria-label={`${option.votes} голосов из ${totalVotes}`}><span style={{ width: `${totalVotes ? option.votes * 100 / totalVotes : 0}%` }} /></span>}</span>
     </label>)}</div>
+    {poll.resultsVisible && <p className="poll-total">Проголосовали: {totalVotes}</p>}
     {!poll.resultsVisible && <p className="hint">Итоги появятся после закрытия опроса.</p>}
     {onVote && !poll.myOptionId && !poll.closed && <Button mode="primary" type="button" disabled={!optionId || busy} onClick={() => onVote(poll.id, optionId)}>Проголосовать</Button>}
   </div>;
@@ -409,7 +430,7 @@ function Admin() {
   const [invitations, setInvitations] = useState([]);
   const [polls, setPolls] = useState([]);
   const [pollQuestion, setPollQuestion] = useState("");
-  const [pollOptions, setPollOptions] = useState("Да\nНет");
+  const [pollOptions, setPollOptions] = useState(["", ""]);
   const [pollClose, setPollClose] = useState(() => new Date(Date.now() + 7 * 86400000 - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 16));
   const [hidePollResults, setHidePollResults] = useState(false);
   const [createdToken, setCreatedToken] = useState("");
@@ -471,12 +492,12 @@ function Admin() {
   async function createPoll(event) {
     event.preventDefault(); setBusy(true); setNotice("");
     try {
-      const options = pollOptions.split("\n").map(value => value.trim()).filter(Boolean);
+      const options = pollOptions.map(value => value.trim());
       await request(`${base}/polls`, { method: "POST", body: JSON.stringify({
         question: pollQuestion.trim(), options, closesAt: new Date(pollClose).toISOString(),
         resultsHiddenUntilClose: hidePollResults,
       }) });
-      setPolls(await request(`${base}/polls`)); setPollQuestion(""); setPollOptions("Да\nНет");
+      setPolls(await request(`${base}/polls`)); setPollQuestion(""); setPollOptions(["", ""]);
     } catch (error) { fail(error); } finally { setBusy(false); }
   }
 
@@ -499,7 +520,11 @@ function Admin() {
       <Card><SectionHeading number="04" title="Предварительные опросы" subtitle="Узнайте мнение жителей выбранного дома" />
         <form onSubmit={createPoll} className="admin-form">
           <Field id="poll-question" label="Вопрос"><textarea id="poll-question" value={pollQuestion} onChange={event => setPollQuestion(event.target.value)} maxLength="500" required /></Field>
-          <Field id="poll-options" label="Варианты ответа — каждый с новой строки"><textarea id="poll-options" value={pollOptions} onChange={event => setPollOptions(event.target.value)} required /></Field>
+          <div className="poll-option-editor"><strong>Варианты ответа</strong>{pollOptions.map((value, index) =>
+            <div className="poll-option-edit-row" key={index}><label htmlFor={`poll-option-${index}`}>{index + 1}</label>
+              <input id={`poll-option-${index}`} value={value} maxLength="200" required placeholder={`Вариант ${index + 1}`} onChange={event => setPollOptions(current => current.map((item, position) => position === index ? event.target.value : item))} />
+              {pollOptions.length > 2 && <button type="button" aria-label={`Удалить вариант ${index + 1}`} onClick={() => setPollOptions(current => current.filter((_, position) => position !== index))}>×</button>}</div>)}
+            {pollOptions.length < 20 && <button className="add-poll-option" type="button" onClick={() => setPollOptions(current => [...current, ""])}>+ Добавить вариант</button>}</div>
           <Field id="poll-close" label="Закрыть опрос"><input id="poll-close" type="datetime-local" value={pollClose} onChange={event => setPollClose(event.target.value)} required /></Field>
           <label className="poll-check"><input type="checkbox" checked={hidePollResults} onChange={event => setHidePollResults(event.target.checked)} /> Показывать итоги только после закрытия</label>
           <p className="hint">Опрос не заменяет официальное голосование собственников.</p>
@@ -520,6 +545,8 @@ function Dispatcher() {
   const [reason, setReason] = useState("");
   const [mergeTargetId, setMergeTargetId] = useState("");
   const [splitReason, setSplitReason] = useState("");
+  const [plannedDate, setPlannedDate] = useState("");
+  const [plannedDateReason, setPlannedDateReason] = useState("");
   const [notice, setNotice] = useState("");
   const [busy, setBusy] = useState(false);
   const request = (path, options) => api("dispatcher", path, options);
@@ -538,7 +565,7 @@ function Dispatcher() {
   }, [houseId]);
 
   async function showIssue(id) {
-    try { setIssue(await request(`/v1/dispatcher/issues/${encodeURIComponent(id)}`)); setMergeTargetId(""); setSplitReason(""); setNotice(""); }
+    try { const selected = await request(`/v1/dispatcher/issues/${encodeURIComponent(id)}`); setIssue(selected); setPlannedDate(selected.plannedDate || ""); setPlannedDateReason(""); setMergeTargetId(""); setSplitReason(""); setNotice(""); }
     catch (error) { fail(error); }
   }
 
@@ -552,6 +579,20 @@ function Dispatcher() {
       setReason("");
       await refreshQueue(houseId);
       await showIssue(issue.id);
+    } catch (error) { fail(error); }
+    finally { setBusy(false); }
+  }
+
+  async function savePlannedDate() {
+    if (!plannedDate) { setNotice("Укажите плановую дату."); return; }
+    if (issue.plannedDate && !plannedDateReason.trim()) { setNotice("Укажите причину изменения срока."); return; }
+    setBusy(true); setNotice("");
+    try {
+      const updated = await request(`/v1/issues/${encodeURIComponent(issue.id)}/planned-date`, {
+        method: "PATCH", body: JSON.stringify({ date: plannedDate, reason: plannedDateReason.trim() }),
+      });
+      setIssue(updated); setPlannedDateReason(""); await refreshQueue(houseId);
+      setNotice("Плановая дата сохранена. Жители увидят изменение в заявке.");
     } catch (error) { fail(error); }
     finally { setBusy(false); }
   }
@@ -591,12 +632,13 @@ function Dispatcher() {
     <div className="content-grid">
       <Card className="queue-card"><SectionHeading number="01" title="Очередь заявок" subtitle="Обращения жителей по вашему дому" />
         <Field id="house" label="Дом"><select id="house" value={houseId} onChange={event => setHouseId(event.target.value)}><option value="">Выберите дом</option>{houses.map(h => <option value={h.id} key={h.id}>{h.address}</option>)}</select></Field>
-        <div className="item-list">{queue.length ? queue.map(item => <CellSimple key={item.id} className="issue-cell" title={item.location || "Место не указано"} subtitle={item.description || "Все обращения отозваны"} overline={statusLabels[item.status] || item.status} showChevron onClick={() => showIssue(item.id)} />) : <p className="muted empty">Новых заявок пока нет.</p>}</div>
+        <div className="item-list">{queue.length ? queue.map(item => <div key={item.id} className="queue-item"><CellSimple className="issue-cell" title={item.location || "Место не указано"} subtitle={item.description || "Все обращения отозваны"} overline={statusLabels[item.status] || item.status} showChevron onClick={() => showIssue(item.id)} />{item.plannedDate && <small className={issueOverdue(item) ? "deadline-red" : ""}>{issueOverdue(item) ? "Просрочено: " : "План до: "}{passportDate(`${item.plannedDate}T12:00:00`)}</small>}</div>) : <p className="muted empty">Новых заявок пока нет.</p>}</div>
         <Button mode="tertiary" className="quiet-action" type="button" stretched disabled={!houseId} onClick={() => refreshQueue(houseId).catch(fail)}>Обновить очередь</Button>
       </Card>
       {issue && <Card className="detail-panel"><SectionHeading number="02" title="Карточка заявки" subtitle="Детали обращения и следующий шаг" />
         <h3>{categoryLabels[issue.category] || issue.category || "Проблема дома"}</h3>
         <IssueDetails issue={issue} role="dispatcher" onError={setNotice} />
+        {editableIssueStatuses.includes(issue.status) && <div className="secondary-operation"><h3>Плановая дата исполнения</h3><p className="hint">Жители увидят дату и все её изменения. День заканчивается по московскому времени.</p><Field id="planned-date" label="Планируем выполнить до"><input id="planned-date" type="date" min={moscowToday()} value={plannedDate} onChange={event => setPlannedDate(event.target.value)} /></Field>{issue.plannedDate && <Field id="planned-date-reason" label="Причина изменения"><textarea id="planned-date-reason" maxLength="1000" value={plannedDateReason} onChange={event => setPlannedDateReason(event.target.value)} placeholder="Например, ожидаем запчасть" /></Field>}<Button mode="secondary" type="button" stretched disabled={busy || !plannedDate || plannedDate === issue.plannedDate || (!!issue.plannedDate && !plannedDateReason.trim())} onClick={savePlannedDate}>{issue.plannedDate ? "Изменить дату" : "Установить дату"}</Button></div>}
         {transitions[issue.status] && <><Field id="reason" label="Комментарий к изменению статуса"><textarea id="reason" maxLength="1000" placeholder="Что сделано или кому передана задача" value={reason} onChange={event => setReason(event.target.value)} /></Field><Button mode="primary" className="brand-button" type="button" stretched disabled={busy} onClick={nextStatus}>{transitions[issue.status][1]}</Button></>}
         {editableIssueStatuses.includes(issue.status) && <div className="secondary-operation"><h3>Обращения в заявке</h3>{issue.reports?.length > 1 && <Field id="split-reason" label="Причина разделения"><textarea id="split-reason" maxLength="1000" value={splitReason} onChange={event => setSplitReason(event.target.value)} placeholder="Например, другая проблема или место" /></Field>}{issue.reports?.map(report => <div className="linked-report" key={report.id}><small>{report.author}</small><p>{report.description}</p>{issue.reports.length > 1 && <Button mode="tertiary" type="button" disabled={busy || !splitReason.trim()} onClick={() => splitIssue(report.id)}>Выделить в новую заявку</Button>}</div>)}</div>}
         {!!mergeTargets.length && <div className="secondary-operation"><h3>Объединить заявки</h3><p className="hint">Обращения из этой заявки перейдут в выбранную. Выберите заявку на той же или более поздней стадии работы.</p><Field id="merge-target" label="Основная заявка"><select id="merge-target" value={mergeTargetId} onChange={event => setMergeTargetId(event.target.value)}><option value="">Выберите заявку</option>{mergeTargets.map(item => <option key={item.id} value={item.id}>{item.location || item.address} · {statusLabels[item.status] || item.status} · {item.id.slice(0, 8)}</option>)}</select></Field><Button mode="secondary" type="button" stretched disabled={busy || !mergeTargetId} onClick={mergeIssues}>Объединить с выбранной заявкой</Button></div>}

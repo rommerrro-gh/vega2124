@@ -16,6 +16,7 @@ import org.springframework.web.bind.annotation.RestController;
 import ru.pulsedoma.issues.IssueStatus;
 import ru.pulsedoma.issues.MiniAppService;
 import java.security.Principal;
+import java.time.LocalDate;
 
 @Validated
 @RestController
@@ -67,6 +68,12 @@ public class IssuesController {
         return miniApp.changeStatus(id, principal.getName(), request.status(), request.reason());
     }
 
+    @PatchMapping("/{id}/planned-date")
+    public MiniAppService.IssueView setPlannedDate(@PathVariable @NotBlank String id,
+            @Valid @RequestBody SetPlannedDateRequest request, Principal principal) {
+        return miniApp.setPlannedDate(id, principal.getName(), request.date(), request.reason());
+    }
+
     @PostMapping("/{id}/verify")
     public MiniAppService.IssueView verify(@PathVariable @NotBlank String id,
                                            @Valid @RequestBody VerifyIssueRequest request,
@@ -84,6 +91,7 @@ public class IssuesController {
     public record MergeIssueRequest(@NotBlank String targetIssueId) {}
     public record SplitIssueRequest(@NotBlank String reportId, @NotBlank String reason) {}
     public record ChangeStatusRequest(@NotNull IssueStatus status, @NotBlank String reason) {}
+    public record SetPlannedDateRequest(@NotNull LocalDate date, @Size(max = 1000) String reason) {}
     public record VerifyIssueRequest(@NotNull Boolean confirmed, @Size(max = 2000) String comment) {}
     public record AddCommentRequest(@NotBlank @Size(max = 2000) String text) {}
 }

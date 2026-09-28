@@ -359,6 +359,32 @@ paths:
           description: Invalid request
         '401': {description: Missing or invalid MAX initData}
         '403': {description: Dispatcher house access required}
+  /v1/issues/{id}/planned-date:
+    patch:
+      operationId: setIssuePlannedDate
+      summary: Set or change the planned completion date for an issue
+      description: Verified dispatcher of the house may set a date without a time. Changes require a reason, are kept in history, and notify participants with MAX IDs.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: {type: string}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/SetPlannedDateRequest'}
+      responses:
+        '200':
+          description: Updated issue with planned date history
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/IssueView'}
+        '400': {description: Date is in the past or reason is missing for a change}
+        '401': {description: Missing or invalid MAX initData}
+        '403': {description: Verified dispatcher role required}
+        '404': {description: Issue unavailable}
+        '409': {description: Issue is no longer editable or date is unchanged}
   /v1/dispatcher/issues:
     get:
       operationId: listDispatcherIssues
@@ -855,7 +881,7 @@ components:
         confidence: {type: [number, 'null'], minimum: 0, maximum: 1}
     IssueView:
       type: object
-      required: [id, houseId, address, status, description, participants, attachments, reports]
+      required: [id, houseId, address, status, description, participants, attachments, reports, plannedDateHistory]
       properties:
         id: {type: string}
         houseId: {type: string}
@@ -866,6 +892,10 @@ components:
         location: {type: string, nullable: true}
         occurredAt: {type: string, format: date-time, nullable: true}
         verificationDueAt: {type: string, format: date-time, nullable: true}
+        plannedDate: {type: [string, 'null'], format: date, description: Completion target in Europe/Moscow calendar dates}
+        plannedDateHistory:
+          type: array
+          items: {$ref: '#/components/schemas/PlannedDateChange'}
         participants: {type: integer}
         attachments:
           type: array
@@ -882,6 +912,15 @@ components:
         description: {type: string}
         author: {type: string}
         createdAt: {type: string}
+    PlannedDateChange:
+      type: object
+      required: [newDate, previousDateMissed, changedAt]
+      properties:
+        previousDate: {type: [string, 'null'], format: date}
+        newDate: {type: string, format: date}
+        previousDateMissed: {type: boolean}
+        reason: {type: [string, 'null']}
+        changedAt: {type: string, format: date-time}
     AttachmentView:
       type: object
       required: [id, mime]
@@ -967,6 +1006,12 @@ components:
           type: string
           enum: [DRAFT, OPEN, ASSIGNED, IN_PROGRESS, RESOLVED, VERIFICATION_72H, CLOSED_CONFIRMED, CLOSED_UNCONFIRMED, REVIEW_REQUIRED, REOPENED, WITHDRAWN, REJECTED]
         reason: {type: string, minLength: 1}
+    SetPlannedDateRequest:
+      type: object
+      required: [date]
+      properties:
+        date: {type: string, format: date}
+        reason: {type: string, maxLength: 1000, description: Required when changing an existing date}
     VerifyIssueRequest:
       type: object
       required: [confirmed]
