@@ -1,4 +1,5 @@
 **/target
 .git
 .env
+frontend/node_modules
 data/*.db*

@@ -11,6 +11,12 @@ RUN --mount=type=cache,target=/root/.m2 \
 
 FROM eclipse-temurin:21-jre-alpine
 RUN addgroup -S app && adduser -S app -G app && mkdir -p /app/data && chown -R app:app /app
+COPY infra/certs/russian_trusted_root_ca.pem /tmp/russian_trusted_root_ca.pem
+RUN keytool -importcert -noprompt -trustcacerts \
+    -alias russian-trusted-root-ca \
+    -file /tmp/russian_trusted_root_ca.pem \
+    -cacerts -storepass changeit \
+    && rm /tmp/russian_trusted_root_ca.pem
 USER app
 WORKDIR /app
 COPY --from=build --chown=app:app /src/app-bootstrap/target/app-bootstrap-0.1.0-SNAPSHOT.jar app.jar

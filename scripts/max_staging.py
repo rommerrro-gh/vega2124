@@ -6,10 +6,18 @@ import json
 import os
 import pathlib
 import re
+import ssl
 import sys
 import urllib.error
 import urllib.parse
 import urllib.request
+
+
+def ssl_context():
+    context = ssl.create_default_context()
+    certificate = pathlib.Path(__file__).resolve().parents[1] / "infra/certs/russian_trusted_root_ca.pem"
+    context.load_verify_locations(cafile=str(certificate))
+    return context
 
 
 def local_settings():
@@ -28,7 +36,7 @@ def local_settings():
 def get_json(url, token=None):
     headers = {"Authorization": token} if token else {}
     request = urllib.request.Request(url, headers=headers)
-    with urllib.request.urlopen(request, timeout=10) as response:
+    with urllib.request.urlopen(request, timeout=10, context=ssl_context()) as response:
         return json.load(response)
 
 
@@ -56,7 +64,7 @@ def check(public_url, token, secret, api_url):
             raise ValueError("backend не сообщает UP")
         print("OK: публичный backend доступен по HTTPS")
         request = urllib.request.Request(public_url + "/miniapp/index.html")
-        with urllib.request.urlopen(request, timeout=10) as response:
+        with urllib.request.urlopen(request, timeout=10, context=ssl_context()) as response:
             if response.status != 200 or "text/html" not in response.headers.get("Content-Type", ""):
                 raise ValueError("mini app не отдаёт HTML")
         print("OK: mini app доступен по HTTPS")
@@ -90,7 +98,7 @@ def subscribe(public_url, token, secret, api_url):
                                      headers={"Authorization": token, "Content-Type": "application/json"},
                                      method="POST")
     try:
-        with urllib.request.urlopen(request, timeout=15) as response:
+        with urllib.request.urlopen(request, timeout=15, context=ssl_context()) as response:
             result = json.load(response)
     except (urllib.error.URLError, json.JSONDecodeError) as error:
         print("Подписка не создана:", error)
@@ -108,7 +116,7 @@ def unsubscribe(public_url, token, api_url):
     })
     request = urllib.request.Request(url, headers={"Authorization": token}, method="DELETE")
     try:
-        with urllib.request.urlopen(request, timeout=15) as response:
+        with urllib.request.urlopen(request, timeout=15, context=ssl_context()) as response:
             result = json.load(response)
     except (urllib.error.URLError, json.JSONDecodeError) as error:
         print("Не удалось удалить подписку:", error)
