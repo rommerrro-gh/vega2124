@@ -1,0 +1,16 @@
+{
+  "name": "pulse-doma-frontend",
+  "private": true,
+  "version": "1.0.0",
+  "scripts": {
+    "build": "esbuild src/main.jsx --bundle --minify --format=esm --target=es2020 --outdir=../app-bootstrap/src/main/resources/static/miniapp --entry-names=bundle"
+  },
+  "dependencies": {
+    "@maxhub/max-ui": "0.5.0",
+    "react": "19.2.8",
+    "react-dom": "19.2.8"
+  },
+  "devDependencies": {
+    "esbuild": "0.25.9"
+  }
+}

@@ -2,81 +2,12 @@
 <html lang="ru">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="theme-color" content="#f5f7f3">
-  <title>Пульс дома — новая заявка</title>
-  <link rel="stylesheet" href="/miniapp/style.css">
-  <link rel="stylesheet" href="/miniapp/extended.css">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#f4f7f5">
+  <title>Пульс дома — жителю</title>
+  <link rel="stylesheet" href="/miniapp/bundle.css">
   <script src="https://st.max.ru/js/max-web-app.js" defer></script>
-  <script src="/miniapp/app.js" defer></script>
+  <script type="module" src="/miniapp/bundle.js"></script>
 </head>
-<body>
-  <main class="shell">
-    <header class="topbar"><span class="mark">◉</span><span>Пульс дома</span><span class="topbar-note">MAX mini app</span></header>
-    <section class="hero">
-      <p class="eyebrow">ПРОБЛЕМЫ ДОМА</p>
-      <h1>Расскажите, что случилось</h1>
-      <p>Проверим, есть ли похожая заявка, и сохраним ваш выбор.</p>
-    </section>
-    <div id="notice" class="notice" role="alert" hidden></div>
-    <button id="open-dispatcher" class="secondary" type="button" hidden>Открыть кабинет диспетчера</button>
-    <section class="panel">
-      <div class="step">МОИ ЗАЯВКИ</div>
-      <div id="my-issues"></div>
-      <button id="refresh-issues" class="secondary" type="button">Обновить заявки</button>
-    </section>
-    <section id="form-step" class="panel">
-      <div class="step"><span>01</span> Описание проблемы</div>
-      <form id="report-form">
-        <label for="house">Дом</label>
-        <select id="house" required><option value="">Загрузка домов…</option></select>
-        <label for="category">Категория</label>
-        <select id="category" required>
-          <option value="">Выберите категорию</option>
-          <option value="LIGHTING">Освещение</option>
-          <option value="WATER">Вода</option>
-          <option value="HEATING">Отопление</option>
-          <option value="ELEVATOR">Лифт</option>
-          <option value="OTHER">Другое</option>
-        </select>
-        <label for="location">Где именно?</label>
-        <input id="location" maxlength="160" placeholder="Например: подъезд 1, этаж 2" required>
-        <label for="occurred-at">Когда заметили?</label>
-        <input id="occurred-at" type="datetime-local" required>
-        <label for="description">Что произошло?</label>
-        <textarea id="description" maxlength="4000" minlength="8" placeholder="Например: в подъезде не работает свет на втором этаже" required></textarea>
-        <label for="attachments">Фото, видео или документ</label>
-        <input id="attachments" type="file" accept="image/jpeg,image/png,video/mp4,application/pdf" multiple>
-        <p class="hint">До 5 файлов по 10 МБ. Содержимое файлов не анализируется.</p>
-        <button type="submit" class="primary">Проверить похожие заявки <span>→</span></button>
-      </form>
-    </section>
-    <section id="decision-step" class="panel" hidden>
-      <div class="step"><span>02</span> Выбор заявки</div>
-      <h2>Похожие проблемы</h2>
-      <p class="muted">Если это та же проблема, присоединитесь к ней. Иначе создайте новую заявку.</p>
-      <div id="candidates"></div>
-      <button id="new-issue" class="primary" type="button">Создать новую заявку <span>→</span></button>
-    </section>
-    <section id="result-step" class="panel" hidden>
-      <div class="step"><span>03</span> Готово</div>
-      <h2 id="result-title">Заявка сохранена</h2>
-      <p id="result-address" class="muted"></p>
-      <p id="result-location" class="muted"></p>
-      <p id="result-time" class="muted"></p>
-      <p id="result-description"></p>
-      <div id="result-attachments"></div>
-      <div class="result-meta"><span id="result-status"></span><span id="result-participants"></span></div>
-      <div id="verification" class="verification" hidden>
-        <h3>Работа выполнена?</h3>
-        <p id="verification-deadline" class="muted"></p>
-        <label for="verification-comment">Комментарий, если проблема осталась</label>
-        <textarea id="verification-comment" maxlength="2000" placeholder="Что ещё не исправлено?"></textarea>
-        <button id="confirm-result" class="primary" type="button">Да, проблема решена</button>
-        <button id="reject-result" class="secondary" type="button">Нет, проблема осталась</button>
-      </div>
-      <button id="again" class="secondary" type="button">Сообщить о другой проблеме</button>
-    </section>
-  </main>
-</body>
+<body data-page="resident"><div id="app"></div></body>
 </html>

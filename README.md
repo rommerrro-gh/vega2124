@@ -35,6 +35,16 @@ curl -i -X POST http://localhost:8080/webhooks/max \
 
 ### Mini app
 
+Интерфейс жителя и кабинет диспетчера находятся в `frontend/`: React и компоненты MAX UI оформлены цветами «Пульса дома». Для изменения фронта установите Node.js и pnpm, затем выполните:
+
+```sh
+cd frontend
+pnpm install --frozen-lockfile
+pnpm build
+```
+
+Сборка создаёт `bundle.js` и `bundle.css` в `app-bootstrap/src/main/resources/static/miniapp/`. Эти файлы хранятся в Git, поэтому Docker и Maven запускают приложение без Node.js. После изменения фронта пересоберите контейнер: `docker compose up --build -d`. HTTP API и Java-сервис при переходе на React не менялись.
+
 Для локальной демонстрации включите профиль `demo` через `SPRING_PROFILES_ACTIVE=demo` и откройте `http://localhost:8080/miniapp/index.html`. Профиль создаёт два дома, жителя и диспетчера первого дома. Кабинет диспетчера открыт по `http://localhost:8080/dispatcher/index.html`. Только в этом профиле заголовки `X-Demo-Session: true` и `X-Demo-Session: dispatcher` открывают соответствующие тестовые роли. В обычном профиле сервер проверяет подписанную строку `WebApp.initData` из заголовка `X-Max-Init-Data` по токену `MAX_BOT_TOKEN` и сроку в один час. Новый MAX-пользователь создаётся при первом корректном входе; дом добавляется по приглашению `?invite=<token>` или через `start_param` MAX. Токен приглашения хранится в БД только как SHA-256 hash.
 
 Форма принимает категорию, место, время и описание, до пяти файлов JPEG/PNG/PDF/MP4 по 10 МБ. В профиле `demo` файлы сохраняются в `./data/demo-attachments`, в обычном профиле — в частный bucket MinIO `pulse-doma-attachments`. Доступ к файлу есть у автора обращения, участников связанной заявки и диспетчера дома. Файлы хранятся без анализа содержимого; антивирусная проверка и политика удаления ещё не добавлены.
