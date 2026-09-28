@@ -654,9 +654,27 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
   /v1/houses/{id}/polls:
+    get:
+      operationId: listHousePolls
+      summary: List preliminary polls for a verified resident of this house
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: {type: string}
+      responses:
+        '200':
+          description: House polls with the current user's choice and visible aggregate results
+          content:
+            application/json:
+              schema:
+                type: array
+                items: {$ref: '#/components/schemas/HousePoll'}
+        '401': {description: Missing or invalid MAX initData}
+        '404': {description: No verified resident membership in this house}
     post:
       operationId: createPoll
-      summary: createPoll
+      summary: Create a preliminary, non-official poll as the verified house admin
       parameters:
         - name: id
           in: path
@@ -670,18 +688,43 @@ paths:
             schema:
               $ref: '#/components/schemas/CreatePollRequest'
       responses:
-        '200':
-          description: Accepted or returned
-        '400':
-          description: Invalid request
-        '403':
-          description: Access denied until JWT and house scope are implemented
-        '501':
-          description: Scaffold endpoint pending implementation
+        '201':
+          description: Preliminary poll created
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ErrorResponse'
+                $ref: '#/components/schemas/HousePoll'
+        '400': {description: Invalid request}
+        '401': {description: Missing or invalid MAX initData}
+        '403': {description: Verified HOUSE_ADMIN role required for this house}
+  /v1/houses/{id}/polls/{pollId}/votes:
+    post:
+      operationId: voteInHousePoll
+      summary: Cast one vote as a verified resident before the poll closes
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: {type: string}
+        - name: pollId
+          in: path
+          required: true
+          schema: {type: string}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/HousePollVoteRequest'}
+      responses:
+        '200':
+          description: Vote recorded; returns updated poll
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/HousePoll'}
+        '400': {description: Invalid request}
+        '401': {description: Missing or invalid MAX initData}
+        '404': {description: House, poll, or option unavailable to this resident}
+        '409': {description: Poll closed or user already voted}
   /v1/connectors/{type}/sync:
     post:
       operationId: syncConnector
@@ -741,6 +784,35 @@ components:
         contacts:
           type: array
           items: {$ref: '#/components/schemas/HouseContact'}
+    HousePoll:
+      type: object
+      description: Preliminary poll; never an official owners' meeting or binding vote
+      required: [id, houseId, question, official, closesAt, createdAt, closed, resultsVisible, options]
+      properties:
+        id: {type: string}
+        houseId: {type: string}
+        question: {type: string}
+        official: {type: boolean, const: false}
+        closesAt: {type: string, format: date-time}
+        createdAt: {type: string, format: date-time}
+        closed: {type: boolean}
+        resultsVisible: {type: boolean}
+        myOptionId: {type: [string, 'null']}
+        options:
+          type: array
+          items: {$ref: '#/components/schemas/HousePollOption'}
+    HousePollOption:
+      type: object
+      required: [id, label, votes]
+      properties:
+        id: {type: string}
+        label: {type: string}
+        votes: {type: integer, minimum: 0, description: Zero while resultsVisible is false}
+    HousePollVoteRequest:
+      type: object
+      required: [optionId]
+      properties:
+        optionId: {type: string, minLength: 1}
     HouseContact:
       type: object
       required: [id, type, title, phone, updatedAt]
@@ -914,15 +986,16 @@ components:
         description: {type: string, minLength: 1, maxLength: 4000}
     CreatePollRequest:
       type: object
-      required: [question, options]
+      required: [question, options, closesAt]
       properties:
         question: {type: string, minLength: 1, maxLength: 500}
         options:
           type: array
           minItems: 2
           maxItems: 20
-          items: {type: string, minLength: 1}
+          items: {type: string, minLength: 1, maxLength: 200}
         closesAt: {type: string, format: date-time}
+        resultsHiddenUntilClose: {type: boolean, default: false}
     SyncRequest:
       type: object
       required: [houseId]

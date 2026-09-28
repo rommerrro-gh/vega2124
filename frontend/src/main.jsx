@@ -171,6 +171,21 @@ function HousePassport({ houses, selectedId, onSelect, passport, loading, error 
   </Card>;
 }
 
+function PollCard({ poll, onVote, busy }) {
+  const [optionId, setOptionId] = useState("");
+  return <div className="poll-card">
+    <div className="poll-heading"><strong>{poll.question}</strong><span>{poll.closed ? "Завершён" : `До ${passportDate(poll.closesAt)}`}</span></div>
+    <p className="hint">Предварительный опрос жителей · не является официальным голосованием собственников</p>
+    <div className="poll-options">{poll.options.map(option => <label key={option.id} className="poll-option">
+      {!poll.myOptionId && !poll.closed && onVote && <input type="radio" name={`poll-${poll.id}`} value={option.id} checked={optionId === option.id} onChange={() => setOptionId(option.id)} />}
+      <span>{option.label}{poll.myOptionId === option.id ? " · ваш выбор" : ""}</span>
+      {poll.resultsVisible && <small>{option.votes}</small>}
+    </label>)}</div>
+    {!poll.resultsVisible && <p className="hint">Итоги появятся после закрытия опроса.</p>}
+    {onVote && !poll.myOptionId && !poll.closed && <Button mode="primary" type="button" disabled={!optionId || busy} onClick={() => onVote(poll.id, optionId)}>Проголосовать</Button>}
+  </div>;
+}
+
 function Resident() {
   const formRef = useRef(null);
   const [houses, setHouses] = useState([]);
@@ -178,6 +193,8 @@ function Resident() {
   const [passport, setPassport] = useState(null);
   const [passportLoading, setPassportLoading] = useState(false);
   const [passportError, setPassportError] = useState("");
+  const [polls, setPolls] = useState([]);
+  const [pollBusy, setPollBusy] = useState(false);
   const [issues, setIssues] = useState([]);
   const [dispatcher, setDispatcher] = useState(false);
   const [notice, setNotice] = useState("");
@@ -211,13 +228,25 @@ function Resident() {
   useEffect(() => {
     if (!selectedHouseId) return;
     let active = true;
-    setPassport(null); setPassportError(""); setPassportLoading(true);
-    request(`/v1/houses/${encodeURIComponent(selectedHouseId)}`)
-      .then(data => { if (active) setPassport(data); })
+    const membership = houses.find(house => house.id === selectedHouseId)?.memberships || [];
+    const canVote = membership.some(access => ["RESIDENT", "HOUSE_ADMIN"].includes(access.role) && access.verificationStatus === "VERIFIED");
+    setPassport(null); setPolls([]); setPassportError(""); setPassportLoading(true);
+    Promise.all([request(`/v1/houses/${encodeURIComponent(selectedHouseId)}`),
+      canVote ? request(`/v1/houses/${encodeURIComponent(selectedHouseId)}/polls`) : Promise.resolve([])])
+      .then(([data, housePolls]) => { if (active) { setPassport(data); setPolls(housePolls); } })
       .catch(error => { if (active) setPassportError(error.message || String(error)); })
       .finally(() => { if (active) setPassportLoading(false); });
     return () => { active = false; };
-  }, [selectedHouseId]);
+  }, [selectedHouseId, houses]);
+
+  async function voteInPoll(pollId, optionId) {
+    setPollBusy(true); setNotice("");
+    try {
+      await request(`/v1/houses/${encodeURIComponent(selectedHouseId)}/polls/${encodeURIComponent(pollId)}/votes`,
+        { method: "POST", body: JSON.stringify({ optionId }) });
+      setPolls(await request(`/v1/houses/${encodeURIComponent(selectedHouseId)}/polls`));
+    } catch (error) { fail(error); } finally { setPollBusy(false); }
+  }
 
   function showIssue(nextIssue) {
     setIssue(nextIssue); setVerificationComment(""); setStep("result"); setNotice("");
@@ -296,6 +325,7 @@ function Resident() {
     {houses.some(house => house.memberships?.some(access => access.role === "HOUSE_ADMIN" && access.verificationStatus === "VERIFIED")) && <AdminLink />}
     <div className="content-grid">
       <HousePassport houses={houses} selectedId={selectedHouseId} onSelect={setSelectedHouseId} passport={passport} loading={passportLoading} error={passportError} />
+      {!!polls.length && <Card><SectionHeading number="02" title="Опросы дома" subtitle="Ваше мнение о делах дома" /><div className="poll-list">{polls.map(poll => <PollCard key={poll.id} poll={poll} onVote={voteInPoll} busy={pollBusy} />)}</div></Card>}
       <Card className="issues-card">
         <SectionHeading number="02" title="Мои заявки" subtitle="Следите за тем, как решаются ваши обращения" />
         <div className="item-list">{issues.length ? issues.map(item => <CellSimple key={item.id} className="issue-cell" title={item.location || item.address} subtitle={item.description} overline={statusLabels[item.status] || item.status} showChevron onClick={() => showIssue(item)} />) : <p className="muted empty">Заявок пока нет.</p>}</div>
@@ -338,6 +368,11 @@ function Admin() {
   const [houseId, setHouseId] = useState("");
   const [contacts, setContacts] = useState([]);
   const [invitations, setInvitations] = useState([]);
+  const [polls, setPolls] = useState([]);
+  const [pollQuestion, setPollQuestion] = useState("");
+  const [pollOptions, setPollOptions] = useState("Да\nНет");
+  const [pollClose, setPollClose] = useState(() => new Date(Date.now() + 7 * 86400000 - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 16));
+  const [hidePollResults, setHidePollResults] = useState(false);
   const [createdToken, setCreatedToken] = useState("");
   const [editingId, setEditingId] = useState("");
   const [contactType, setContactType] = useState("EMERGENCY");
@@ -362,8 +397,8 @@ function Admin() {
   useEffect(() => {
     if (!houseId) return;
     setCreatedToken(""); setNotice("");
-    Promise.all([request(`${base}/contacts`), request(`${base}/invitations`)])
-      .then(([nextContacts, nextInvitations]) => { setContacts(nextContacts); setInvitations(nextInvitations); })
+    Promise.all([request(`${base}/contacts`), request(`${base}/invitations`), request(`${base}/polls`)])
+      .then(([nextContacts, nextInvitations, nextPolls]) => { setContacts(nextContacts); setInvitations(nextInvitations); setPolls(nextPolls); })
       .catch(fail);
   }, [houseId]);
 
@@ -394,6 +429,17 @@ function Admin() {
     try { await request(`${base}/invitations/${encodeURIComponent(id)}/revoke`, { method: "POST" }); setInvitations(await request(`${base}/invitations`)); }
     catch (error) { fail(error); } finally { setBusy(false); }
   }
+  async function createPoll(event) {
+    event.preventDefault(); setBusy(true); setNotice("");
+    try {
+      const options = pollOptions.split("\n").map(value => value.trim()).filter(Boolean);
+      await request(`${base}/polls`, { method: "POST", body: JSON.stringify({
+        question: pollQuestion.trim(), options, closesAt: new Date(pollClose).toISOString(),
+        resultsHiddenUntilClose: hidePollResults,
+      }) });
+      setPolls(await request(`${base}/polls`)); setPollQuestion(""); setPollOptions("Да\nНет");
+    } catch (error) { fail(error); } finally { setBusy(false); }
+  }
 
   return <main className="shell">
     <Brand role="Администратору" />
@@ -410,6 +456,17 @@ function Admin() {
         <form onSubmit={createInvitation} className="admin-form"><div className="field-grid"><Field id="invite-days" label="Срок, дней"><input id="invite-days" type="number" min="1" max="30" value={days} onChange={event => setDays(event.target.value)} required /></Field><Field id="invite-limit" label="Число активаций"><input id="invite-limit" type="number" min="1" max="100" value={activationLimit} onChange={event => setActivationLimit(event.target.value)} required /></Field></div><Button mode="primary" className="brand-button" type="submit" stretched disabled={busy}>Создать приглашение</Button></form>
         {createdToken && <div className="invite-token" role="status"><strong>Токен приглашения</strong><code>{createdToken}</code><p>Передайте его жителю приватно и добавьте к ссылке бота MAX как параметр <code>startapp</code>. После обновления страницы токен больше не отображается.</p></div>}
         <div className="item-list admin-invitations">{invitations.map(invitation => <div className="admin-row" key={invitation.id}><div><strong>{invitation.revokedAt ? "Отозвано" : new Date(invitation.expiresAt) < new Date() ? "Истекло" : "Активно"}</strong><small>До {passportDate(invitation.expiresAt)} · использовано {invitation.activationCount} из {invitation.activationLimit}</small></div>{!invitation.revokedAt && <button type="button" disabled={busy} onClick={() => revokeInvitation(invitation.id)}>Отозвать</button>}</div>)}</div>
+      </Card>
+      <Card><SectionHeading number="04" title="Предварительные опросы" subtitle="Узнайте мнение жителей выбранного дома" />
+        <form onSubmit={createPoll} className="admin-form">
+          <Field id="poll-question" label="Вопрос"><textarea id="poll-question" value={pollQuestion} onChange={event => setPollQuestion(event.target.value)} maxLength="500" required /></Field>
+          <Field id="poll-options" label="Варианты ответа — каждый с новой строки"><textarea id="poll-options" value={pollOptions} onChange={event => setPollOptions(event.target.value)} required /></Field>
+          <Field id="poll-close" label="Закрыть опрос"><input id="poll-close" type="datetime-local" value={pollClose} onChange={event => setPollClose(event.target.value)} required /></Field>
+          <label className="poll-check"><input type="checkbox" checked={hidePollResults} onChange={event => setHidePollResults(event.target.checked)} /> Показывать итоги только после закрытия</label>
+          <p className="hint">Опрос не заменяет официальное голосование собственников.</p>
+          <Button mode="primary" className="brand-button" type="submit" stretched disabled={busy}>Создать опрос</Button>
+        </form>
+        <div className="poll-list">{polls.map(poll => <PollCard key={poll.id} poll={poll} />)}</div>
       </Card>
     </div>}
     <footer>Пульс дома <span>·</span> Кабинет администратора</footer>

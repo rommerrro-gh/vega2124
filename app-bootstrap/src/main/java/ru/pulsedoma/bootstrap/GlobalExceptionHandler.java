@@ -23,7 +23,9 @@ public class GlobalExceptionHandler {
         HttpStatus status = switch (e.getCode()) {
             case "HOUSE_ACCESS_DENIED" -> HttpStatus.FORBIDDEN;
             case "ISSUE_NOT_FOUND", "ATTACHMENT_NOT_FOUND", "HOUSE_NOT_FOUND",
-                 "CONTACT_NOT_FOUND", "INVITATION_NOT_FOUND" -> HttpStatus.NOT_FOUND;
+                 "CONTACT_NOT_FOUND", "INVITATION_NOT_FOUND", "POLL_NOT_FOUND",
+                 "POLL_OPTION_NOT_FOUND" -> HttpStatus.NOT_FOUND;
+            case "ALREADY_VOTED", "POLL_CLOSED" -> HttpStatus.CONFLICT;
             default -> HttpStatus.BAD_REQUEST;
         };
         return ResponseEntity.status(status).body(error(e.getCode(), e.getMessage()));
