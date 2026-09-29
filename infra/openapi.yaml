@@ -323,7 +323,8 @@ paths:
   /v1/reports/{reportId}/attachments:
     post:
       operationId: uploadReportAttachment
-      summary: Add a private attachment to the current user's unlinked report
+      summary: Add a private JPEG or PNG photo to the current user's unlinked report
+      description: Only JPEG and PNG photos up to 10 MB are accepted, at most five per report. Previously stored files remain readable.
       parameters:
         - name: reportId
           in: path
@@ -1126,6 +1127,14 @@ components:
         occurredAt: {type: string, format: date-time, nullable: true}
         verificationDueAt: {type: string, format: date-time, nullable: true}
         plannedDate: {type: [string, 'null'], format: date, description: Completion target in Europe/Moscow calendar dates}
+        dispatcherComment:
+          type: object
+          nullable: true
+          description: Latest nonempty dispatcher comment on a status change
+          properties:
+            text: {type: string}
+            status: {type: string}
+            changedAt: {type: string, format: date-time}
         plannedDateHistory:
           type: array
           items: {$ref: '#/components/schemas/PlannedDateChange'}

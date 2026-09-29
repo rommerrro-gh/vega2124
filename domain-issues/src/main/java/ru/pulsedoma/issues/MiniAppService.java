@@ -25,10 +25,12 @@ import ru.pulsedoma.identity.VerificationStatus;
 public class MiniAppService {
     private final JdbcTemplate jdbc;
     private final AttachmentService attachments;
+    private final IssueNotificationService notifications;
 
-    public MiniAppService(JdbcTemplate jdbc, AttachmentService attachments) {
+    public MiniAppService(JdbcTemplate jdbc, AttachmentService attachments, IssueNotificationService notifications) {
         this.jdbc = jdbc;
         this.attachments = attachments;
+        this.notifications = notifications;
     }
 
     public record MembershipAccess(MembershipRole role, VerificationStatus verificationStatus) {}
@@ -37,12 +39,13 @@ public class MiniAppService {
     public record LinkedReportView(String id, String description, String author, String createdAt) {}
     public record PlannedDateChange(String previousDate, String newDate, boolean previousDateMissed,
                                     String reason, String changedAt) {}
+    public record DispatcherComment(String text, IssueStatus status, String changedAt) {}
     public record IssueView(String id, String houseId, String address, String category,
                             IssueStatus status, String description, String location,
                             String occurredAt, String verificationDueAt, String plannedDate,
                             List<PlannedDateChange> plannedDateHistory, int participants,
                             List<AttachmentService.AttachmentView> attachments,
-                            List<LinkedReportView> reports, boolean mergedForMe) {}
+                            List<LinkedReportView> reports, boolean mergedForMe, DispatcherComment dispatcherComment) {}
 
     public List<IssueView> myIssues(String userId) {
         List<String> ids = jdbc.query("""
@@ -175,7 +178,7 @@ public class MiniAppService {
                 rs.getString("address"), rs.getString("category"), IssueStatus.valueOf(rs.getString("status")),
                 rs.getString("description"), rs.getString("location"), rs.getString("occurred_at"),
                 rs.getString("verification_due_at"), rs.getString("planned_date"), List.of(),
-                rs.getInt("participants"), List.of(), List.of(), rs.getBoolean("merged_for_me")),
+                rs.getInt("participants"), List.of(), List.of(), rs.getBoolean("merged_for_me"), null),
                 userId, issueId, userId);
         if (found.isEmpty()) throw new BusinessException("ISSUE_NOT_FOUND", "Issue is not available");
         IssueView row = found.get(0);
@@ -197,10 +200,19 @@ public class MiniAppService {
                 """, (rs, index) -> new PlannedDateChange(rs.getString("previous_date"),
                 rs.getString("new_date"), rs.getInt("previous_date_missed") != 0,
                 rs.getString("reason"), rs.getString("created_at")), issueId);
+        List<DispatcherComment> comments = jdbc.query("""
+                SELECT s.reason, s.to_status, s.created_at FROM status_events s
+                WHERE s.issue_id = ? AND s.reason IS NOT NULL AND trim(s.reason) != ''
+                  AND EXISTS (SELECT 1 FROM audit_events a WHERE a.entity_id = s.issue_id
+                    AND a.actor_id = s.actor_id AND a.created_at = s.created_at
+                    AND a.action = 'ISSUE_STATUS_CHANGED')
+                ORDER BY s.created_at DESC, s.id DESC LIMIT 1
+                """, (rs, index) -> new DispatcherComment(rs.getString("reason"),
+                IssueStatus.valueOf(rs.getString("to_status")), rs.getString("created_at")), issueId);
         return new IssueView(row.id(), row.houseId(), row.address(), row.category(), row.status(),
                 row.description(), row.location(), row.occurredAt(), row.verificationDueAt(),
                 row.plannedDate(), history, row.participants(), attachments.forIssue(issueId), reports,
-                row.mergedForMe());
+                row.mergedForMe(), comments.isEmpty() ? null : comments.get(0));
     }
 
     @Transactional
@@ -549,17 +561,6 @@ public class MiniAppService {
                 """, dueAt, now, issueId);
         statusEvent(issueId, IssueStatus.RESOLVED, IssueStatus.VERIFICATION_72H, null,
                 "Ожидается подтверждение жителей", now);
-        jdbc.update("""
-                INSERT INTO notification_outbox
-                    (id, issue_id, verification_round, recipient_user_id, kind, body, next_attempt_at)
-                SELECT lower(hex(randomblob(16))), i.id, i.verification_round, p.user_id,
-                       'VERIFY_RESULT',
-                       'Работа по заявке «' || COALESCE(json_extract(i.zone_json, '$.label'), i.category, 'Проблема дома') ||
-                       '» отмечена выполненной. Откройте мини-приложение «Пульс дома» и подтвердите результат в течение 72 часов.', ?
-                FROM issues i JOIN issue_participants p ON p.issue_id = i.id
-                JOIN users u ON u.id = p.user_id
-                WHERE i.id = ? AND u.max_user_id IS NOT NULL AND trim(u.max_user_id) != ''
-                """, now, issueId);
     }
 
     private void updateVerificationStatus(String issueId, IssueStatus next, String actorId,
@@ -569,6 +570,7 @@ public class MiniAppService {
         jdbc.update("""
                 UPDATE notification_outbox SET cancelled_at = ?
                 WHERE issue_id = ? AND sent_at IS NULL AND cancelled_at IS NULL
+                  AND (kind = 'VERIFY_RESULT' OR kind GLOB 'PLANNED_DATE_*')
                 """, now, issueId);
         statusEvent(issueId, IssueStatus.VERIFICATION_72H, next, actorId, reason, now);
         jdbc.update("""
@@ -579,10 +581,12 @@ public class MiniAppService {
 
     private void statusEvent(String issueId, IssueStatus previous, IssueStatus next,
                              String actorId, String reason, String now) {
+        String eventId = UUID.randomUUID().toString();
         jdbc.update("""
                 INSERT INTO status_events(id, issue_id, from_status, to_status, actor_id, reason, created_at)
                 VALUES (?, ?, ?, ?, ?, ?, ?)
-                """, UUID.randomUUID().toString(), issueId, previous.name(), next.name(), actorId, reason, now);
+                """, eventId, issueId, previous.name(), next.name(), actorId, reason, now);
+        notifications.statusChanged(eventId, issueId, previous, next, reason, now);
     }
 
     private boolean editableIssue(IssueStatus status) {

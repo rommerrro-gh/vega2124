@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
+import { createPortal } from "react-dom";
 import { MaxUI, Panel, Button as MaxButton, CellSimple } from "@maxhub/max-ui";
 import "@maxhub/max-ui/dist/styles.css";
 import "./theme.css";
@@ -10,7 +11,7 @@ function Button({ mode = "primary", className = "", ...props }) {
 
 const statusLabels = {
   DRAFT: "Ожидает диспетчера", OPEN: "Принята", ASSIGNED: "Назначена",
-  IN_PROGRESS: "В работе", VERIFICATION_72H: "Ожидает вашего подтверждения",
+  IN_PROGRESS: "В работе", RESOLVED: "Выполнена", REJECTED: "Отклонена", VERIFICATION_72H: "Ожидает вашего подтверждения",
   CLOSED_CONFIRMED: "Закрыта после подтверждения",
   CLOSED_UNCONFIRMED: "Закрыта по истечении срока", REOPENED: "Открыта повторно",
   REVIEW_REQUIRED: "Требует решения диспетчера", WITHDRAWN: "Отозвана",
@@ -21,6 +22,16 @@ const categoryLabels = {
   YARD_CLEANING: "Уборка придомовой территории", WASTE_REMOVAL: "Вывоз мусора",
   PLAYGROUND: "Детская площадка", OTHER: "Другое",
 };
+const candidateReasonLabels = {
+  same_house: "Тот же дом", same_category: "Та же категория", same_location: "Совпадает место",
+  same_entrance: "Тот же подъезд", same_floor: "Тот же этаж",
+  elevator_floor_ignored: "Для лифта этаж может отличаться", floor_unspecified: "В одной заявке этаж не указан — проверьте место",
+  same_outdoor_object: "Тот же тип объекта во дворе", check_outdoor_zone: "Проверьте, что это один объект и участок",
+  location_unspecified: "Место не уточнено", recent_issue: "Недавняя заявка",
+};
+function candidateReason(reason) {
+  return reason.startsWith("shared_terms:") ? `Общих слов: ${reason.split(":")[1]}` : candidateReasonLabels[reason];
+}
 const transitions = {
   DRAFT: ["OPEN", "Принять заявку"], OPEN: ["ASSIGNED", "Назначить себе"],
   ASSIGNED: ["IN_PROGRESS", "Начать работу"], IN_PROGRESS: ["RESOLVED", "Отметить выполненной"],
@@ -118,8 +129,10 @@ async function downloadAttachment(role, attachment, onError) {
     const url = URL.createObjectURL(await response.blob());
     const link = document.createElement("a");
     link.href = url;
-    link.download = attachment.id;
+    link.download = attachment.id + ({ "image/jpeg": ".jpg", "image/png": ".png", "application/pdf": ".pdf", "video/mp4": ".mp4" }[attachment.mime] || "");
+    document.body.appendChild(link);
     link.click();
+    link.remove();
     setTimeout(() => URL.revokeObjectURL(url), 60000);
   } catch (error) { onError(error.message); }
 }
@@ -257,13 +270,72 @@ function InvitationToken({ token, role = "admin" }) {
     <p>Сохраните ссылку сейчас: из соображений безопасности она показывается один раз. Если потеряли её, отзовите приглашение и создайте новое.</p></div>;
 }
 
+function PhotoPreview({ attachment, role, onClose }) {
+  const dialog = useRef(null);
+  const [url, setUrl] = useState("");
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  useEffect(() => {
+    const previousFocus = document.activeElement;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    dialog.current.showModal();
+    const controller = new AbortController();
+    let objectUrl;
+    (async () => {
+      try {
+        const response = await fetch(`/v1/attachments/${encodeURIComponent(attachment.id)}`, {
+          headers: authHeaders(role), signal: controller.signal,
+        });
+        if (!response.ok) throw new Error("Не удалось загрузить фото. Закройте просмотр и попробуйте ещё раз.");
+        const blob = await response.blob();
+        if (controller.signal.aborted) return;
+        objectUrl = URL.createObjectURL(blob);
+        setUrl(objectUrl);
+      } catch (error) { if (!controller.signal.aborted) { setError(error.message); setLoading(false); } }
+    })();
+    return () => {
+      controller.abort();
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
+      document.body.style.overflow = previousOverflow;
+      if (previousFocus?.isConnected) previousFocus.focus({ preventScroll: true });
+    };
+  }, [attachment.id, role]);
+  return createPortal(<dialog ref={dialog} className="photo-viewer" aria-labelledby="photo-title"
+    onCancel={event => { event.preventDefault(); onClose(); }}>
+    <header className="photo-viewer-header"><h2 id="photo-title">Фото к заявке</h2><Button mode="secondary" type="button" onClick={onClose}>Закрыть</Button></header>
+    <div className="photo-viewer-media">
+      {loading && <p role="status">Загружаем фото…</p>}
+      {error && <p role="alert">{error}</p>}
+      {url && !error && <img src={url} alt="Фото, приложенное к заявке" onLoad={() => setLoading(false)}
+        onError={() => { setLoading(false); setError("Не удалось показать фото: формат или содержимое файла не поддерживается."); }} />}
+    </div>
+    <footer className="photo-viewer-footer"><a className="photo-download" href={url || undefined}
+      download={`${attachment.id}${attachment.mime === "image/png" ? ".png" : ".jpg"}`}
+      aria-disabled={!url || loading || !!error} onClick={event => { if (!url || loading || error) event.preventDefault(); }}>Скачать фото</a></footer>
+  </dialog>, document.body);
+}
+
 function AttachmentList({ attachments, role, onError }) {
+  const [photo, setPhoto] = useState(null);
+  useEffect(() => { setPhoto(null); }, [attachments]);
   if (!attachments?.length) return null;
-  return <div className="item-list">{attachments.map(file => <button className="attachment-link" type="button" key={file.id} onClick={() => downloadAttachment(role, file, onError)}>Открыть вложение · {file.mime}</button>)}</div>;
+  return <><div className="item-list">{attachments.map((file, index) => {
+    const isPhoto = ["image/jpeg", "image/png"].includes(file.mime);
+    return <button className="attachment-link" type="button" key={file.id}
+      onClick={() => isPhoto ? setPhoto(file) : downloadAttachment(role, file, onError)}>
+      {isPhoto ? `Открыть фото ${index + 1}` : `Скачать ранее прикреплённый файл · ${file.mime}`}</button>;
+  })}</div>{photo && <PhotoPreview key={photo.id} attachment={photo} role={role} onClose={() => setPhoto(null)} />}</>;
+}
+
+function StatusBadge({ status }) {
+  return <span className={`status-badge status-${status}`}><span className="status-dot" aria-hidden="true" />{statusLabels[status] || status}</span>;
 }
 
 function IssueDetails({ issue, role, onError }) {
   return <>
+    <div className="issue-current-status"><strong>Статус заявки</strong><StatusBadge status={issue.status} /></div>
+    {issue.dispatcherComment && <section className="dispatcher-comment"><h3>Последний комментарий диспетчера</h3><small>{new Date(issue.dispatcherComment.changedAt).toLocaleString("ru-RU")} · {statusLabels[issue.dispatcherComment.status] || issue.dispatcherComment.status}</small><p>{issue.dispatcherComment.text}</p></section>}
     {role === "true" && issue.mergedForMe && <p className="merge-notice">Ваше обращение объединили с другой заявкой. Следите за ходом работ здесь.</p>}
     <div className="detail-lines"><p className="muted">{issue.address}</p>{issue.category && <p className="muted">Категория: {categoryLabels[issue.category] || issue.category}</p>}{issue.location && <p className="muted">Место: {issue.location}</p>}{issue.occurredAt && <p className="muted">Дата и время обращения: {new Date(issue.occurredAt).toLocaleString("ru-RU")}</p>}</div>
     <p className="detail-description">{issue.description || "Активных обращений нет."}</p>
@@ -276,7 +348,7 @@ function IssueDetails({ issue, role, onError }) {
         <span>{passportDate(change.changedAt)}{change.previousDateMissed ? " · предыдущий срок прошёл" : ""}</span>
         {change.reason && <p>Причина: {change.reason}</p>}</li>)}</ol></details>}
     <AttachmentList attachments={issue.attachments} role={role} onError={onError} />
-    <div className="result-meta"><span>{statusLabels[issue.status] || issue.status}</span><span>Участников: {issue.participants}</span></div>
+    <div className="result-meta"><span>Участников: {issue.participants}</span></div>
   </>;
 }
 
@@ -409,6 +481,7 @@ function Resident() {
       const form = event.currentTarget;
       const files = [...form.elements.attachments.files];
       if (files.length > 5 || files.some(file => file.size > 10 * 1024 * 1024)) throw new Error("Можно прикрепить до 5 файлов по 10 МБ");
+      if (files.some(file => !["image/jpeg", "image/png"].includes(file.type))) throw new Error("Пока можно прикладывать только фото в формате JPEG или PNG.");
       let report = reportData;
       let id = reportId;
       if (!id) {
@@ -496,20 +569,20 @@ function Resident() {
           <Field id="location" label="Где именно?"><input id="location" name="location" maxLength="160" placeholder="Например, подъезд 1, этаж 2" required disabled={!!reportId} /></Field>
           <Field id="appeal-time" label="Дата и время обращения"><output id="appeal-time" className="automatic-time">Запишем автоматически при отправке обращения</output></Field>
           <Field id="description" label="Что произошло?"><textarea id="description" name="description" maxLength="4000" minLength="8" placeholder="Опишите, что случилось и как это влияет на жителей" required disabled={!!reportId} /></Field>
-          <Field id="attachments" label="Фото, видео или документ"><input id="attachments" name="attachments" type="file" accept="image/jpeg,image/png,video/mp4,application/pdf" multiple /></Field>
-          <p className="hint">До 5 файлов по 10 МБ. Содержимое файлов не анализируется.</p>
+          <Field id="attachments" label="Фото"><input id="attachments" name="attachments" type="file" accept="image/jpeg,image/png" multiple /></Field>
+          <p className="hint">Пока можно прикладывать только фото: JPEG или PNG, до 5 фото по 10 МБ.</p>
           <Button mode="primary" className="brand-button" type="submit" stretched disabled={busy || !selectedHouseId}>Проверить похожие заявки <span aria-hidden="true">→</span></Button>
         </form>
       </Card>}
       {step === "form" && selectedHouse && <DisclosureCard className="issues-card" title="Мои заявки" summary={houseIssues.length ? `${countLabel(houseIssues.length, "заявка", "заявки", "заявок")} по выбранному дому` : "Пока нет заявок"}>
-        <div className="item-list">{houseIssues.length ? houseIssues.map(item => <CellSimple key={item.id} className="issue-cell" title={item.location || item.address} subtitle={item.description} overline={`${statusLabels[item.status] || item.status}${item.mergedForMe ? " · Объединена с другой заявкой" : ""}`} showChevron onClick={() => showIssue(item)} />) : <p className="muted empty">Заявок пока нет.</p>}</div>
+        <div className="item-list">{houseIssues.length ? houseIssues.map(item => <div key={item.id} className="resident-issue"><StatusBadge status={item.status} /><CellSimple className="issue-cell" title={item.location || item.address} subtitle={item.description} overline={item.mergedForMe ? "Объединена с другой заявкой" : undefined} showChevron onClick={() => showIssue(item)} /></div>) : <p className="muted empty">Заявок пока нет.</p>}</div>
         <Button mode="secondary" className="refresh-action" type="button" stretched onClick={() => refreshIssues().catch(fail)}>↻ Обновить список</Button>
       </DisclosureCard>}
       {step === "form" && canReport && <DisclosureCard title="Опросы дома" summary={openPolls.length ? `${countLabel(openPolls.length, "опрос ждёт", "опроса ждут", "опросов ждут")} вашего ответа` : polls.length ? countLabel(polls.length, "опрос", "опроса", "опросов") : "Опросов пока нет"}><div className="poll-list">{polls.map(poll => <PollCard key={poll.id} poll={poll} onVote={voteInPoll} busy={pollBusy} />)}{!polls.length && <p className="muted">В выбранном доме пока нет опросов.</p>}<Button mode="secondary" type="button" disabled={pollBusy} onClick={refreshPolls}>Обновить опросы</Button></div></DisclosureCard>}
       {step === "form" && selectedHouse && <HousePassport passport={passport} loading={passportLoading} error={passportError} />}
       {step === "decision" && <Card className="flow-card">
         <SectionHeading title="Похожие проблемы" subtitle="Выберите существующую заявку или создайте новую" />
-        <div className="item-list">{candidates.length ? candidates.map(({ issue: item, score }) => <div className="candidate" key={item.id}><span className="score">{Math.round(score * 100)}% совпадение</span><strong>{item.description || item.category || "Проблема дома"}</strong><p>{item.address} · {item.participants} участников</p><button type="button" disabled={busy} onClick={() => decide(`/v1/issues/${encodeURIComponent(item.id)}/join`)}>Присоединиться</button></div>) : <p className="muted empty">Похожих активных заявок не найдено.</p>}</div>
+        <div className="item-list">{candidates.length ? candidates.map(({ issue: item, score, reasons }) => <div className="candidate" key={item.id}><span className="score">Оценка сходства: {Math.round(score * 100)}%</span><strong>{item.description || item.category || "Проблема дома"}</strong><p>{item.address} · {item.participants} участников</p><ul className="candidate-reasons">{(reasons || []).map(candidateReason).filter(Boolean).map(reason => <li key={reason}>{reason}</li>)}</ul><button type="button" disabled={busy} onClick={() => decide(`/v1/issues/${encodeURIComponent(item.id)}/join`)}>Присоединиться</button></div>) : <p className="muted empty">Похожих активных заявок не найдено.</p>}</div>
         <Button mode="primary" className="brand-button" type="button" stretched disabled={busy} onClick={() => decide("/v1/issues")}>Создать новую заявку <span aria-hidden="true">→</span></Button>
         <Button mode="tertiary" className="decision-cancel" type="button" stretched disabled={busy} onClick={() => withdrawReport(reportId, "Создание заявки отменено пользователем", "Создание заявки отменено.")}>Отмена</Button>
       </Card>}
@@ -855,7 +928,7 @@ function SystemAdmin() {
   const org = organizations.find(item => item.id === organizationId);
   async function run(action) { setBusy(true); setNotice(""); try { await action(); await refresh(); } catch (error) { setNotice(error.message); } finally { setBusy(false); } }
   async function revokeInvitation(id) { await run(async () => { await request(`/v1/access/invitations/${id}/revoke`, { method: "POST" }); setInvitations(await request("/v1/access/invitations")); }); }
-  return <main className="shell"><Brand role="Системному администратору" /><section className="hero"><div className="hero-copy"><h1>УК и доступы</h1><p>Создавайте организации, закрепляйте дома и приглашайте администраторов УК.</p></div></section><Notice message={notice} />
+  return <main className="shell"><Brand role="Системному администратору" /><section className="hero"><div className="hero-copy"><div className="hero-kicker"><span className="live-dot" /> Кабинет системного администратора</div><h1>Системный<br />администратор</h1><p>Создавайте организации, закрепляйте дома и приглашайте администраторов УК.</p></div></section><Notice message={notice} />
     <div className="content-grid"><Card><SectionHeading title="Управляющие компании" />
       <form className="system-form" onSubmit={event => { event.preventDefault(); run(async () => { await request("/v1/access/organizations", { method: "POST", body: JSON.stringify({ name: organizationName.trim() }) }); setOrganizationName(""); }); }}><Field id="org-name" label="Название УК"><input id="org-name" value={organizationName} maxLength="200" required onChange={event => setOrganizationName(event.target.value)} /></Field><Button className="system-action" mode="primary" type="submit" disabled={busy}>Создать УК</Button></form>
       <Field id="org-select" label="УК"><select id="org-select" value={organizationId} onChange={event => { setOrganizationId(event.target.value); setSelected([]); }}><option value="">Выберите УК</option>{organizations.map(item => <option value={item.id} key={item.id}>{item.name}</option>)}</select></Field>
@@ -899,7 +972,7 @@ function UkAdmin() {
     try { await request(`/v1/access/invitations/${id}/revoke`, { method: "POST" }); setInvitations(await request("/v1/access/invitations")); }
     catch (error) { setNotice(error.message); } finally { setBusy(false); }
   }
-  return <main className="shell"><Brand role="Администратору УК" /><section className="hero"><div className="hero-copy"><h1>Команда УК</h1><p>Приглашайте диспетчеров и администраторов назначенных домов.</p></div></section><Notice message={notice} />
+  return <main className="shell"><Brand role="Администратору УК" /><section className="hero"><div className="hero-copy"><div className="hero-kicker"><span className="live-dot" /> Кабинет администратора УК</div><h1>Команда УК</h1><p>Приглашайте диспетчеров и администраторов назначенных домов.</p></div></section><Notice message={notice} />
     <div className="content-grid"><Card><SectionHeading title="Пригласить сотрудника" /><Field id="uk-org" label="Управляющая компания"><select id="uk-org" value={organizationId} onChange={event => { setOrganizationId(event.target.value); setSelected([]); }}><option value="">Выберите УК</option>{organizations.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}</select></Field>
       <form onSubmit={create}><Field id="staff-role" label="Роль"><select id="staff-role" value={role} onChange={event => { setRole(event.target.value); setSelected([]); }}><option value="DISPATCHER">Диспетчер</option><option value="HOUSE_ADMIN">Администратор дома</option></select></Field><HouseChecks houses={org?.houses || []} selected={selected} onChange={setSelected} /><Button mode="primary" type="submit" disabled={busy || !selected.length || (role === "HOUSE_ADMIN" && selected.length !== 1)}>Создать приглашение</Button></form><InvitationToken token={token} /><IssuedInvitations items={invitations.filter(item => item.organizationId === organizationId)} onRevoke={revokeInvitation} busy={busy} /></Card>
       <Card><SectionHeading title="Назначенные сотрудники" /><div className="item-list">{assignments.map(item => <div className="admin-row" key={`${item.userId}-${item.role}-${item.houseId}`}><div><strong>{item.displayName}</strong><small>{accessRoleLabels[item.role]} · {item.houseAddress} · {item.status}</small></div>{item.status === "ACTIVE" && <button type="button" disabled={busy} onClick={() => revoke(item)}>Отозвать</button>}</div>)}</div></Card>

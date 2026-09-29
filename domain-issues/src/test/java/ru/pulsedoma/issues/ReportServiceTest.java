@@ -32,22 +32,35 @@ class ReportServiceTest {
 
     @Test
     void middleScoreRequiresReviewWithoutDraft() {
-        Report report = createWithScore(0.7);
+        Report report = createWithScore(0.50);
         assertEquals(1, report.candidates.size());
         assertTrue(auditContains("DUPLICATE_REVIEW_REQUIRED"));
     }
 
     @Test
     void lowScoreWaitsForResidentDecision() {
-        Report report = createWithScore(0.64);
+        Report report = createWithScore(0.49);
         assertTrue(report.candidates.isEmpty());
         assertTrue(!sqlContains("INSERT INTO issues"));
     }
 
     private Report createWithScore(double score) {
+        return createWithCandidates(List.of(new DuplicateCandidate("issue-1", score, List.of("shared_terms:1"))));
+    }
+
+    @Test
+    void filtersEveryCandidateEvenWhenTheBestScoreIsHigh() {
+        Report report = createWithCandidates(List.of(
+                new DuplicateCandidate("strong", .9, List.of()),
+                new DuplicateCandidate("boundary", .5, List.of()),
+                new DuplicateCandidate("weak", .49, List.of())));
+        assertEquals(List.of("strong", "boundary"), report.candidates.stream().map(DuplicateCandidate::issueId).toList());
+    }
+
+    private Report createWithCandidates(List<DuplicateCandidate> candidates) {
         when(jdbc.queryForObject(anyString(), eq(Integer.class), any(), any())).thenReturn(1);
         when(retriever.findCandidates(anyString(), anyString(), eq("LIGHTING"), eq("подъезд 1"), any(Instant.class)))
-                .thenReturn(List.of(new DuplicateCandidate("issue-1", score, List.of("shared_terms:1"))));
+                .thenReturn(candidates);
         return service.createReport(new CreateReportCommand("house-1", "user-1", "Свет в подъезде", "LIGHTING",
                 "Подъезд 1", Instant.now()));
     }

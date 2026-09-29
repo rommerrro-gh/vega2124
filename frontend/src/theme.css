@@ -99,7 +99,20 @@ button{cursor:pointer}
 .attachment-link,.candidate{width:100%;border:1px solid #e0e9e2;border-radius:15px;background:#fbfdfb;padding:14px 15px;color:#234239;line-height:1.45}
 .attachment-link{text-align:left;cursor:pointer;font-size:13px;font-weight:650;transition:background .18s,border-color .18s,transform .18s}
 .attachment-link:hover{background:#f0faf4;border-color:#abd9bb;transform:translateY(-1px)}
+.photo-viewer{position:fixed;inset:0;margin:0;border:0;width:100%;max-width:none;height:100%;height:100dvh;max-height:none;padding:16px;background:#111d19;color:#edf6ef;box-sizing:border-box}
+.photo-viewer[open]{display:grid;grid-template-rows:auto minmax(0,1fr) auto;gap:16px;padding:calc(16px + env(safe-area-inset-top)) calc(16px + env(safe-area-inset-right)) calc(16px + env(safe-area-inset-bottom)) calc(16px + env(safe-area-inset-left))}
+.photo-viewer::backdrop{background:#111d19}
+.photo-viewer-header{display:flex;align-items:center;justify-content:space-between;gap:12px;min-width:0}
+.photo-viewer-header h2{margin:0;font-size:18px;line-height:1.3;color:#edf6ef}
+.photo-viewer-media{position:relative;display:grid;place-items:center;min-width:0;min-height:0;overflow:auto}
+.photo-viewer-media img{display:block;max-width:100%;max-height:100%;width:100%;height:100%;object-fit:contain}
+.photo-viewer-media p{position:absolute;inset:0;display:grid;place-items:center;margin:0;padding:20px;text-align:center;background:#111d19;color:#d8e6da;line-height:1.5;z-index:1}
+.photo-viewer-footer{padding:0;text-align:center}
+.photo-download{display:inline-flex;justify-content:center;align-items:center;min-height:48px;padding:12px 20px;border:1px solid #437456;border-radius:13px;background:#294e38;color:#c6f2d5;font-size:14px;font-weight:700;text-decoration:none}
+.photo-download[aria-disabled=true]{opacity:.5;cursor:default}
+.photo-download:focus-visible{outline:2px solid #9be4b3;outline-offset:3px}
 .candidate strong{display:block;font-size:15px;line-height:1.35;overflow-wrap:anywhere}.candidate p{color:#819188;font-size:12px;margin:7px 0 13px}
+.candidate-reasons{margin:0 0 14px;padding-left:18px;font-size:12px;line-height:1.6;color:inherit}
 .candidate button{min-height:40px;border:1px solid #b9ddc6;border-radius:10px;background:#e6f5ea;color:#126344;padding:10px 13px;font-weight:750;font-size:12px}.candidate button:hover{background:#d5efdd}
 .score{display:inline-block;margin-bottom:7px;font-size:11px;color:#16845e;font-weight:800}
 .flow-card .card-panel{padding:30px!important}.success-mark{display:grid;place-items:center;width:55px;height:55px;background:#dbf6e5;border-radius:18px;color:#149362;font-size:28px;font-weight:700;margin-bottom:17px}
@@ -166,3 +179,12 @@ footer{font-size:11px;color:#a0afa5;text-align:center;padding:28px 0 5px}footer 
   .attachment-link:hover{background:#274535!important;border-color:#78bd8d!important}
   .poll-option-selectable:hover{border-color:#78bd8d!important}
 }
+
+.status-badge{--status-color:#5566ce;display:inline-flex;align-items:center;gap:8px;padding:7px 11px;border:1px solid var(--status-color);border-radius:12px;color:var(--status-color);font-size:14px;font-weight:700;line-height:1.4;max-width:100%;box-sizing:border-box}
+.status-dot{width:9px;height:9px;border-radius:50%;background:currentColor;flex:none}
+.status-OPEN{--status-color:#087b61}.status-ASSIGNED{--status-color:#3465b5}.status-IN_PROGRESS{--status-color:#986200}.status-VERIFICATION_72H{--status-color:#7d49b6}.status-CLOSED_CONFIRMED{--status-color:#287d36}.status-CLOSED_UNCONFIRMED{--status-color:#687344}.status-REOPENED{--status-color:#b35014}.status-REVIEW_REQUIRED{--status-color:#ad3737}.status-WITHDRAWN{--status-color:#63716c}
+.resident-issue{display:grid;gap:8px}.resident-issue>.status-badge{justify-self:start}.issue-current-status{display:flex;align-items:center;flex-wrap:wrap;gap:10px;margin:0 0 18px}.dispatcher-comment{border:1px solid #b9d7c6;border-left:4px solid #16845c;border-radius:12px;padding:14px;margin:0 0 18px}.dispatcher-comment h3{font-size:16px;margin:0 0 6px}.dispatcher-comment small{color:#526d5d}.dispatcher-comment p{margin:10px 0 0;white-space:pre-wrap;overflow-wrap:anywhere;line-height:1.5}
+@media(prefers-color-scheme:dark){.status-badge{--status-color:#b8bcff}.status-OPEN{--status-color:#89dfb4}.status-ASSIGNED{--status-color:#99c3ff}.status-IN_PROGRESS{--status-color:#f3d482}.status-VERIFICATION_72H{--status-color:#d2b0ff}.status-CLOSED_CONFIRMED{--status-color:#b0e59b}.status-CLOSED_UNCONFIRMED{--status-color:#c9d29e}.status-REOPENED{--status-color:#ffba86}.status-REVIEW_REQUIRED{--status-color:#ffabab}.status-WITHDRAWN{--status-color:#bdcac3}.dispatcher-comment{border-color:#34503e;border-left-color:#89dfb4}.dispatcher-comment small{color:#a8c5b1}}
+
+.status-RESOLVED{--status-color:#16785f}.status-REJECTED{--status-color:#994456}
+@media(prefers-color-scheme:dark){.status-RESOLVED{--status-color:#76d7cf}.status-REJECTED{--status-color:#f3a3c1}}

@@ -16,7 +16,7 @@ import java.util.UUID;
 @Service
 public class ReportService {
     private static final double CANDIDATE_THRESHOLD = 0.82;
-    private static final double REVIEW_THRESHOLD = 0.65;
+    private static final double REVIEW_THRESHOLD = 0.50;
     private static final Duration CANDIDATE_WINDOW = Duration.ofDays(30);
     private final JdbcTemplate jdbc;
     private final TextNormalizer normalizer;
@@ -76,7 +76,8 @@ public class ReportService {
         audit(report.authorId, "REPORT_CREATED", "report", report.id, now);
 
         List<DuplicateCandidate> candidates = retriever.findCandidates(report.houseId, normalized,
-                report.category, locationKey, now.minus(CANDIDATE_WINDOW));
+                report.category, locationKey, now.minus(CANDIDATE_WINDOW)).stream()
+                .filter(candidate -> candidate.score() >= REVIEW_THRESHOLD).toList();
         double best = candidates.isEmpty() ? 0 : candidates.get(0).score();
         if (best >= CANDIDATE_THRESHOLD) {
             report.candidates = candidates;

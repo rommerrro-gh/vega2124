@@ -220,6 +220,14 @@ class MiniAppFlowTest {
                         .header("X-Demo-Session", "true"))
                 .andExpect(status().isBadRequest());
 
+        for (MockMultipartFile unsupported : new MockMultipartFile[] {
+                new MockMultipartFile("file", "document.pdf", "application/pdf", "%PDF-1.7".getBytes()),
+                new MockMultipartFile("file", "video.mp4", "video/mp4", new byte[] {0, 0, 0, 8, 'f', 't', 'y', 'p'})}) {
+            mvc.perform(multipart("/v1/reports/" + firstId + "/attachments")
+                    .file(unsupported).header("X-Demo-Session", "true"))
+                    .andExpect(status().isBadRequest());
+        }
+
         MockMultipartFile file = new MockMultipartFile("file", "evidence.png", "image/png",
                 new byte[]{(byte) 0x89, 'P', 'N', 'G', 13, 10, 26, 10});
         JsonNode uploaded = json(mvc.perform(multipart("/v1/reports/" + firstId + "/attachments")
@@ -291,7 +299,7 @@ class MiniAppFlowTest {
         }
         assertEquals("VERIFICATION_72H", issues.issue(issueId, "demo-resident-1").status().name());
         assertEquals(5, jdbc.queryForObject("SELECT COUNT(*) FROM status_events WHERE issue_id = ?", Integer.class, issueId));
-        assertEquals(1, jdbc.queryForObject("SELECT COUNT(*) FROM notification_outbox WHERE issue_id = ?", Integer.class, issueId));
+        assertEquals(1, jdbc.queryForObject("SELECT COUNT(*) FROM notification_outbox WHERE issue_id = ? AND kind = 'VERIFY_RESULT'", Integer.class, issueId));
         mvc.perform(post("/v1/issues/" + issueId + "/verify").header("X-Demo-Session", "dispatcher")
                         .contentType("application/json").content("{\"confirmed\":true}"))
                 .andExpect(status().isNotFound());
@@ -316,7 +324,7 @@ class MiniAppFlowTest {
                     .andExpect(status().isOk());
         }
         assertEquals(2, jdbc.queryForObject("SELECT verification_round FROM issues WHERE id = ?", Integer.class, issueId));
-        assertEquals(2, jdbc.queryForObject("SELECT COUNT(*) FROM notification_outbox WHERE issue_id = ?", Integer.class, issueId));
+        assertEquals(2, jdbc.queryForObject("SELECT COUNT(*) FROM notification_outbox WHERE issue_id = ? AND kind = 'VERIFY_RESULT'", Integer.class, issueId));
         mvc.perform(post("/v1/issues/" + issueId + "/verify").header("X-Demo-Session", "true")
                         .contentType("application/json").content("{\"confirmed\":true}"))
                 .andExpect(status().isOk());

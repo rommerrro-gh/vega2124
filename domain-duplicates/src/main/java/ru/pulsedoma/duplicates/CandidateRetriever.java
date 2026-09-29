@@ -9,13 +9,15 @@ import java.time.LocalDateTime;
 import java.time.ZoneOffset;
 import java.util.Arrays;
 import java.util.Comparator;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
+import java.util.Objects;
 import java.util.stream.Collectors;
 
 @Repository
 public class CandidateRetriever {
+    private static final Set<String> STOP_WORDS = Set.of("не", "в", "во", "на", "и", "а", "у", "к", "с", "со", "по", "из", "за", "для", "но", "это");
+    private final LocationMatcher locations = new LocationMatcher();
     private final JdbcTemplate jdbc;
 
     public CandidateRetriever(JdbcTemplate jdbc) {
@@ -29,26 +31,30 @@ public class CandidateRetriever {
         }
         String match = Arrays.stream(normalizedText.split("\\s+"))
                 .filter(token -> token.matches("[\\p{L}\\p{N}]+"))
+                .filter(token -> !STOP_WORDS.contains(token))
                 .distinct().limit(12)
                 .map(token -> "\"" + token + "\"")
                 .collect(Collectors.joining(" OR "));
         if (match.isEmpty()) return List.of();
         Instant now = Instant.now();
         List<DuplicateCandidate> found = jdbc.query("""
-                SELECT i.id, i.category, i.normalized_text, i.created_at, bm25(issues_fts) AS rank
+                SELECT i.id, i.category, i.normalized_text, i.created_at,
+                       COALESCE(json_extract(i.zone_json, '$.label'), json_extract(i.zone_json, '$.key')) AS location,
+                       bm25(issues_fts) AS rank
                 FROM issues_fts JOIN issues i ON i.rowid = issues_fts.rowid
                 WHERE issues_fts MATCH ? AND i.house_id = ?
                   AND i.status IN ('DRAFT', 'OPEN', 'IN_PROGRESS', 'ASSIGNED', 'REOPENED')
                   AND (? IS NULL OR i.category = ?)
-                  AND (? IS NULL OR json_extract(i.zone_json, '$.key') = ?)
                   AND datetime(i.created_at) >= datetime(?)
                   AND datetime(i.created_at) <= datetime(?)
-                ORDER BY rank LIMIT 10
+                ORDER BY rank LIMIT 100
                 """, (rs, row) -> {
             String candidateText = rs.getString("normalized_text");
-            Set<String> input = new HashSet<>(Arrays.asList(normalizedText.split("\\s+")));
+            LocationMatcher.Match place = locations.compare(category, locationKey, rs.getString("location"));
+            if (!place.compatible()) return null;
+            Set<String> input = terms(normalizedText);
             Set<String> other = candidateText == null || candidateText.isBlank()
-                    ? Set.of() : new HashSet<>(Arrays.asList(candidateText.split("\\s+")));
+                    ? Set.of() : terms(candidateText);
             long shared = input.stream().filter(other::contains).count();
             double text = other.isEmpty() ? 0 : (double) shared / (input.size() + other.size() - shared);
             boolean sameCategory = category != null && category.equals(rs.getString("category"));
@@ -57,16 +63,22 @@ public class CandidateRetriever {
             double score = locationKey == null
                     ? (category == null || category.isBlank() ? 0.7 * text + 0.3 * recency
                        : 0.4 * (sameCategory ? 1 : 0) + 0.4 * text + 0.2 * recency)
-                    : new DuplicateScorer().score(sameCategory ? 1 : 0, 1, recency, text);
+                    : new DuplicateScorer().score(sameCategory ? 1 : 0, place.score(), recency, text);
             List<String> reasons = new java.util.ArrayList<>();
+            reasons.add("same_house");
             if (sameCategory) reasons.add("same_category");
-            if (locationKey != null) reasons.add("same_location");
+            if (locationKey != null) reasons.addAll(place.reasons());
             if (shared > 0) reasons.add("shared_terms:" + shared);
             if (recency >= 0.8) reasons.add("recent_issue");
             return new DuplicateCandidate(rs.getString("id"), Math.round(score * 10000) / 10000.0,
                     List.copyOf(reasons));
-        }, match, houseId, category, category, locationKey, locationKey, startedAt.toString(), now.toString());
-        return found.stream().sorted(Comparator.comparingDouble(DuplicateCandidate::score).reversed()).toList();
+        }, match, houseId, category, category, startedAt.toString(), now.toString());
+        return found.stream().filter(Objects::nonNull).sorted(Comparator.comparingDouble(DuplicateCandidate::score).reversed())
+                .limit(10).toList();
+    }
+
+    private static Set<String> terms(String text) {
+        return Arrays.stream(text.split("\\s+")).filter(token -> !STOP_WORDS.contains(token)).collect(Collectors.toSet());
     }
 
     private static Instant parseSqliteTime(String value) {

@@ -31,7 +31,7 @@ public class AttachmentService {
     @Transactional
     public AttachmentView upload(String reportId, String userId, byte[] bytes, String mime) {
         if (bytes == null || bytes.length == 0 || bytes.length > MAX_BYTES || !valid(bytes, mime)) {
-            throw new BusinessException("INVALID_ATTACHMENT", "Only JPEG, PNG, PDF or MP4 up to 10 MB is supported");
+            throw new BusinessException("INVALID_ATTACHMENT", "Пока можно прикладывать только фото JPEG или PNG размером до 10 МБ");
         }
         Integer count = jdbc.queryForObject("""
                 SELECT COUNT(*) FROM reports r JOIN house_memberships m ON m.house_id = r.house_id
@@ -91,8 +91,6 @@ public class AttachmentService {
                     && new String(bytes, 1, 3, StandardCharsets.US_ASCII).equals("PNG")
                     && (bytes[4] & 255) == 13 && (bytes[5] & 255) == 10
                     && (bytes[6] & 255) == 26 && (bytes[7] & 255) == 10;
-            case "application/pdf" -> bytes.length >= 5 && new String(bytes, 0, 5, StandardCharsets.US_ASCII).equals("%PDF-");
-            case "video/mp4" -> bytes.length >= 8 && new String(bytes, 4, 4, StandardCharsets.US_ASCII).equals("ftyp");
             default -> false;
         };
     }

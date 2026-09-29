@@ -56,7 +56,11 @@ public class VerificationJobs {
                             AND i.status = 'VERIFICATION_72H')
                         OR (o.kind GLOB 'PLANNED_DATE_*' AND i.status IN
                             ('DRAFT', 'OPEN', 'ASSIGNED', 'IN_PROGRESS', 'REOPENED', 'REVIEW_REQUIRED'))
+                        OR o.kind GLOB 'STATUS_CHANGE_*'
                       )
+                      AND EXISTS (SELECT 1 FROM house_memberships m
+                          WHERE m.house_id = i.house_id AND m.user_id = o.recipient_user_id
+                            AND m.role = 'RESIDENT' AND m.verification_status = 'VERIFIED' AND m.access_status = 'ACTIVE')
                       AND datetime(o.next_attempt_at) <= datetime('now')
                     ORDER BY o.next_attempt_at LIMIT 10
                     """);
