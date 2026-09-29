@@ -4,6 +4,10 @@ import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
+import jakarta.validation.constraints.Min;
+import jakarta.validation.constraints.Max;
+import jakarta.validation.constraints.AssertTrue;
+import ru.pulsedoma.duplicates.LocationFeatures;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.validation.annotation.Validated;
@@ -12,7 +16,7 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
-import ru.pulsedoma.duplicates.DuplicateCandidate;
+import org.springframework.transaction.annotation.Transactional;
 import ru.pulsedoma.issues.CreateReportCommand;
 import ru.pulsedoma.issues.Report;
 import ru.pulsedoma.issues.ReportService;
@@ -37,11 +41,13 @@ public class ReportsController {
 
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
+    @Transactional
     public CreateReportResponse create(@Valid @RequestBody CreateReportRequest request, Principal principal) {
         Report report = reports.createReport(new CreateReportCommand(
                 request.houseId(), principal.getName(), request.text(), request.category().name(),
-                request.location(), request.occurredAt()));
-        return new CreateReportResponse(report.id, report.correlationId, report.candidates);
+                request.location(), request.occurredAt(), request.locationFeatures() == null ? null : request.locationFeatures().features()));
+        return new CreateReportResponse(report.id, report.correlationId, report.candidates.stream().map(candidate ->
+                new CandidateResponse(candidate.issueId(), candidate.score(), candidate.reasons(), issues.candidateSummary(candidate.issueId(), principal.getName()))).toList());
     }
 
     @PostMapping("/{id}/withdraw")
@@ -54,9 +60,20 @@ public class ReportsController {
     public record CreateReportRequest(@NotBlank String houseId,
                                       @NotBlank @Size(max = 4000) String text,
                                       @NotNull ReportCategory category,
-                                      @NotBlank @Size(max = 160) String location,
-                                      Instant occurredAt) {}
+                                      @Size(max = 160) String location,
+                                      Instant occurredAt, @Valid LocationRequest locationFeatures) {
+        @AssertTrue(message = "Укажите место проблемы")
+        public boolean isLocationPresent() { return locationFeatures != null || location != null && !location.isBlank(); }
+    }
+    public record LocationRequest(@NotNull LocationFeatures.Area area,
+                                  @Min(1) @Max(100) Integer entrance, @Min(1) @Max(200) Integer floor,
+                                  LocationFeatures.LiftType liftType, @Min(1) @Max(100) Integer liftNumber,
+                                  LocationFeatures.Coverage coverage, LocationFeatures.OutdoorObject object,
+                                  @Min(1) @Max(100) Integer site, @Size(max = 160) String details) {
+        LocationFeatures features() { return new LocationFeatures(area, entrance, floor, liftType, liftNumber, coverage, object, site, details); }
+    }
     public record CreateReportResponse(String reportId, String correlationId,
-                                       List<DuplicateCandidate> candidates) {}
+                                       List<CandidateResponse> candidates) {}
+    public record CandidateResponse(String issueId, double score, List<String> reasons, MiniAppService.CandidateSummary issue) {}
     public record WithdrawReportRequest(@NotBlank @Size(max = 1000) String reason) {}
 }

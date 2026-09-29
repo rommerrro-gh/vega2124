@@ -1191,13 +1191,31 @@ components:
         houseId: {type: string, minLength: 1}
     CreateReportRequest:
       type: object
-      required: [houseId, text, category, location]
+      required: [houseId, text, category]
+      anyOf:
+        - required: [locationFeatures]
+        - required: [location]
       properties:
         houseId: {type: string, minLength: 1}
         text: {type: string, minLength: 1, maxLength: 4000}
         category: {type: string, enum: [LIGHTING, WATER, HEATING, ELEVATOR, ENTRANCE_CLEANING, YARD_CLEANING, WASTE_REMOVAL, PLAYGROUND, OTHER]}
-        location: {type: string, minLength: 1, maxLength: 160}
+        location: {type: string, minLength: 1, maxLength: 160, description: Legacy free text place}
+        locationFeatures: {$ref: '#/components/schemas/LocationFeatures'}
         occurredAt: {type: string, format: date-time, description: Optional occurrence time; defaults to server receipt time}
+    LocationFeatures:
+      type: object
+      required: [area]
+      description: Category-specific place. Entrance/floor required for local indoor problems; liftType required for elevators; coverage required for entrance cleaning. Apartment numbers are not collected.
+      properties:
+        area: {type: string, enum: [ENTRANCE, APARTMENT, BASEMENT, YARD, WHOLE_HOUSE, OTHER]}
+        entrance: {type: [integer, 'null'], minimum: 1, maximum: 100}
+        floor: {type: [integer, 'null'], minimum: 1, maximum: 200}
+        liftType: {type: [string, 'null'], enum: [PASSENGER, CARGO, UNKNOWN, null]}
+        liftNumber: {type: [integer, 'null'], minimum: 1, maximum: 100}
+        coverage: {type: [string, 'null'], enum: [LOCAL, ENTIRE, null]}
+        object: {type: [string, 'null'], enum: [SWING, SLIDE, SANDBOX, OTHER, WHOLE_PLAYGROUND, null]}
+        site: {type: [integer, 'null'], minimum: 1, maximum: 100}
+        details: {type: [string, 'null'], maxLength: 160}
     CreateReportResponse:
       type: object
       required: [reportId, correlationId, candidates]
@@ -1210,6 +1228,17 @@ components:
             type: object
             required: [issueId, score, reasons]
             properties:
+              issue:
+                type: object
+                description: Preview for a verified resident of the same house, without attachments or author data
+                properties:
+                  id: {type: string}
+                  houseId: {type: string}
+                  address: {type: string}
+                  category: {type: string}
+                  description: {type: string}
+                  location: {type: string}
+                  participants: {type: integer}
               issueId: {type: string}
               score: {type: number, format: double}
               reasons:

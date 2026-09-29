@@ -32,14 +32,14 @@ class ReportServiceTest {
 
     @Test
     void middleScoreRequiresReviewWithoutDraft() {
-        Report report = createWithScore(0.50);
+        Report report = createWithScore(0.65);
         assertEquals(1, report.candidates.size());
         assertTrue(auditContains("DUPLICATE_REVIEW_REQUIRED"));
     }
 
     @Test
     void lowScoreWaitsForResidentDecision() {
-        Report report = createWithScore(0.49);
+        Report report = createWithScore(0.64);
         assertTrue(report.candidates.isEmpty());
         assertTrue(!sqlContains("INSERT INTO issues"));
     }
@@ -52,8 +52,8 @@ class ReportServiceTest {
     void filtersEveryCandidateEvenWhenTheBestScoreIsHigh() {
         Report report = createWithCandidates(List.of(
                 new DuplicateCandidate("strong", .9, List.of()),
-                new DuplicateCandidate("boundary", .5, List.of()),
-                new DuplicateCandidate("weak", .49, List.of())));
+                new DuplicateCandidate("boundary", .65, List.of()),
+                new DuplicateCandidate("weak", .64, List.of())));
         assertEquals(List.of("strong", "boundary"), report.candidates.stream().map(DuplicateCandidate::issueId).toList());
     }
 

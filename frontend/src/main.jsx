@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { createPortal } from "react-dom";
-import { MaxUI, Panel, Button as MaxButton, CellSimple } from "@maxhub/max-ui";
+import { MaxUI, Panel, Button as MaxButton } from "@maxhub/max-ui";
 import "@maxhub/max-ui/dist/styles.css";
 import "./theme.css";
 
@@ -23,6 +23,10 @@ const categoryLabels = {
   PLAYGROUND: "Детская площадка", OTHER: "Другое",
 };
 const candidateReasonLabels = {
+  structured_location: "Место сравнивается по выбранным полям", same_lift_type: "Тот же тип лифта",
+  lift_type_unspecified: "Тип лифта не уточнён — проверьте совпадение", whole_house_scope: "Общая проблема дома может включать ваше место",
+  whole_entrance_scope: "Общая уборка подъезда может включать этот этаж", same_waste_site: "Та же мусорная площадка",
+  outdoor_place_unspecified: "Место во дворе не уточнено — проверьте, что проблема та же", legacy_location: "В старой заявке место указано текстом — проверьте его",
   same_house: "Тот же дом", same_category: "Та же категория", same_location: "Совпадает место",
   same_entrance: "Тот же подъезд", same_floor: "Тот же этаж",
   elevator_floor_ignored: "Для лифта этаж может отличаться", floor_unspecified: "В одной заявке этаж не указан — проверьте место",
@@ -328,6 +332,53 @@ function AttachmentList({ attachments, role, onError }) {
   })}</div>{photo && <PhotoPreview key={photo.id} attachment={photo} role={role} onClose={() => setPhoto(null)} />}</>;
 }
 
+const placeAreas = { ENTRANCE: "Подъезд", APARTMENT: "В квартире", BASEMENT: "Подвал", YARD: "Двор", WHOLE_HOUSE: "Весь дом", OTHER: "Другое место" };
+function defaultPlace(category) {
+  if (category === "ELEVATOR") return { area: "ENTRANCE", liftType: "UNKNOWN" };
+  if (category === "ENTRANCE_CLEANING") return { area: "ENTRANCE", coverage: "ENTIRE" };
+  if (["YARD_CLEANING", "WASTE_REMOVAL", "PLAYGROUND"].includes(category)) return { area: "YARD" };
+  return { area: ["WATER", "HEATING"].includes(category) ? "APARTMENT" : "ENTRANCE" };
+}
+function PlaceFields({ category, value, onChange, passport, disabled }) {
+  if (!category) return <p className="hint">Выберите категорию — покажем нужные поля места.</p>;
+  const update = (key, next) => onChange(current => ({ ...current, [key]: next }));
+  const count = key => {
+    const n = Number(passport?.fields?.find(field => field.key === key)?.value);
+    return Number.isInteger(n) && n > 0 && n <= 200 ? n : null;
+  };
+  const numberField = (key, label, total, required = true) => <Field key={key} id={`place-${key}`} label={label}>
+    {total && total <= 30 ? <select id={`place-${key}`} required={required} disabled={disabled} value={value[key] ?? ""} onChange={event => update(key, event.target.value ? Number(event.target.value) : null)}>
+      <option value="">{required ? "Выберите номер" : "Не указан"}</option>{Array.from({ length: total }, (_, i) => <option key={i + 1} value={i + 1}>{i + 1}</option>)}
+    </select> : <input id={`place-${key}`} type="number" inputMode="numeric" min="1" max={total || (key === "floor" ? 200 : 100)} required={required} disabled={disabled} value={value[key] ?? ""} onChange={event => update(key, event.target.value ? Number(event.target.value) : null)} placeholder={required ? "Введите номер" : "Необязательно"} />}
+  </Field>;
+  const areas = category === "LIGHTING" ? ["ENTRANCE", "YARD"] : category === "WATER" ? ["APARTMENT", "ENTRANCE", "BASEMENT", "YARD"]
+    : category === "HEATING" ? ["APARTMENT", "ENTRANCE", "WHOLE_HOUSE"] : category === "OTHER" ? ["ENTRANCE", "YARD", "BASEMENT", "WHOLE_HOUSE", "OTHER"] : [];
+  const indoors = ["ENTRANCE", "APARTMENT"].includes(value.area);
+  const needFloor = indoors && category !== "ELEVATOR" && (category !== "ENTRANCE_CLEANING" || value.coverage === "LOCAL");
+  return <div className="place-fields">
+    {!!areas.length && <Field id="place-area" label="Где находится проблема?"><select id="place-area" value={value.area} disabled={disabled} onChange={event => onChange({ area: event.target.value })}>{areas.map(area => <option key={area} value={area}>{placeAreas[area]}</option>)}</select></Field>}
+    {indoors && numberField("entrance", "Подъезд", count("entrance_count"))}
+    {category === "ENTRANCE_CLEANING" && <Field id="place-coverage" label="Область уборки"><select id="place-coverage" disabled={disabled} value={value.coverage} onChange={event => onChange(current => ({ ...current, coverage: event.target.value, floor: null }))}><option value="ENTIRE">Весь подъезд</option><option value="LOCAL">Конкретный этаж</option></select></Field>}
+    {needFloor && numberField("floor", "Этаж", count("floor_count"), category !== "OTHER")}
+    {category === "ELEVATOR" && <><Field id="place-lift-type" label="Тип лифта"><select id="place-lift-type" value={value.liftType} disabled={disabled} onChange={event => update("liftType", event.target.value)}><option value="UNKNOWN">Не знаю</option><option value="PASSENGER">Пассажирский</option><option value="CARGO">Грузовой</option></select></Field>{numberField("liftNumber", "Номер лифта, если одинаковых несколько", null, false)}</>}
+    {category === "WASTE_REMOVAL" && <>{numberField("site", "Номер мусорной площадки, если их несколько", null, false)}<p className="hint">Если площадка одна или её номер неизвестен, оставьте поле пустым.</p></>}
+    {category === "PLAYGROUND" && <Field id="place-object" label="Объект площадки — необязательно"><select id="place-object" disabled={disabled} value={value.object || ""} onChange={event => update("object", event.target.value || null)}><option value="">Не указан</option><option value="SWING">Качели</option><option value="SLIDE">Горка</option><option value="SANDBOX">Песочница</option><option value="WHOLE_PLAYGROUND">Вся площадка</option><option value="OTHER">Другой объект</option></select></Field>}
+    {category === "OTHER" && value.area === "OTHER" && <Field id="place-details" label="Уточните место"><input id="place-details" maxLength="160" required disabled={disabled} value={value.details || ""} onChange={event => update("details", event.target.value)} placeholder="Например, вход со стороны дороги" /></Field>}
+    {["YARD_CLEANING", "PLAYGROUND"].includes(category) && <p className="hint">Дом уже выбран. Опишите проблему ниже, чтобы отличить её от других обращений.</p>}
+  </div>;
+}
+function IssueCard({ issue, onClick }) {
+  const overdue = issueOverdue(issue);
+  return <button type="button" className="issue-summary-card" onClick={onClick}>
+    <StatusBadge status={issue.status} />
+    {issue.mergedForMe && <span className="issue-merge-label">Объединена с другой заявкой</span>}
+    <span className="issue-summary-title">{issue.location || issue.address || "Место не указано"}</span>
+    <span className="issue-summary-description">{issue.description || "Активных обращений нет"}</span>
+    {issue.plannedDate && <span className={`issue-summary-deadline ${overdue ? "is-overdue" : ""}`}>{overdue ? "Срок прошёл · до " : "Выполнить до "}{passportDate(`${issue.plannedDate}T12:00:00`)}</span>}
+    <svg className="issue-summary-chevron" viewBox="0 0 16 16" aria-hidden="true"><path d="m6 3 5 5-5 5" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" /></svg>
+  </button>;
+}
+
 function StatusBadge({ status }) {
   return <span className={`status-badge status-${status}`}><span className="status-dot" aria-hidden="true" />{statusLabels[status] || status}</span>;
 }
@@ -401,6 +452,8 @@ function PollCard({ poll, onVote, busy }) {
 function Resident() {
   const [initialLoading, setInitialLoading] = useState(true);
   const formRef = useRef(null);
+  const [reportCategory, setReportCategory] = useState("");
+  const [placeFeatures, setPlaceFeatures] = useState({});
   const [houses, setHouses] = useState([]);
   const [selectedHouseId, setSelectedHouseId] = useState("");
   const [passport, setPassport] = useState(null);
@@ -487,7 +540,7 @@ function Resident() {
       if (!id) {
         report = await request("/v1/reports", { method: "POST", body: JSON.stringify({
           houseId: selectedHouseId, category: form.elements.category.value,
-          location: form.elements.location.value.trim(),
+          locationFeatures: placeFeatures,
           text: form.elements.description.value.trim(),
         }) });
         id = report.reportId;
@@ -499,7 +552,7 @@ function Resident() {
         setUploaded(index + 1);
       }
       const details = await Promise.all(report.candidates.map(async candidate => ({
-        ...candidate, issue: await request(`/v1/issues/${encodeURIComponent(candidate.issueId)}`),
+        ...candidate, issue: candidate.issue || await request(`/v1/issues/${encodeURIComponent(candidate.issueId)}`),
       })));
       setCandidates(details); setStep("decision");
       window.scrollTo({ top: 0, behavior: "smooth" });
@@ -545,6 +598,7 @@ function Resident() {
 
   function again() {
     setReportId(null); setReportData(null); setUploaded(0); setCandidates([]); setIssue(null); setIssueMessage("");
+    setReportCategory(""); setPlaceFeatures({});
     setStep("form"); setShowReportForm(true); setWithdrawReason(""); setWithdrawTargetId(null); setNotice("");
     requestAnimationFrame(() => formRef.current?.reset());
   }
@@ -558,15 +612,15 @@ function Resident() {
   return <main className="shell">
     <Brand role="Жителю" /><div className="resident-hero"><Hero /></div><Notice message={notice} />
     <GuidedDemoEntry />
-    {selectedHouse && <div className="house-switcher"><span className="house-switcher-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M3.5 10.5 12 3.5l8.5 7v9a1 1 0 0 1-1 1h-15a1 1 0 0 1-1-1z"/><path d="M9.5 20.5v-6h5v6"/></svg></span><div className="house-switcher-copy"><span>Ваш дом</span>{houses.length > 1 ? <select aria-label="Выбранный дом" value={selectedHouseId} disabled={step !== "form" || !!reportId} onChange={event => { setSelectedHouseId(event.target.value); request("/v1/me/active-house", { method: "PUT", body: JSON.stringify({ houseId: event.target.value }) }).catch(fail); }}>{houses.map(house => <option key={house.id} value={house.id}>{house.address}</option>)}</select> : <strong>{selectedHouse.address}</strong>}</div></div>}
+    {selectedHouse && <div className="house-switcher"><span className="house-switcher-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M3.5 10.5 12 3.5l8.5 7v9a1 1 0 0 1-1 1h-15a1 1 0 0 1-1-1z"/><path d="M9.5 20.5v-6h5v6"/></svg></span><div className="house-switcher-copy"><span>Ваш дом</span>{houses.length > 1 ? <select aria-label="Выбранный дом" value={selectedHouseId} disabled={step !== "form" || !!reportId} onChange={event => { setSelectedHouseId(event.target.value); setPlaceFeatures(defaultPlace(reportCategory)); request("/v1/me/active-house", { method: "PUT", body: JSON.stringify({ houseId: event.target.value }) }).catch(fail); }}>{houses.map(house => <option key={house.id} value={house.id}>{house.address}</option>)}</select> : <strong>{selectedHouse.address}</strong>}</div></div>}
     {!!awaitingVerification.length && step === "form" && <div className="priority-notice"><div><strong>Подтвердите выполнение работ</strong><p>{countLabel(awaitingVerification.length, "заявка ждёт", "заявки ждут", "заявок ждут")} вашего ответа.</p></div><Button mode="secondary" type="button" onClick={() => showIssue(awaitingVerification[0])}>Открыть</Button></div>}
     {selectedHouse && canReport && step === "form" && !showReportForm && <div className="start-action"><div><strong>Заметили проблему?</strong><p>Проверьте похожие заявки и сообщите о новой.</p></div><Button mode="primary" type="button" onClick={() => setShowReportForm(true)}>Сообщить о проблеме <span aria-hidden="true">→</span></Button></div>}
     <div className="content-grid">
       {step === "form" && showReportForm && canReport && <Card className="form-card">
         <div className="form-title"><SectionHeading title="Сообщить о проблеме" subtitle={`Дом: ${selectedHouse?.address || "не выбран"}`} /><button className="form-close" type="button" disabled={busy} onClick={() => reportId ? withdrawReport(reportId, "Создание заявки отменено пользователем", "Создание заявки отменено.") : setShowReportForm(false)}>Отмена</button></div>
         <form ref={formRef} onSubmit={submitReport}>
-          <Field id="category" label="Категория"><select id="category" name="category" required disabled={!!reportId} defaultValue=""><option value="">Выберите категорию</option><option value="LIGHTING">Освещение</option><option value="WATER">Вода</option><option value="HEATING">Отопление</option><option value="ELEVATOR">Лифт</option><option value="ENTRANCE_CLEANING">Уборка подъезда</option><option value="YARD_CLEANING">Уборка придомовой территории</option><option value="WASTE_REMOVAL">Вывоз мусора</option><option value="PLAYGROUND">Детская площадка</option><option value="OTHER">Другое</option></select></Field>
-          <Field id="location" label="Где именно?"><input id="location" name="location" maxLength="160" placeholder="Например, подъезд 1, этаж 2" required disabled={!!reportId} /></Field>
+          <Field id="category" label="Категория"><select id="category" name="category" required disabled={!!reportId} value={reportCategory} onChange={event => { setReportCategory(event.target.value); setPlaceFeatures(defaultPlace(event.target.value)); }}><option value="">Выберите категорию</option><option value="LIGHTING">Освещение</option><option value="WATER">Вода</option><option value="HEATING">Отопление</option><option value="ELEVATOR">Лифт</option><option value="ENTRANCE_CLEANING">Уборка подъезда</option><option value="YARD_CLEANING">Уборка придомовой территории</option><option value="WASTE_REMOVAL">Вывоз мусора</option><option value="PLAYGROUND">Детская площадка</option><option value="OTHER">Другое</option></select></Field>
+          <PlaceFields category={reportCategory} value={placeFeatures} onChange={setPlaceFeatures} passport={passport} disabled={!!reportId} />
           <Field id="appeal-time" label="Дата и время обращения"><output id="appeal-time" className="automatic-time">Запишем автоматически при отправке обращения</output></Field>
           <Field id="description" label="Что произошло?"><textarea id="description" name="description" maxLength="4000" minLength="8" placeholder="Опишите, что случилось и как это влияет на жителей" required disabled={!!reportId} /></Field>
           <Field id="attachments" label="Фото"><input id="attachments" name="attachments" type="file" accept="image/jpeg,image/png" multiple /></Field>
@@ -575,7 +629,7 @@ function Resident() {
         </form>
       </Card>}
       {step === "form" && selectedHouse && <DisclosureCard className="issues-card" title="Мои заявки" summary={houseIssues.length ? `${countLabel(houseIssues.length, "заявка", "заявки", "заявок")} по выбранному дому` : "Пока нет заявок"}>
-        <div className="item-list">{houseIssues.length ? houseIssues.map(item => <div key={item.id} className="resident-issue"><StatusBadge status={item.status} /><CellSimple className="issue-cell" title={item.location || item.address} subtitle={item.description} overline={item.mergedForMe ? "Объединена с другой заявкой" : undefined} showChevron onClick={() => showIssue(item)} /></div>) : <p className="muted empty">Заявок пока нет.</p>}</div>
+        <div className="item-list">{houseIssues.length ? houseIssues.map(item => <IssueCard key={item.id} issue={item} onClick={() => showIssue(item)} />) : <p className="muted empty">Заявок пока нет.</p>}</div>
         <Button mode="secondary" className="refresh-action" type="button" stretched onClick={() => refreshIssues().catch(fail)}>↻ Обновить список</Button>
       </DisclosureCard>}
       {step === "form" && canReport && <DisclosureCard title="Опросы дома" summary={openPolls.length ? `${countLabel(openPolls.length, "опрос ждёт", "опроса ждут", "опросов ждут")} вашего ответа` : polls.length ? countLabel(polls.length, "опрос", "опроса", "опросов") : "Опросов пока нет"}><div className="poll-list">{polls.map(poll => <PollCard key={poll.id} poll={poll} onVote={voteInPoll} busy={pollBusy} />)}{!polls.length && <p className="muted">В выбранном доме пока нет опросов.</p>}<Button mode="secondary" type="button" disabled={pollBusy} onClick={refreshPolls}>Обновить опросы</Button></div></DisclosureCard>}
@@ -817,7 +871,7 @@ function Dispatcher() {
     <div className="content-grid">
       <Card className="queue-card"><SectionHeading number="01" title="Очередь заявок" subtitle="Обращения жителей по вашему дому" />
         <Field id="house" label="Дом"><select id="house" value={houseId} onChange={event => setHouseId(event.target.value)}><option value="">Выберите дом</option>{houses.map(h => <option value={h.id} key={h.id}>{h.address}</option>)}</select></Field>
-        <div className="item-list">{queue.length ? queue.map(item => <div key={item.id} className="queue-item"><CellSimple className="issue-cell" title={item.location || "Место не указано"} subtitle={item.description || "Все обращения отозваны"} overline={statusLabels[item.status] || item.status} showChevron onClick={() => showIssue(item.id)} />{item.plannedDate && <small className={issueOverdue(item) ? "deadline-red" : ""}>{issueOverdue(item) ? "Просрочено: " : "План до: "}{passportDate(`${item.plannedDate}T12:00:00`)}</small>}</div>) : <p className="muted empty">Новых заявок пока нет.</p>}</div>
+        <div className="item-list">{queue.length ? queue.map(item => <IssueCard key={item.id} issue={item} onClick={() => showIssue(item.id)} />) : <p className="muted empty">Новых заявок пока нет.</p>}</div>
         <Button mode="secondary" className="refresh-action" type="button" stretched disabled={!houseId} onClick={() => refreshQueue(houseId).catch(fail)}>↻ Обновить очередь</Button>
       </Card>
       {issue && <Card className="detail-panel"><SectionHeading number="02" title="Карточка заявки" subtitle="Детали обращения и следующий шаг" />

@@ -151,6 +151,25 @@ public class MiniAppService {
                 .stream().findFirst().orElseThrow(() -> new BusinessException("INVITATION_INVALID", "Invitation is expired or unavailable"));
     }
 
+    public record CandidateSummary(String id, String houseId, String address, String category,
+                                   String description, String location, int participants) {}
+    public CandidateSummary candidateSummary(String issueId, String userId) {
+        List<CandidateSummary> found = jdbc.query("""
+                SELECT i.id, i.house_id, h.address, i.category, json_extract(i.zone_json, '$.label') AS location,
+                    COALESCE((SELECT r.raw_text FROM issue_reports ir JOIN reports r ON r.id = ir.report_id
+                        WHERE ir.issue_id = i.id AND ir.unlinked_at IS NULL AND r.withdrawn_at IS NULL
+                        ORDER BY ir.linked_at, ir.id LIMIT 1), '') AS description,
+                    (SELECT count(*) FROM issue_participants p WHERE p.issue_id = i.id) AS participants
+                FROM issues i JOIN houses h ON h.id = i.house_id
+                WHERE i.id = ? AND i.status IN ('DRAFT','OPEN','ASSIGNED','IN_PROGRESS','REOPENED')
+                  AND EXISTS (SELECT 1 FROM house_memberships m WHERE m.house_id = i.house_id
+                    AND m.user_id = ? AND m.role = 'RESIDENT' AND m.verification_status = 'VERIFIED' AND m.access_status = 'ACTIVE')
+                """, (rs, row) -> new CandidateSummary(rs.getString("id"), rs.getString("house_id"), rs.getString("address"),
+                rs.getString("category"), rs.getString("description"), rs.getString("location"), rs.getInt("participants")), issueId, userId);
+        if (found.isEmpty()) throw new BusinessException("ISSUE_NOT_FOUND", "Candidate is not available");
+        return found.get(0);
+    }
+
     public IssueView issue(String issueId, String userId) {
         List<IssueView> found = jdbc.query("""
                 SELECT i.id, i.house_id, h.address, i.category, i.status,

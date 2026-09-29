@@ -94,6 +94,24 @@ public final class LocationMatcher {
                 ? new Match(true, 1, List.of("same_location")) : DIFFERENT;
     }
 
+    public LocationFeatures legacyFeatures(String category, String label) {
+        String text = normalize(label);
+        var area = text.contains("весь дом") ? LocationFeatures.Area.WHOLE_HOUSE
+                : text.contains("квартир") ? LocationFeatures.Area.APARTMENT
+                : text.contains("подвал") ? LocationFeatures.Area.BASEMENT
+                : text.contains("двор") || text.contains("территор") || !objects(text).isEmpty() ? LocationFeatures.Area.YARD
+                : text.contains("подъезд") ? LocationFeatures.Area.ENTRANCE : LocationFeatures.Area.OTHER;
+        var type = lift(text) == Lift.CARGO ? LocationFeatures.LiftType.CARGO
+                : lift(text) == Lift.PASSENGER ? LocationFeatures.LiftType.PASSENGER : LocationFeatures.LiftType.UNKNOWN;
+        var object = objects(text).contains(ObjectType.SWING) ? LocationFeatures.OutdoorObject.SWING
+                : objects(text).contains(ObjectType.SLIDE) ? LocationFeatures.OutdoorObject.SLIDE
+                : objects(text).contains(ObjectType.SANDBOX) ? LocationFeatures.OutdoorObject.SANDBOX : null;
+        return new LocationFeatures(area, number(text, "подъезд"), number(text, "этаж"),
+                category.equals("ELEVATOR") ? type : null, number(text, "лифт"),
+                category.equals("ENTRANCE_CLEANING") ? text.contains("весь подъезд") ? LocationFeatures.Coverage.ENTIRE : LocationFeatures.Coverage.LOCAL : null,
+                object, category.equals("WASTE_REMOVAL") ? number(text, "площадка|контейнер") : null, label);
+    }
+
     private static String normalize(String text) {
         String cleaned = (text == null ? "" : text.toLowerCase(java.util.Locale.ROOT)).replace('ё', 'е')
                 .replaceAll("[^\\p{L}\\p{N}]+", " ")

@@ -56,6 +56,31 @@ class MiniAppFlowTest {
     @Autowired MiniAppService issues;
 
     @Test
+    void structuredPlacesValidateAndCandidatesHaveSafePreview() throws Exception {
+        String payload = """
+                {"houseId":"demo-house-1","category":"ELEVATOR","text":"Дверь кабины не открывается",
+                 "locationFeatures":{"area":"ENTRANCE","entrance":1,"liftType":"CARGO","liftNumber":97}}
+                """;
+        var first = json(mvc.perform(post("/v1/reports").header("X-Demo-Session", "true")
+                .contentType("application/json").content(payload)).andExpect(status().isCreated()).andReturn().getResponse().getContentAsByteArray());
+        var created = json(mvc.perform(post("/v1/issues").header("X-Demo-Session", "true").contentType("application/json")
+                .content("{\"reportId\":\"" + first.path("reportId").asText() + "\"}"))
+                .andExpect(status().isOk()).andReturn().getResponse().getContentAsByteArray());
+        var second = json(mvc.perform(post("/v1/reports").header("X-Demo-Session", "true")
+                .contentType("application/json").content(payload.replace("Дверь кабины не открывается", "Невозможно подняться наверх")))
+                .andExpect(status().isCreated()).andReturn().getResponse().getContentAsByteArray());
+        var summary = second.path("candidates").get(0).path("issue");
+        assertEquals(created.path("id").asText(), summary.path("id").asText());
+        assertFalse(summary.has("attachments"));
+        assertFalse(summary.has("reports"));
+        assertTrue(summary.path("location").asText().contains("грузовой"));
+        mvc.perform(post("/v1/reports").header("X-Demo-Session", "true").contentType("application/json")
+                .content(payload.replace("\"entrance\":1", "\"entrance\":0"))).andExpect(status().isBadRequest());
+        mvc.perform(post("/v1/reports").header("X-Demo-Session", "true").contentType("application/json")
+                .content(payload.replace("\"liftType\":\"CARGO\",", ""))).andExpect(status().isBadRequest());
+    }
+
+    @Test
     void miniAppCanBeEmbeddedByMaxWebClient() throws Exception {
         mvc.perform(get("/miniapp/index.html"))
                 .andExpect(status().isOk())

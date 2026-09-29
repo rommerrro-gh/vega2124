@@ -16,7 +16,7 @@ import java.util.UUID;
 @Service
 public class ReportService {
     private static final double CANDIDATE_THRESHOLD = 0.82;
-    private static final double REVIEW_THRESHOLD = 0.50;
+    private static final double REVIEW_THRESHOLD = 0.65;
     private static final Duration CANDIDATE_WINDOW = Duration.ofDays(30);
     private final JdbcTemplate jdbc;
     private final TextNormalizer normalizer;
@@ -37,8 +37,11 @@ public class ReportService {
         }
         String normalized = normalizer.normalize(command.text());
         if (normalized.isBlank()) throw new BusinessException("INVALID_REPORT", "Report text has no searchable terms");
-        String locationKey = command.location() == null ? null : normalizer.normalize(command.location());
-        if (command.location() != null && locationKey.isBlank()) {
+        var features = command.locationFeatures();
+        if (features != null) features.validate(command.category());
+        String location = features == null ? command.location() : features.label();
+        String locationKey = location == null ? null : normalizer.normalize(location);
+        if (location != null && locationKey.isBlank()) {
             throw new BusinessException("INVALID_LOCATION", "Location has no searchable terms");
         }
         if (command.occurredAt() != null && command.occurredAt().isAfter(Instant.now().plusSeconds(300))) {
@@ -64,19 +67,28 @@ public class ReportService {
         report.searchText = normalized;
         report.category = command.category();
         report.createdAt = now;
+        if (features != null) {
+            checkHouseNumber(report.houseId, "entrance_count", features.entrance());
+            checkHouseNumber(report.houseId, "floor_count", features.floor());
+        }
+        String zone = features == null ? null : jdbc.queryForObject("""
+                SELECT json_object('label', ?, 'key', ?, 'structured', 1, 'area', ?, 'entrance', ?, 'floor', ?,
+                    'liftType', ?, 'liftNumber', ?, 'coverage', ?, 'object', ?, 'site', ?, 'details', ?)
+                """, String.class, location, locationKey, features.area().name(), features.entrance(), features.floor(),
+                name(features.liftType()), features.liftNumber(), name(features.coverage()), name(features.object()), features.site(), features.details());
         jdbc.update("""
                 INSERT INTO reports(id, house_id, author_id, raw_text, search_text, category,
                                     zone_json, occurred_at, correlation_id, created_at)
-                VALUES (?, ?, ?, ?, ?, ?, CASE WHEN ? IS NULL THEN NULL ELSE json_object('label', ?, 'key', ?) END,
+                VALUES (?, ?, ?, ?, ?, ?, COALESCE(?, CASE WHEN ? IS NULL THEN NULL ELSE json_object('label', ?, 'key', ?) END),
                         ?, ?, ?)
                 """, report.id, report.houseId, report.authorId, report.rawText, normalized,
-                report.category, command.location(), command.location(), locationKey,
-                recordedAt.toString(),
-                report.correlationId, now.toString());
+                report.category, zone, location, location, locationKey,
+                recordedAt.toString(), report.correlationId, now.toString());
         audit(report.authorId, "REPORT_CREATED", "report", report.id, now);
 
-        List<DuplicateCandidate> candidates = retriever.findCandidates(report.houseId, normalized,
-                report.category, locationKey, now.minus(CANDIDATE_WINDOW)).stream()
+        List<DuplicateCandidate> candidates = (features == null
+                ? retriever.findCandidates(report.houseId, normalized, report.category, locationKey, now.minus(CANDIDATE_WINDOW))
+                : retriever.findCandidates(report.houseId, normalized, report.category, features, now.minus(CANDIDATE_WINDOW))).stream()
                 .filter(candidate -> candidate.score() >= REVIEW_THRESHOLD).toList();
         double best = candidates.isEmpty() ? 0 : candidates.get(0).score();
         if (best >= CANDIDATE_THRESHOLD) {
@@ -87,6 +99,18 @@ public class ReportService {
             audit(report.authorId, "DUPLICATE_REVIEW_REQUIRED", "report", report.id, now);
         }
         return report;
+    }
+
+    private static String name(Enum<?> value) { return value == null ? null : value.name(); }
+
+    private void checkHouseNumber(String houseId, String field, Integer number) {
+        if (number == null) return;
+        List<String> values = jdbc.query("SELECT json_extract(value_json, '$') FROM house_fields WHERE house_id = ? AND key = ?",
+                (rs, row) -> rs.getString(1), houseId, field);
+        if (!values.isEmpty() && values.get(0) != null && values.get(0).matches("[1-9][0-9]{0,2}")
+                && number > Integer.parseInt(values.get(0))) {
+            throw new BusinessException("INVALID_LOCATION", "Номер подъезда или этажа превышает сведения паспорта дома");
+        }
     }
 
     private void audit(String actorId, String action, String entity, String entityId, Instant at) {
