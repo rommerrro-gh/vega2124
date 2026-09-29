@@ -6,6 +6,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.LocalDate;
 import java.time.ZoneId;
+import java.time.format.DateTimeFormatter;
 import java.util.Map;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -74,6 +75,11 @@ class PlannedDateFlowTest {
         assertEquals(first.toString(), initial.path("plannedDate").asText());
         assertEquals(1, initial.path("plannedDateHistory").size());
         assertTrue(initial.path("plannedDateHistory").get(0).path("previousDate").isNull());
+        String context = "Заявка «Сломан светильник у лифта».\nДом: " + initial.path("address").asText()
+                + "\nМесто: Первый подъезд\n";
+        DateTimeFormatter displayDate = DateTimeFormatter.ofPattern("dd.MM.yyyy");
+        assertEquals(context + "Установлен плановый срок: " + first.format(displayDate) + ".",
+                jdbc.queryForObject("SELECT body FROM notification_outbox WHERE issue_id = ?", String.class, issueId));
         mvc.perform(patch("/v1/issues/" + issueId + "/planned-date")
                 .header("X-Demo-Session", "dispatcher").contentType("application/json")
                 .content(body(next, ""))).andExpect(status().isBadRequest());
@@ -91,8 +97,8 @@ class PlannedDateFlowTest {
         notifications.sendPending();
         assertEquals(1, jdbc.queryForObject("SELECT COUNT(*) FROM notification_outbox WHERE issue_id = ? AND sent_at IS NOT NULL",
                 Integer.class, issueId));
-        verify(max, times(1)).sendText(eq("test-max-user"), eq("Плановый срок по заявке изменён с " + first
-                + " на " + next + ". Причина: Ожидаем запчасть"));
+        verify(max, times(1)).sendText(eq("test-max-user"), eq(context + "Плановый срок изменён с " + first.format(displayDate)
+                + " на " + next.format(displayDate) + ". Причина: Ожидаем запчасть"));
         assertEquals(2, jdbc.queryForObject("SELECT COUNT(*) FROM audit_events WHERE entity_id = ? AND action = 'ISSUE_PLANNED_DATE_CHANGED'",
                 Integer.class, issueId));
         JsonNode resident = mapper.readTree(mvc.perform(get("/v1/issues/" + issueId)

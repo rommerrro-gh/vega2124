@@ -8,6 +8,7 @@ import ru.pulsedoma.common.BusinessException;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneId;
+import java.time.format.DateTimeFormatter;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
@@ -61,7 +62,10 @@ public class MiniAppService {
                 SELECT h.id, h.address, m.role, m.verification_status FROM houses h
                 JOIN house_memberships m ON m.house_id = h.id
                 WHERE m.user_id = ? AND m.verification_status = 'VERIFIED' AND m.access_status = 'ACTIVE'
-                ORDER BY h.address, m.role
+                ORDER BY CASE WHEN EXISTS (
+                    SELECT 1 FROM guided_demo_sessions s
+                    WHERE s.user_id = m.user_id AND s.house_id = h.id AND s.active = 1
+                ) THEN 0 ELSE 1 END, h.address, h.id, m.role
                 """, rs -> {
             String id = rs.getString("id");
             String address = rs.getString("address");
@@ -444,10 +448,15 @@ public class MiniAppService {
                 VALUES (?, ?, 'ISSUE_PLANNED_DATE_CHANGED', 'issue', ?, ?, ?)
                 """, UUID.randomUUID().toString(), userId, issueId,
                 "{\"plannedDate\":\"" + date + "\"}", now);
-        String message = previous == null
-                ? "По заявке установлен плановый срок: " + date + "."
-                : "Плановый срок по заявке изменён с " + previous + " на " + date
-                    + ". Причина: " + trimmedReason;
+        String title = current.description().isBlank() ? "Проблема дома" : current.description().strip();
+        if (title.length() > 160) title = title.substring(0, 160) + "…";
+        DateTimeFormatter displayDate = DateTimeFormatter.ofPattern("dd.MM.yyyy");
+        String context = "Заявка «" + title + "».\nДом: " + current.address()
+                + (current.location() == null || current.location().isBlank() ? "" : "\nМесто: " + current.location());
+        String message = context + "\n" + (previous == null
+                ? "Установлен плановый срок: " + date.format(displayDate) + "."
+                : "Плановый срок изменён с " + LocalDate.parse(previous).format(displayDate)
+                    + " на " + date.format(displayDate) + ". Причина: " + trimmedReason);
         jdbc.update("""
                 UPDATE notification_outbox SET cancelled_at = ?
                 WHERE issue_id = ? AND kind GLOB 'PLANNED_DATE_*'

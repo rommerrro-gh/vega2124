@@ -45,6 +45,7 @@ class GuidedDemoFlowTest {
     @Autowired AccessActivationService access;
     @Autowired ReportService reports;
     @Autowired JdbcTemplate jdbc;
+    @Autowired ru.pulsedoma.issues.MiniAppService miniApp;
 
     @Test
     void isolatesRepeatableDemoAndPreservesCandidatePath() {
@@ -53,6 +54,8 @@ class GuidedDemoFlowTest {
         assertThrows(BusinessException.class, () -> demos.activate("judge-a", "wrong"));
         var first = demos.activate("judge-a", CODE);
         assertTrue(first.active());
+        assertEquals(first.houseId(), miniApp.houses("judge-a").get(0).id());
+        assertEquals(first.houseId(), miniApp.dispatcherHouses("judge-a").get(0).id());
         assertEquals(first.houseId(), demos.activate("judge-a", CODE).houseId());
         var second = demos.activate("judge-b", CODE);
         assertNotEquals(first.houseId(), second.houseId());
