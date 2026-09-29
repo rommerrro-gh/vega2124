@@ -449,6 +449,11 @@ public class MiniAppService {
                 : "Плановый срок по заявке изменён с " + previous + " на " + date
                     + ". Причина: " + trimmedReason;
         jdbc.update("""
+                UPDATE notification_outbox SET cancelled_at = ?
+                WHERE issue_id = ? AND kind GLOB 'PLANNED_DATE_*'
+                  AND sent_at IS NULL AND cancelled_at IS NULL
+                """, now, issueId);
+        jdbc.update("""
                 INSERT INTO notification_outbox
                     (id, issue_id, verification_round, recipient_user_id, kind, body, next_attempt_at)
                 SELECT lower(hex(randomblob(16))), ?, 0, p.user_id, ?, ?, ?
@@ -524,6 +529,11 @@ public class MiniAppService {
 
     private void startVerification(String issueId, String now) {
         String dueAt = Instant.parse(now).plusSeconds(72 * 3600).toString();
+        jdbc.update("""
+                UPDATE notification_outbox SET cancelled_at = ?
+                WHERE issue_id = ? AND kind GLOB 'PLANNED_DATE_*'
+                  AND sent_at IS NULL AND cancelled_at IS NULL
+                """, now, issueId);
         jdbc.update("""
                 UPDATE issues SET status = 'VERIFICATION_72H', verification_round = verification_round + 1,
                                   verification_due_at = ?, updated_at = ? WHERE id = ?

@@ -49,9 +49,14 @@ public class VerificationJobs {
             List<Map<String, Object>> pending = jdbc.queryForList("""
                     SELECT o.id, o.body, u.max_user_id FROM notification_outbox o
                     JOIN users u ON u.id = o.recipient_user_id
-                    JOIN issues i ON i.id = o.issue_id AND i.verification_round = o.verification_round
+                    JOIN issues i ON i.id = o.issue_id
                     WHERE o.sent_at IS NULL AND o.cancelled_at IS NULL
-                      AND i.status = 'VERIFICATION_72H'
+                      AND (
+                        (o.kind = 'VERIFY_RESULT' AND i.verification_round = o.verification_round
+                            AND i.status = 'VERIFICATION_72H')
+                        OR (o.kind GLOB 'PLANNED_DATE_*' AND i.status IN
+                            ('DRAFT', 'OPEN', 'ASSIGNED', 'IN_PROGRESS', 'REOPENED', 'REVIEW_REQUIRED'))
+                      )
                       AND datetime(o.next_attempt_at) <= datetime('now')
                     ORDER BY o.next_attempt_at LIMIT 10
                     """);

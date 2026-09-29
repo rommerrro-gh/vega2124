@@ -16,10 +16,20 @@ import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.test.web.servlet.MockMvc;
+import reactor.core.publisher.Mono;
+import ru.pulsedoma.bootstrap.VerificationJobs;
+import ru.pulsedoma.max.MaxApiClient;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.contains;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -73,6 +83,16 @@ class PlannedDateFlowTest {
         assertFalse(changed.path("plannedDateHistory").get(0).path("previousDateMissed").asBoolean());
         assertEquals(2, jdbc.queryForObject("SELECT COUNT(*) FROM notification_outbox WHERE issue_id = ?",
                 Integer.class, issueId));
+        assertEquals(1, jdbc.queryForObject("SELECT COUNT(*) FROM notification_outbox WHERE issue_id = ? AND cancelled_at IS NOT NULL",
+                Integer.class, issueId));
+        MaxApiClient max = mock(MaxApiClient.class);
+        when(max.sendText(eq("test-max-user"), anyString())).thenReturn(Mono.just("{}"));
+        var notifications = new VerificationJobs.Notifications(jdbc, max, "test-token");
+        notifications.sendPending();
+        assertEquals(1, jdbc.queryForObject("SELECT COUNT(*) FROM notification_outbox WHERE issue_id = ? AND sent_at IS NOT NULL",
+                Integer.class, issueId));
+        verify(max, times(1)).sendText(eq("test-max-user"), eq("Плановый срок по заявке изменён с " + first
+                + " на " + next + ". Причина: Ожидаем запчасть"));
         assertEquals(2, jdbc.queryForObject("SELECT COUNT(*) FROM audit_events WHERE entity_id = ? AND action = 'ISSUE_PLANNED_DATE_CHANGED'",
                 Integer.class, issueId));
         JsonNode resident = mapper.readTree(mvc.perform(get("/v1/issues/" + issueId)
@@ -84,6 +104,19 @@ class PlannedDateFlowTest {
         jdbc.update("UPDATE issues SET planned_date = ? WHERE id = ?", today.minusDays(1).toString(), issueId);
         JsonNode lateChange = change(issueId, today.plusDays(4), "Работы задержались");
         assertTrue(lateChange.path("plannedDateHistory").get(0).path("previousDateMissed").asBoolean());
+
+        for (String status : new String[] {"OPEN", "ASSIGNED", "IN_PROGRESS", "RESOLVED"}) {
+            mvc.perform(patch("/v1/issues/" + issueId + "/status")
+                    .header("X-Demo-Session", "dispatcher").contentType("application/json")
+                    .content(mapper.writeValueAsString(Map.of("status", status, "reason", "Тест"))))
+                    .andExpect(status().isOk());
+        }
+        assertEquals(2, jdbc.queryForObject("SELECT COUNT(*) FROM notification_outbox WHERE issue_id = ? AND kind GLOB 'PLANNED_DATE_*' AND cancelled_at IS NOT NULL",
+                Integer.class, issueId));
+        notifications.sendPending();
+        assertEquals(1, jdbc.queryForObject("SELECT COUNT(*) FROM notification_outbox WHERE issue_id = ? AND kind = 'VERIFY_RESULT' AND sent_at IS NOT NULL",
+                Integer.class, issueId));
+        verify(max, times(1)).sendText(eq("test-max-user"), contains("подтвердите результат"));
     }
 
     private String createIssue() throws Exception {
