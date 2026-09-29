@@ -133,6 +133,11 @@ function Brand({ role }) {
     Promise.all([api("true", "/v1/access/me"), api("true", "/v1/guided-demo"), api("true", "/v1/access/config")])
       .then(([roles, state, config]) => { setAccess(roles); setDemo(state); setLocalDemo(config.demoMode === true); }).catch(() => {});
   }, []);
+  useEffect(() => {
+    const closeOnEscape = event => { if (event.key === "Escape" && menu.current) menu.current.open = false; };
+    document.addEventListener("keydown", closeOnEscape);
+    return () => document.removeEventListener("keydown", closeOnEscape);
+  }, []);
   const available = localDemo ? rolePages : rolePages.filter(([name]) => access.some(item => item.role === name));
   const current = rolePages.find(([, , path]) => location.pathname === path);
   async function demoAction(action) {
@@ -147,6 +152,7 @@ function Brand({ role }) {
     <div className="brand"><span className="brand-mark" aria-hidden="true"><i /></span><span>Пульс дома</span></div>
     {available.length ? <details ref={menu} className="role-menu">
       <summary aria-label="Выбрать роль">{current?.[1] || role} <span aria-hidden="true">⌄</span></summary>
+      <button className="role-menu-backdrop" type="button" aria-label="Закрыть меню ролей" onClick={() => { menu.current.open = false; }} />
       <nav aria-label="Доступные роли">
         {available.map(([name, label, path]) => <button key={name} type="button"
           aria-current={location.pathname === path ? "page" : undefined}
