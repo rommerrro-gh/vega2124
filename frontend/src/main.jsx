@@ -161,7 +161,7 @@ function Brand({ role }) {
   return <><header className="topbar">
     <div className="brand"><span className="brand-icon-frame"><img className="brand-icon" src="/miniapp/app-icon.png?v=20260929-6" alt="" /></span><span>Пульс дома</span></div>
     {available.length ? <details ref={menu} className="role-menu">
-      <summary aria-label="Выбрать роль">{current?.[1] || role} <span aria-hidden="true">⌄</span></summary>
+      <summary aria-label="Выбрать роль"><span className="role-menu-label">{current?.[1] || role}</span><svg aria-hidden="true" viewBox="0 0 12 12"><path d="m3 4.5 3 3 3-3" /></svg></summary>
       <button className="role-menu-backdrop" type="button" aria-label="Закрыть меню ролей" onClick={() => { menu.current.open = false; }} />
       <nav aria-label="Доступные роли">
         {available.map(([name, label, path]) => <button key={name} type="button"
