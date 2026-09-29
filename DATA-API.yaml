@@ -1,0 +1,1259 @@
+---
+openapi: 3.1.0
+info:
+  title: Пульс дома — API для проверки основного сценария
+  version: 0.1.0
+  description: 'Реализованные методы для проверки. Полный контракт: infra/openapi.yaml.
+    На браузерном демостенде используется X-Demo-Session; на MAX-стенде — X-Max-Init-Data.
+    Данные браузерного стенда общие. Логин и пароль не требуются.'
+servers:
+- url: https://pulsedoma.ru
+  description: Общий браузерный демостенд для проверки API
+- url: http://localhost:8080
+  description: Локальный профиль demo
+- url: https://www.pulsedoma.ru
+  description: 'MAX-стенд: требуется подписанный WebApp.initData'
+paths:
+  "/v1/me/houses":
+    get:
+      operationId: getMyHouses
+      summary: getMyHouses
+      responses:
+        '200':
+          description: Verified houses available to the current MAX user
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  "$ref": "#/components/schemas/HouseView"
+        '400':
+          description: Invalid request
+        '401':
+          description: Missing or invalid MAX initData
+      x-test-role: RESIDENT
+      x-test-headers:
+        X-Demo-Session: 'true'
+  "/v1/reports":
+    post:
+      operationId: createReport
+      summary: createReport
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              "$ref": "#/components/schemas/CreateReportRequest"
+      responses:
+        '201':
+          description: Report saved and duplicate candidates returned; no issue is
+            created until user decision
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/CreateReportResponse"
+        '400':
+          description: Invalid request
+        '401':
+          description: Missing or invalid MAX initData
+      x-test-role: RESIDENT
+      x-test-headers:
+        X-Demo-Session: 'true'
+  "/v1/issues":
+    post:
+      operationId: createIssue
+      summary: createIssue
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              "$ref": "#/components/schemas/CreateIssueRequest"
+      responses:
+        '200':
+          description: New draft issue created from the current user's unlinked report
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/IssueView"
+        '400':
+          description: Invalid request
+        '401':
+          description: Missing or invalid MAX initData
+      x-test-role: RESIDENT
+      x-test-headers:
+        X-Demo-Session: 'true'
+  "/v1/issues/{id}/join":
+    post:
+      operationId: joinIssue
+      summary: joinIssue
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              "$ref": "#/components/schemas/JoinIssueRequest"
+      responses:
+        '200':
+          description: Current user's unlinked report joined to an active issue in
+            the same house
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/IssueView"
+        '400':
+          description: Invalid request
+        '401':
+          description: Missing or invalid MAX initData
+      x-test-role: RESIDENT
+      x-test-headers:
+        X-Demo-Session: 'true'
+  "/v1/dispatcher/issues":
+    get:
+      operationId: listDispatcherIssues
+      summary: Queue of issues for a dispatcher in one house
+      parameters:
+      - name: houseId
+        in: query
+        required: true
+        schema:
+          type: string
+          minLength: 1
+      responses:
+        '200':
+          description: Issue queue
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  "$ref": "#/components/schemas/IssueView"
+        '403':
+          description: Dispatcher house access required
+        '401':
+          description: Missing or invalid MAX initData
+      x-test-role: DISPATCHER
+      x-test-headers:
+        X-Demo-Session: dispatcher
+  "/v1/issues/{id}/status":
+    patch:
+      operationId: changeIssueStatus
+      summary: changeIssueStatus
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              "$ref": "#/components/schemas/ChangeStatusRequest"
+      responses:
+        '200':
+          description: Dispatcher changed status and wrote a status event
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/IssueView"
+        '400':
+          description: Invalid request
+        '401':
+          description: Missing or invalid MAX initData
+        '403':
+          description: Dispatcher house access required
+      x-test-role: DISPATCHER
+      x-test-headers:
+        X-Demo-Session: dispatcher
+  "/v1/issues/{id}/planned-date":
+    patch:
+      operationId: setIssuePlannedDate
+      summary: Set or change the planned completion date for an issue
+      description: Verified dispatcher of the house may set a date without a time.
+        Changes require a reason, are kept in history, and notify participants with
+        MAX IDs.
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              "$ref": "#/components/schemas/SetPlannedDateRequest"
+      responses:
+        '200':
+          description: Updated issue with planned date history
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/IssueView"
+        '400':
+          description: Date is in the past or reason is missing for a change
+        '401':
+          description: Missing or invalid MAX initData
+        '403':
+          description: Verified dispatcher role required
+        '404':
+          description: Issue unavailable
+        '409':
+          description: Issue is no longer editable or date is unchanged
+      x-test-role: DISPATCHER
+      x-test-headers:
+        X-Demo-Session: dispatcher
+  "/v1/issues/{id}":
+    get:
+      operationId: getIssue
+      summary: Issue card for a verified member of its house
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: Issue card
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/IssueView"
+        '401':
+          description: Missing or invalid MAX initData
+      x-test-role: RESIDENT
+      x-test-headers:
+        X-Demo-Session: 'true'
+  "/v1/issues/{id}/verify":
+    post:
+      operationId: verifyIssue
+      summary: verifyIssue
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              "$ref": "#/components/schemas/VerifyIssueRequest"
+      responses:
+        '200':
+          description: Verification recorded; the issue closes when all participants
+            confirm or reopens after a rejection
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/IssueView"
+        '400':
+          description: Invalid request, duplicate response or expired verification
+            window
+        '401':
+          description: Missing or invalid MAX initData
+        '404':
+          description: Issue unavailable to the current user
+      x-test-role: RESIDENT
+      x-test-headers:
+        X-Demo-Session: 'true'
+  "/v1/houses/{id}":
+    get:
+      operationId: getHouse
+      summary: House passport with a source and retrieval date for every populated
+        field
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: Passport of a house with verified membership
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/HousePassport"
+        '400':
+          description: Invalid request
+        '401':
+          description: Missing or invalid MAX initData
+        '404':
+          description: House does not exist or is unavailable to the current user
+      x-test-role: RESIDENT
+      x-test-headers:
+        X-Demo-Session: 'true'
+  "/v1/me/issues":
+    get:
+      operationId: getMyIssues
+      summary: List issues joined by the current resident
+      responses:
+        '200':
+          description: Current resident's issues
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  "$ref": "#/components/schemas/IssueView"
+        '401':
+          description: Missing or invalid MAX initData
+      x-test-role: RESIDENT
+      x-test-headers:
+        X-Demo-Session: 'true'
+components:
+  schemas:
+    GuidedDemoView:
+      type: object
+      required:
+      - enabled
+      - active
+      properties:
+        enabled:
+          type: boolean
+        active:
+          type: boolean
+        houseId:
+          type:
+          - string
+          - 'null'
+        address:
+          type:
+          - string
+          - 'null'
+    AccessHouse:
+      type: object
+      properties:
+        id:
+          type: string
+        address:
+          type: string
+    AccessOrganization:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        houses:
+          type: array
+          items:
+            "$ref": "#/components/schemas/AccessHouse"
+    AccessView:
+      type: object
+      properties:
+        role:
+          type: string
+          enum:
+          - SYSTEM_ADMIN
+          - UK_ADMIN
+          - DISPATCHER
+          - HOUSE_ADMIN
+          - RESIDENT
+        organizationId:
+          type:
+          - string
+          - 'null'
+        organizationName:
+          type:
+          - string
+          - 'null'
+        houseId:
+          type:
+          - string
+          - 'null'
+        houseAddress:
+          type:
+          - string
+          - 'null'
+        status:
+          type: string
+          enum:
+          - ACTIVE
+          - SUSPENDED
+          - REVOKED
+        userId:
+          type:
+          - string
+          - 'null'
+        displayName:
+          type:
+          - string
+          - 'null'
+    AccessInvitation:
+      type: object
+      properties:
+        id:
+          type: string
+        role:
+          type: string
+          enum:
+          - UK_ADMIN
+          - DISPATCHER
+          - HOUSE_ADMIN
+          - RESIDENT
+        organizationId:
+          type:
+          - string
+          - 'null'
+        organizationName:
+          type:
+          - string
+          - 'null'
+        houses:
+          type: array
+          items:
+            "$ref": "#/components/schemas/AccessHouse"
+        inviter:
+          type: string
+        expiresAt:
+          type: string
+          format: date-time
+        activationLimit:
+          type: integer
+        activationCount:
+          type: integer
+        revokedAt:
+          type:
+          - string
+          - 'null'
+          format: date-time
+        acceptedByMe:
+          type: boolean
+    CreateAccessInvitation:
+      type: object
+      required:
+      - role
+      - houseIds
+      - days
+      - activationLimit
+      properties:
+        role:
+          type: string
+          enum:
+          - UK_ADMIN
+          - DISPATCHER
+          - HOUSE_ADMIN
+          - RESIDENT
+        organizationId:
+          type:
+          - string
+          - 'null'
+        houseIds:
+          type: array
+          minItems: 1
+          items:
+            type: string
+        days:
+          type: integer
+          minimum: 1
+          maximum: 30
+        activationLimit:
+          type: integer
+          minimum: 1
+          maximum: 100
+    RevokeAccessRequest:
+      type: object
+      required:
+      - role
+      - userId
+      properties:
+        role:
+          type: string
+          enum:
+          - UK_ADMIN
+          - DISPATCHER
+          - HOUSE_ADMIN
+          - RESIDENT
+        userId:
+          type: string
+        organizationId:
+          type:
+          - string
+          - 'null'
+        houseId:
+          type:
+          - string
+          - 'null'
+    HouseView:
+      type: object
+      required:
+      - id
+      - address
+      - memberships
+      properties:
+        id:
+          type: string
+        address:
+          type: string
+        memberships:
+          type: array
+          items:
+            "$ref": "#/components/schemas/HouseMembershipAccess"
+    HouseMembershipAccess:
+      type: object
+      required:
+      - role
+      - verificationStatus
+      properties:
+        role:
+          type: string
+          enum:
+          - RESIDENT
+          - HOUSE_ADMIN
+          - DISPATCHER
+        verificationStatus:
+          type: string
+          enum:
+          - INVITED
+          - PENDING
+          - VERIFIED
+          - REJECTED
+    HousePassport:
+      type: object
+      required:
+      - id
+      - address
+      - fields
+      - contacts
+      properties:
+        id:
+          type: string
+        address:
+          type: string
+        fields:
+          type: array
+          items:
+            "$ref": "#/components/schemas/HousePassportField"
+        contacts:
+          type: array
+          items:
+            "$ref": "#/components/schemas/HouseContact"
+    HousePoll:
+      type: object
+      description: Preliminary poll; never an official owners' meeting or binding
+        vote
+      required:
+      - id
+      - houseId
+      - question
+      - official
+      - closesAt
+      - createdAt
+      - closed
+      - resultsVisible
+      - options
+      properties:
+        id:
+          type: string
+        houseId:
+          type: string
+        question:
+          type: string
+        official:
+          type: boolean
+          const: false
+        closesAt:
+          type: string
+          format: date-time
+        createdAt:
+          type: string
+          format: date-time
+        closed:
+          type: boolean
+        resultsVisible:
+          type: boolean
+        myOptionId:
+          type:
+          - string
+          - 'null'
+        options:
+          type: array
+          items:
+            "$ref": "#/components/schemas/HousePollOption"
+    HousePollOption:
+      type: object
+      required:
+      - id
+      - label
+      - votes
+      properties:
+        id:
+          type: string
+        label:
+          type: string
+        votes:
+          type: integer
+          minimum: 0
+          description: Zero while resultsVisible is false
+    HousePollVoteRequest:
+      type: object
+      required:
+      - optionId
+      properties:
+        optionId:
+          type: string
+          minLength: 1
+    HouseContact:
+      type: object
+      required:
+      - id
+      - type
+      - title
+      - phone
+      - updatedAt
+      properties:
+        id:
+          type: string
+        type:
+          type: string
+          enum:
+          - EMERGENCY
+          - LOCAL
+        title:
+          type: string
+        phone:
+          type: string
+        details:
+          type:
+          - string
+          - 'null'
+        updatedAt:
+          type: string
+          format: date-time
+    HouseContactRequest:
+      type: object
+      required:
+      - type
+      - title
+      - phone
+      properties:
+        type:
+          type: string
+          enum:
+          - EMERGENCY
+          - LOCAL
+        title:
+          type: string
+          minLength: 1
+          maxLength: 120
+        phone:
+          type: string
+          pattern: "^[+0-9() .-]{2,40}$"
+        details:
+          type:
+          - string
+          - 'null'
+          maxLength: 500
+    HouseInvitation:
+      type: object
+      required:
+      - id
+      - expiresAt
+      - activationLimit
+      - activationCount
+      - createdAt
+      properties:
+        id:
+          type: string
+        expiresAt:
+          type: string
+          format: date-time
+        activationLimit:
+          type: integer
+        activationCount:
+          type: integer
+        revokedAt:
+          type:
+          - string
+          - 'null'
+          format: date-time
+        createdAt:
+          type: string
+          format: date-time
+    CreateHouseInvitationRequest:
+      type: object
+      required:
+      - days
+      - activationLimit
+      properties:
+        days:
+          type: integer
+          minimum: 1
+          maximum: 30
+        activationLimit:
+          type: integer
+          minimum: 1
+          maximum: 100
+    CreatedHouseInvitation:
+      type: object
+      required:
+      - token
+      - invitation
+      properties:
+        token:
+          type: string
+        invitation:
+          "$ref": "#/components/schemas/HouseInvitation"
+    HousePassportField:
+      type: object
+      required:
+      - key
+      - value
+      - source
+      - fetchedAt
+      properties:
+        key:
+          type: string
+        value: {}
+        source:
+          type: string
+        sourceUrl:
+          type:
+          - string
+          - 'null'
+          format: uri
+        fetchedAt:
+          type: string
+          format: date-time
+        validAt:
+          type:
+          - string
+          - 'null'
+          format: date-time
+        confidence:
+          type:
+          - number
+          - 'null'
+          minimum: 0
+          maximum: 1
+    IssueView:
+      type: object
+      required:
+      - id
+      - houseId
+      - address
+      - status
+      - description
+      - participants
+      - attachments
+      - reports
+      - plannedDateHistory
+      - mergedForMe
+      properties:
+        id:
+          type: string
+        houseId:
+          type: string
+        address:
+          type: string
+        category:
+          type: string
+          nullable: true
+        status:
+          type: string
+        description:
+          type: string
+        location:
+          type: string
+          nullable: true
+        occurredAt:
+          type: string
+          format: date-time
+          nullable: true
+        verificationDueAt:
+          type: string
+          format: date-time
+          nullable: true
+        plannedDate:
+          type:
+          - string
+          - 'null'
+          format: date
+          description: Completion target in Europe/Moscow calendar dates
+        dispatcherComment:
+          type: object
+          nullable: true
+          description: Latest nonempty dispatcher comment on a status change
+          properties:
+            text:
+              type: string
+            status:
+              type: string
+            changedAt:
+              type: string
+              format: date-time
+        plannedDateHistory:
+          type: array
+          items:
+            "$ref": "#/components/schemas/PlannedDateChange"
+        participants:
+          type: integer
+        mergedForMe:
+          type: boolean
+          description: The current resident has an active report moved here by a dispatcher
+            merge
+        attachments:
+          type: array
+          items:
+            "$ref": "#/components/schemas/AttachmentView"
+        reports:
+          type: array
+          description: Active reports visible to the current user; residents see only
+            their own, dispatchers see all
+          items:
+            "$ref": "#/components/schemas/LinkedReportView"
+    LinkedReportView:
+      type: object
+      required:
+      - id
+      - description
+      - author
+      - createdAt
+      properties:
+        id:
+          type: string
+        description:
+          type: string
+        author:
+          type: string
+        createdAt:
+          type: string
+    PlannedDateChange:
+      type: object
+      required:
+      - newDate
+      - previousDateMissed
+      - changedAt
+      properties:
+        previousDate:
+          type:
+          - string
+          - 'null'
+          format: date
+        newDate:
+          type: string
+          format: date
+        previousDateMissed:
+          type: boolean
+        reason:
+          type:
+          - string
+          - 'null'
+        changedAt:
+          type: string
+          format: date-time
+    AttachmentView:
+      type: object
+      required:
+      - id
+      - mime
+      properties:
+        id:
+          type: string
+        mime:
+          type: string
+    ErrorResponse:
+      type: object
+      required:
+      - code
+      - message
+      - details
+      - correlationId
+      properties:
+        code:
+          type: string
+        message:
+          type: string
+        details:
+          type: object
+        correlationId:
+          type: string
+    MaxUpdate:
+      type: object
+      required:
+      - update_type
+      properties:
+        update_type:
+          type: string
+          minLength: 1
+      additionalProperties: true
+    SetActiveHouseRequest:
+      type: object
+      required:
+      - houseId
+      properties:
+        houseId:
+          type: string
+          minLength: 1
+    CreateReportRequest:
+      type: object
+      required:
+      - houseId
+      - text
+      - category
+      anyOf:
+      - required:
+        - locationFeatures
+      - required:
+        - location
+      properties:
+        houseId:
+          type: string
+          minLength: 1
+        text:
+          type: string
+          minLength: 1
+          maxLength: 4000
+        category:
+          type: string
+          enum:
+          - LIGHTING
+          - WATER
+          - HEATING
+          - ELEVATOR
+          - ENTRANCE_CLEANING
+          - YARD_CLEANING
+          - WASTE_REMOVAL
+          - PLAYGROUND
+          - OTHER
+        location:
+          type: string
+          minLength: 1
+          maxLength: 160
+          description: Legacy free text place
+        locationFeatures:
+          "$ref": "#/components/schemas/LocationFeatures"
+        occurredAt:
+          type: string
+          format: date-time
+          description: Optional occurrence time; defaults to server receipt time
+    LocationFeatures:
+      type: object
+      required:
+      - area
+      description: Category-specific place. Entrance/floor required for local indoor
+        problems; liftType required for elevators; coverage required for entrance
+        cleaning. Apartment numbers are not collected.
+      properties:
+        area:
+          type: string
+          enum:
+          - ENTRANCE
+          - APARTMENT
+          - BASEMENT
+          - YARD
+          - WHOLE_HOUSE
+          - OTHER
+        entrance:
+          type:
+          - integer
+          - 'null'
+          minimum: 1
+          maximum: 100
+        floor:
+          type:
+          - integer
+          - 'null'
+          minimum: 1
+          maximum: 200
+        liftType:
+          type:
+          - string
+          - 'null'
+          enum:
+          - PASSENGER
+          - CARGO
+          - UNKNOWN
+          - 
+        liftNumber:
+          type:
+          - integer
+          - 'null'
+          minimum: 1
+          maximum: 100
+        coverage:
+          type:
+          - string
+          - 'null'
+          enum:
+          - LOCAL
+          - ENTIRE
+          - 
+        object:
+          type:
+          - string
+          - 'null'
+          enum:
+          - SWING
+          - SLIDE
+          - SANDBOX
+          - OTHER
+          - WHOLE_PLAYGROUND
+          - 
+        site:
+          type:
+          - integer
+          - 'null'
+          minimum: 1
+          maximum: 100
+        details:
+          type:
+          - string
+          - 'null'
+          maxLength: 160
+    CreateReportResponse:
+      type: object
+      required:
+      - reportId
+      - correlationId
+      - candidates
+      properties:
+        reportId:
+          type: string
+          format: uuid
+        correlationId:
+          type: string
+          format: uuid
+        candidates:
+          type: array
+          items:
+            type: object
+            required:
+            - issueId
+            - score
+            - reasons
+            properties:
+              issue:
+                type: object
+                description: Preview for a verified resident of the same house, without
+                  attachments or author data
+                properties:
+                  id:
+                    type: string
+                  houseId:
+                    type: string
+                  address:
+                    type: string
+                  category:
+                    type: string
+                  description:
+                    type: string
+                  location:
+                    type: string
+                  participants:
+                    type: integer
+              issueId:
+                type: string
+              score:
+                type: number
+                format: double
+              reasons:
+                type: array
+                items:
+                  type: string
+    WithdrawReportRequest:
+      type: object
+      required:
+      - reason
+      properties:
+        reason:
+          type: string
+          minLength: 1
+          maxLength: 1000
+    CreateIssueRequest:
+      type: object
+      required:
+      - reportId
+      properties:
+        reportId:
+          type: string
+          minLength: 1
+    JoinIssueRequest:
+      type: object
+      required:
+      - reportId
+      properties:
+        reportId:
+          type: string
+          minLength: 1
+    MergeIssueRequest:
+      type: object
+      required:
+      - targetIssueId
+      properties:
+        targetIssueId:
+          type: string
+          minLength: 1
+    SplitIssueRequest:
+      type: object
+      required:
+      - reportId
+      - reason
+      properties:
+        reportId:
+          type: string
+          minLength: 1
+        reason:
+          type: string
+          minLength: 1
+    ChangeStatusRequest:
+      type: object
+      required:
+      - status
+      - reason
+      properties:
+        status:
+          type: string
+          enum:
+          - DRAFT
+          - OPEN
+          - ASSIGNED
+          - IN_PROGRESS
+          - RESOLVED
+          - VERIFICATION_72H
+          - CLOSED_CONFIRMED
+          - CLOSED_UNCONFIRMED
+          - REVIEW_REQUIRED
+          - REOPENED
+          - WITHDRAWN
+          - REJECTED
+        reason:
+          type: string
+          minLength: 1
+    SetPlannedDateRequest:
+      type: object
+      required:
+      - date
+      properties:
+        date:
+          type: string
+          format: date
+        reason:
+          type: string
+          maxLength: 1000
+          description: Required when changing an existing date
+    VerifyIssueRequest:
+      type: object
+      required:
+      - confirmed
+      properties:
+        confirmed:
+          type: boolean
+        comment:
+          type: string
+          maxLength: 2000
+    AddCommentRequest:
+      type: object
+      required:
+      - text
+      properties:
+        text:
+          type: string
+          minLength: 1
+          maxLength: 2000
+    CreateIncidentRequest:
+      type: object
+      required:
+      - houseId
+      - type
+      - description
+      properties:
+        houseId:
+          type: string
+          minLength: 1
+        type:
+          type: string
+          minLength: 1
+        description:
+          type: string
+          minLength: 1
+          maxLength: 4000
+    CreatePollRequest:
+      type: object
+      required:
+      - question
+      - options
+      - closesAt
+      properties:
+        question:
+          type: string
+          minLength: 1
+          maxLength: 500
+        options:
+          type: array
+          minItems: 2
+          maxItems: 20
+          items:
+            type: string
+            minLength: 1
+            maxLength: 200
+        closesAt:
+          type: string
+          format: date-time
+        resultsHiddenUntilClose:
+          type: boolean
+          default: false
+    SyncRequest:
+      type: object
+      required:
+      - houseId
+      properties:
+        houseId:
+          type: string
+          minLength: 1
+  securitySchemes:
+    DemoSession:
+      type: apiKey
+      in: header
+      name: X-Demo-Session
+      description: 'Только профиль demo: true — житель; dispatcher — диспетчер; admin
+        — администратор.'
+    MaxInitData:
+      type: apiKey
+      in: header
+      name: X-Max-Init-Data
+      description: Подписанная строка WebApp.initData из настоящего клиента MAX; действует
+        один час.
+security:
+- DemoSession: []
+- MaxInitData: []
+x-test-data:
+  houseId: demo-house-1
+  secondHouseId: demo-house-2
+  reportId: Взять reportId из ответа POST /v1/reports
+  issueId: Взять id из ответа POST /v1/issues или candidates[].issueId из ответа POST
+    /v1/reports
+x-test-sequence:
+- 'GET /v1/me/houses с X-Demo-Session: true: 200, массив домов.'
+- 'POST /v1/reports: 201, reportId и candidates. Пример тела: houseId=demo-house-1,
+  category=LIGHTING, text=Не работает свет, locationFeatures={area: ENTRANCE, entrance:
+  1, floor: 2}.'
+- 'POST /v1/issues с reportId: 200, новая заявка DRAFT. Сохранить id.'
+- 'Для дубля повторить POST /v1/reports с тем же домом, категорией и местом; затем
+  POST /v1/issues/{id}/join с новым reportId: 200.'
+- 'GET /v1/dispatcher/issues?houseId=demo-house-1 с X-Demo-Session: dispatcher: 200,
+  очередь.'
+- 'PATCH /v1/issues/{id}/planned-date с date в формате YYYY-MM-DD, не ранее текущей
+  московской даты: 200. При переносе заполнить reason.'
+- 'PATCH /v1/issues/{id}/status с X-Demo-Session: dispatcher: последовательно OPEN,
+  ASSIGNED, IN_PROGRESS, RESOLVED, каждый раз с непустым reason; 200.'
+- 'GET /v1/issues/{id} с X-Demo-Session: true: 200, VERIFICATION_72H.'
+- 'POST /v1/issues/{id}/verify с confirmed=true: 200; CLOSED_CONFIRMED после подтверждения
+  всех участников. confirmed=false возвращает заявку в REOPENED.'
+- 'Запрос GET /v1/me/houses без данных входа: 401. Запрос очереди диспетчера с ролью
+  жителя: 403.'
+- 'Доставку уведомлений проверять внутри MAX: профиль demo не отправляет сообщения
+  наружу.'

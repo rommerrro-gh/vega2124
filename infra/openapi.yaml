@@ -4,7 +4,12 @@ info:
   version: 0.1.0
   description: Контракт из §10 ТЗ. Все маршруты присутствуют; незавершённые операции возвращают 501.
 servers:
+  - url: https://www.pulsedoma.ru
+    description: MAX-стенд с проверкой подписанного WebApp.initData
+  - url: https://pulsedoma.ru
+    description: Браузерный демостенд с тестовыми ролями
   - url: http://localhost:8080
+    description: Локальный запуск
 paths:
   /v1/guided-demo:
     get:
