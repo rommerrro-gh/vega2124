@@ -40,14 +40,25 @@ public class AccessActivationService {
 
     public List<OrganizationView> organizations(String actor) {
         requireSystemAdmin(actor);
-        return jdbc.query("SELECT id FROM organizations ORDER BY name", (rs, row) -> rs.getString(1))
+        String session = demoSession(actor);
+        List<String> ids = session == null
+                ? jdbc.query("SELECT id FROM organizations ORDER BY name", (rs, row) -> rs.getString(1))
+                : jdbc.query("SELECT organization_id FROM guided_demo_organizations WHERE session_id = ?",
+                        (rs, row) -> rs.getString(1), session);
+        return ids
                 .stream().map(id -> new OrganizationView(id, organizationName(id), organizationHouses(id))).toList();
     }
 
     public List<HouseView> allHouses(String actor) {
         requireSystemAdmin(actor);
-        return jdbc.query("SELECT id, address FROM houses ORDER BY address", (rs, row) ->
-                new HouseView(rs.getString(1), rs.getString(2)));
+        String session = demoSession(actor);
+        return session == null
+                ? jdbc.query("SELECT id, address FROM houses ORDER BY address", (rs, row) ->
+                        new HouseView(rs.getString(1), rs.getString(2)))
+                : jdbc.query("""
+                        SELECT h.id, h.address FROM houses h JOIN guided_demo_houses d ON d.house_id = h.id
+                        WHERE d.session_id = ? ORDER BY h.address
+                        """, (rs, row) -> new HouseView(rs.getString(1), rs.getString(2)), session);
     }
 
     @Transactional
@@ -55,6 +66,8 @@ public class AccessActivationService {
         requireSystemAdmin(actor);
         String id = UUID.randomUUID().toString();
         jdbc.update("INSERT INTO organizations(id, type, name) VALUES (?, 'MANAGEMENT_COMPANY', ?)", id, name);
+        String session = demoSession(actor);
+        if (session != null) jdbc.update("INSERT INTO guided_demo_organizations(session_id, organization_id) VALUES (?, ?)", session, id);
         audit(actor, "ORGANIZATION_CREATED", "organization", id, name);
         return new OrganizationView(id, name, List.of());
     }
@@ -64,6 +77,8 @@ public class AccessActivationService {
         requireSystemAdmin(actor);
         String id = UUID.randomUUID().toString();
         jdbc.update("INSERT INTO houses(id, address) VALUES (?, ?)", id, address);
+        String session = demoSession(actor);
+        if (session != null) jdbc.update("INSERT INTO guided_demo_houses(session_id, house_id) VALUES (?, ?)", session, id);
         audit(actor, "HOUSE_CREATED", "house", id, address);
         return new HouseView(id, address);
     }
@@ -71,6 +86,8 @@ public class AccessActivationService {
     @Transactional
     public OrganizationView setOrganizationHouse(String organizationId, String houseId, boolean active, String actor) {
         requireSystemAdmin(actor);
+        requireDemoOrganization(organizationId, actor);
+        requireDemoHouse(houseId, actor);
         requireOrganization(organizationId);
         requireHouse(houseId);
         if (active) {
@@ -232,7 +249,10 @@ public class AccessActivationService {
     @Transactional
     public InvitationView revokeInvitation(String id, String actor) {
         InvitationView view = invitation(id, actor);
-        if (!actor.equals(invitationCreator(id)) && !isSystemAdmin(actor)) throw denied();
+        if (!actor.equals(invitationCreator(id))) {
+            if (!isSystemAdmin(actor)) throw denied();
+            requireDemoOrganization(view.organizationId(), actor);
+        }
         jdbc.update("UPDATE access_invitations SET revoked_at = ? WHERE id = ? AND revoked_at IS NULL",
                 Instant.now().toString(), id);
         audit(actor, "ACCESS_INVITATION_REVOKED", "access_invitation", id, view.role().name());
@@ -246,6 +266,7 @@ public class AccessActivationService {
         if (role == AccessRole.UK_ADMIN) {
             if (organizationId == null) throw invalid("Choose organization");
             requireSystemAdmin(actor);
+            requireDemoOrganization(organizationId, actor);
             jdbc.update("UPDATE organization_memberships SET access_status = 'REVOKED' WHERE organization_id = ? AND user_id = ? AND role = 'UK_ADMIN'",
                     organizationId, userId);
             jdbc.update("UPDATE uk_admin_houses SET access_status = 'REVOKED' WHERE organization_id = ? AND user_id = ?",
@@ -284,6 +305,7 @@ public class AccessActivationService {
 
     public List<AccessView> organizationAdmins(String organizationId, String actor) {
         requireSystemAdmin(actor);
+        requireDemoOrganization(organizationId, actor);
         return jdbc.query("""
                 SELECT u.id, u.display_name, h.id, h.address,
                        COALESCE(a.access_status, m.access_status)
@@ -311,6 +333,7 @@ public class AccessActivationService {
         if (role == AccessRole.UK_ADMIN) {
             requireSystemAdmin(actor);
             if (organizationId == null) throw invalid("Choose organization");
+            requireDemoOrganization(organizationId, actor);
         } else if (role == AccessRole.DISPATCHER || role == AccessRole.HOUSE_ADMIN) {
             requireUkAdmin(organizationId, actor);
         } else if (role == AccessRole.RESIDENT && houses.size() == 1) {
@@ -364,7 +387,31 @@ public class AccessActivationService {
     private boolean isSystemAdmin(String actor) {
         Integer count = jdbc.queryForObject("SELECT COUNT(*) FROM system_administrators WHERE user_id = ?",
                 Integer.class, actor);
-        return count != null && count > 0;
+        return (count != null && count > 0) || demoSession(actor) != null;
+    }
+
+    private String demoSession(String actor) {
+        return jdbc.query("SELECT id FROM guided_demo_sessions WHERE user_id = ? AND active = 1",
+                (rs, row) -> rs.getString(1), actor).stream().findFirst().orElse(null);
+    }
+
+    private void requireDemoOrganization(String organizationId, String actor) {
+        String session = demoSession(actor);
+        if (session == null) return;
+        Integer count = jdbc.queryForObject("""
+                SELECT COUNT(*) FROM guided_demo_organizations
+                WHERE session_id = ? AND organization_id = ?
+                """, Integer.class, session, organizationId);
+        if (count == null || count == 0) throw denied();
+    }
+
+    private void requireDemoHouse(String houseId, String actor) {
+        String session = demoSession(actor);
+        if (session == null) return;
+        Integer count = jdbc.queryForObject("""
+                SELECT COUNT(*) FROM guided_demo_houses WHERE session_id = ? AND house_id = ?
+                """, Integer.class, session, houseId);
+        if (count == null || count == 0) throw denied();
     }
 
     private void requireOrganization(String id) {

@@ -93,6 +93,14 @@ function navigate(path) {
   window.location.assign(`${path}${launchData}`);
 }
 
+function refreshAccess(goHome = false) {
+  if (goHome) localStorage.setItem("pulse-last-mode", "/miniapp/index.html");
+  if (goHome && location.pathname !== "/miniapp/index.html") {
+    history.replaceState(null, "", `/miniapp/index.html${location.hash}`);
+  }
+  window.dispatchEvent(new Event("pulse-access-changed"));
+}
+
 async function downloadAttachment(role, attachment, onError) {
   try {
     const response = await fetch(`/v1/attachments/${encodeURIComponent(attachment.id)}`, { headers: authHeaders(role) });
@@ -115,6 +123,7 @@ const rolePages = [
 ];
 
 function Brand({ role }) {
+  const menu = useRef(null);
   const [access, setAccess] = useState([]);
   const [demo, setDemo] = useState(null);
   const [localDemo, setLocalDemo] = useState(false);
@@ -128,21 +137,22 @@ function Brand({ role }) {
   const current = rolePages.find(([, , path]) => location.pathname === path);
   async function demoAction(action) {
     setNotice("");
+    if (menu.current) menu.current.open = false;
     try {
       await api("true", `/v1/guided-demo/${action}`, { method: "POST" });
-      navigate("/miniapp/index.html");
+      refreshAccess(true);
     } catch (error) { setNotice(error.message); }
   }
   return <><header className="topbar">
     <div className="brand"><span className="brand-mark" aria-hidden="true"><i /></span><span>Пульс дома</span></div>
-    {available.length ? <details className="role-menu">
+    {available.length ? <details ref={menu} className="role-menu">
       <summary aria-label="Выбрать роль">{current?.[1] || role} <span aria-hidden="true">⌄</span></summary>
       <nav aria-label="Доступные роли">
         {available.map(([name, label, path]) => <button key={name} type="button"
           aria-current={location.pathname === path ? "page" : undefined}
           onClick={() => navigate(path)}>{label}{location.pathname === path ? " ✓" : ""}</button>)}
         {demo?.active && <><hr /><span className="role-menu-caption">Демонстрационный режим · тестовые данные</span>
-          <button type="button" onClick={() => setHelp(value => !value)}>Инструкция по сценарию</button>
+          <button type="button" onClick={() => { menu.current.open = false; setHelp(value => !value); }}>Инструкция по сценарию</button>
           <button type="button" onClick={() => demoAction("restart")}>Начать заново</button>
           <button type="button" onClick={() => demoAction("exit")}>Выйти из демонстрации</button></>}
       </nav>
@@ -166,7 +176,7 @@ function GuidedDemoEntry() {
     setBusy(true); setNotice("");
     try {
       await api("true", "/v1/guided-demo/activate", { method: "POST", body: JSON.stringify({ code: value }) });
-      navigate("/miniapp/index.html");
+      refreshAccess(true);
     } catch (error) { setNotice(error.message); setBusy(false); }
   }
   useEffect(() => {
@@ -907,6 +917,15 @@ function UkAdmin() {
     </div></main>;
 }
 
-createRoot(document.getElementById("app")).render(
-  <MaxUI>{document.body.dataset.page === "dispatcher" ? <Dispatcher /> : document.body.dataset.page === "admin" ? <Admin /> : document.body.dataset.page === "system" ? <SystemAdmin /> : document.body.dataset.page === "uk" ? <UkAdmin /> : <InvitationGate />}</MaxUI>
-);
+function App() {
+  const [revision, setRevision] = useState(0);
+  useEffect(() => {
+    const refresh = () => setRevision(value => value + 1);
+    window.addEventListener("pulse-access-changed", refresh);
+    return () => window.removeEventListener("pulse-access-changed", refresh);
+  }, []);
+  const path = location.pathname;
+  return <MaxUI key={revision}>{path === "/dispatcher/index.html" ? <Dispatcher /> : path === "/admin/index.html" ? <Admin /> : path === "/system/index.html" ? <SystemAdmin /> : path === "/uk/index.html" ? <UkAdmin /> : <InvitationGate />}</MaxUI>;
+}
+
+createRoot(document.getElementById("app")).render(<App />);

@@ -70,7 +70,17 @@ public class GuidedDemoService {
                   AND issue_id IN (SELECT id FROM issues WHERE house_id = ?)
                 """, Instant.now().toString(), userId, houseId);
         jdbc.update("UPDATE guided_demo_sessions SET active = 0 WHERE user_id = ? AND house_id = ? AND active = 1", userId, houseId);
-        jdbc.update("UPDATE house_memberships SET access_status = 'REVOKED' WHERE user_id = ? AND house_id = ? AND role IN ('RESIDENT', 'DISPATCHER')", userId, houseId);
+        jdbc.update("UPDATE house_memberships SET access_status = 'REVOKED' WHERE user_id = ? AND house_id = ? AND role IN ('RESIDENT', 'DISPATCHER', 'HOUSE_ADMIN')", userId, houseId);
+        jdbc.update("""
+                UPDATE organization_memberships SET access_status = 'REVOKED'
+                WHERE user_id = ? AND role = 'UK_ADMIN' AND organization_id IN
+                  (SELECT organization_id FROM guided_demo_sessions WHERE user_id = ? AND house_id = ?)
+                """, userId, userId, houseId);
+        jdbc.update("""
+                UPDATE uk_admin_houses SET access_status = 'REVOKED'
+                WHERE user_id = ? AND house_id = ? AND organization_id IN
+                  (SELECT organization_id FROM guided_demo_sessions WHERE user_id = ? AND house_id = ?)
+                """, userId, houseId, userId, houseId);
         jdbc.update("""
                 UPDATE users SET active_house_id = (
                     SELECT previous_house_id FROM guided_demo_sessions WHERE user_id = ? AND house_id = ?
@@ -89,12 +99,14 @@ public class GuidedDemoService {
         jdbc.update("INSERT INTO organizations(id, type, name) VALUES (?, 'MANAGEMENT_COMPANY', 'Демонстрационная УК')", org);
         jdbc.update("INSERT INTO houses(id, address) VALUES (?, ?)", house, address);
         jdbc.update("INSERT INTO organization_houses(organization_id, house_id, status) VALUES (?, ?, 'ACTIVE')", org, house);
-        for (String role : List.of("RESIDENT", "DISPATCHER")) {
+        for (String role : List.of("RESIDENT", "DISPATCHER", "HOUSE_ADMIN")) {
             jdbc.update("""
                     INSERT INTO house_memberships(house_id, user_id, role, verification_status, access_status, source_organization_id)
                     VALUES (?, ?, ?, 'VERIFIED', 'ACTIVE', ?)
                     """, house, userId, role, org);
         }
+        jdbc.update("INSERT INTO organization_memberships(organization_id, user_id, role, access_status) VALUES (?, ?, 'UK_ADMIN', 'ACTIVE')", org, userId);
+        jdbc.update("INSERT INTO uk_admin_houses(organization_id, user_id, house_id, access_status) VALUES (?, ?, ?, 'ACTIVE')", org, userId, house);
         jdbc.update("INSERT INTO users(id, display_name, status) VALUES (?, 'Сосед из демонстрационного дома', 'ACTIVE')", neighbor);
         jdbc.update("""
                 INSERT INTO house_memberships(house_id, user_id, role, verification_status, access_status, source_organization_id)
@@ -103,6 +115,8 @@ public class GuidedDemoService {
         jdbc.update("UPDATE users SET active_house_id = ? WHERE id = ?", house, userId);
         jdbc.update("INSERT INTO guided_demo_sessions(id, user_id, organization_id, house_id, previous_house_id, created_at) VALUES (?, ?, ?, ?, ?, ?)",
                 session, userId, org, house, previousHouse, now);
+        jdbc.update("INSERT INTO guided_demo_organizations(session_id, organization_id) VALUES (?, ?)", session, org);
+        jdbc.update("INSERT INTO guided_demo_houses(session_id, house_id) VALUES (?, ?)", session, house);
         field(house, "management_company", "\"Демонстрационная УК\"", now);
         field(house, "building_year", "2018", now);
         field(house, "emergency_contact", "\"+7 800 000-00-00\"", now);
