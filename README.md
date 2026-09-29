@@ -12,7 +12,7 @@
 - `https://pulsedoma.ru/miniapp/index.html` — браузерный демостенд с переключением тестовых ролей;
 - `https://www.pulsedoma.ru/actuator/health` и `https://pulsedoma.ru/actuator/health` — состояние backend.
 
-Полный HTTP-контракт находится в [`infra/openapi.yaml`](infra/openapi.yaml), а короткая карта методов для проверки — в [`DATA-API.yaml`](DATA-API.yaml).
+Полный HTTP-контракт находится в [`infra/openapi.yaml`](infra/openapi.yaml), а короткая карта методов для проверки — в [`DATA-API.yaml`](DATA-API.yaml). [Результат проверки на живом демостенде](docs/data-api-check.md): 22 запроса с ожидаемыми ответами и состояниями заявки.
 
 ## Запускаемые сервисы и библиотеки
 
