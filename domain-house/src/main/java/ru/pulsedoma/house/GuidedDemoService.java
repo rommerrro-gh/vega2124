@@ -119,6 +119,13 @@ public class GuidedDemoService {
         jdbc.update("INSERT INTO guided_demo_houses(session_id, house_id) VALUES (?, ?)", session, house);
         field(house, "management_company", "\"Демонстрационная УК\"", now);
         field(house, "building_year", "2018", now);
+        field(house, "floor_count", "9", now);
+        field(house, "wall_material", "\"кирпич\"", now);
+        field(house, "entrance_count", "4", now);
+        field(house, "apartment_count", "144", now);
+        field(house, "total_area_sqm", "9600", now);
+        field(house, "registered_residents_count", "312", now);
+        field(house, "capital_repairs", "[\"2021 — замена лифтов\",\"2024 — ремонт кровли\"]", now);
         field(house, "emergency_contact", "\"+7 800 000-00-00\"", now);
         jdbc.update("""
                 INSERT INTO house_contacts(id, house_id, type, title, phone, details, updated_at, updated_by)

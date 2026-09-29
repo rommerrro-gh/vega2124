@@ -1182,13 +1182,13 @@ components:
         houseId: {type: string, minLength: 1}
     CreateReportRequest:
       type: object
-      required: [houseId, text, category, location, occurredAt]
+      required: [houseId, text, category, location]
       properties:
         houseId: {type: string, minLength: 1}
         text: {type: string, minLength: 1, maxLength: 4000}
-        category: {type: string, minLength: 1, maxLength: 100}
+        category: {type: string, enum: [LIGHTING, WATER, HEATING, ELEVATOR, ENTRANCE_CLEANING, YARD_CLEANING, WASTE_REMOVAL, PLAYGROUND, OTHER]}
         location: {type: string, minLength: 1, maxLength: 160}
-        occurredAt: {type: string, format: date-time}
+        occurredAt: {type: string, format: date-time, description: Optional occurrence time; defaults to server receipt time}
     CreateReportResponse:
       type: object
       required: [reportId, correlationId, candidates]

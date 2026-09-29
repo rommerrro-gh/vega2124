@@ -68,7 +68,8 @@ class GuidedDemoFlowTest {
         assertEquals(1, access.organizations("judge-b").size());
         assertEquals(1, jdbc.queryForObject("SELECT count(*) FROM issue_participants p JOIN issues i ON i.id = p.issue_id WHERE i.house_id = ? AND p.user_id <> 'judge-a'", Integer.class, first.houseId()));
         assertEquals(1, jdbc.queryForObject("SELECT count(*) FROM polls WHERE house_id = ?", Integer.class, first.houseId()));
-        assertEquals(3, jdbc.queryForObject("SELECT count(*) FROM house_fields WHERE house_id = ?", Integer.class, first.houseId()));
+        assertEquals(10, jdbc.queryForObject("SELECT count(*) FROM house_fields WHERE house_id = ?", Integer.class, first.houseId()));
+        assertEquals("312", jdbc.queryForObject("SELECT value_json FROM house_fields WHERE house_id = ? AND key = 'registered_residents_count'", String.class, first.houseId()));
         var report = reports.createReport(new CreateReportCommand(first.houseId(), "judge-a", "Не работает свет в подъезде", "LIGHTING", "Подъезд 1, этаж 2", null));
         assertFalse(report.candidates.isEmpty());
         var restarted = demos.restart("judge-a");

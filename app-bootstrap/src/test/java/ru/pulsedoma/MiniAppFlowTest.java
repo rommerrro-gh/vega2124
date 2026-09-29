@@ -20,6 +20,7 @@ import java.nio.file.Path;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
@@ -143,11 +144,19 @@ class MiniAppFlowTest {
                 .header("X-Demo-Session", "true")).andExpect(status().isOk())
                 .andReturn().getResponse().getContentAsByteArray());
         assertEquals("Казань, ул. Баумана, 12", passport.path("address").asText());
-        assertEquals(2, passport.path("fields").size());
-        assertEquals("building_year", passport.path("fields").get(0).path("key").asText());
-        assertEquals(2005, passport.path("fields").get(0).path("value").asInt());
-        assertEquals("Демо-данные", passport.path("fields").get(0).path("source").asText());
-        assertEquals("2026-09-28T00:00:00Z", passport.path("fields").get(0).path("fetchedAt").asText());
+        assertEquals(9, passport.path("fields").size());
+        JsonNode year = null;
+        JsonNode residents = null;
+        for (JsonNode field : passport.path("fields")) {
+            if ("building_year".equals(field.path("key").asText())) year = field;
+            if ("registered_residents_count".equals(field.path("key").asText())) residents = field;
+        }
+        assertNotNull(year);
+        assertEquals(2005, year.path("value").asInt());
+        assertEquals("Демо-данные", year.path("source").asText());
+        assertEquals("2026-09-28T00:00:00Z", year.path("fetchedAt").asText());
+        assertNotNull(residents);
+        assertEquals(312, residents.path("value").asInt());
 
         JsonNode empty = json(mvc.perform(get("/v1/houses/demo-house-2")
                 .header("X-Demo-Session", "true")).andExpect(status().isOk())
@@ -157,6 +166,22 @@ class MiniAppFlowTest {
                 .andExpect(status().isNotFound());
         mvc.perform(get("/v1/houses/missing-house").header("X-Demo-Session", "true"))
                 .andExpect(status().isNotFound());
+    }
+
+    @Test
+    void acceptsNewWasteRemovalCategory() throws Exception {
+        String body = """
+                {"houseId":"demo-house-1","text":"Контейнеры переполнены, мусор не вывезен",
+                 "category":"WASTE_REMOVAL","location":"Контейнерная площадка"}
+                """;
+        JsonNode result = json(mvc.perform(post("/v1/reports").header("X-Demo-Session", "true")
+                .contentType("application/json").content(body)).andExpect(status().isCreated())
+                .andReturn().getResponse().getContentAsByteArray());
+        assertEquals("WASTE_REMOVAL", jdbc.queryForObject(
+                "SELECT category FROM reports WHERE id = ?", String.class, result.path("reportId").asText()));
+        assertEquals(1, jdbc.queryForObject(
+                "SELECT COUNT(*) FROM reports WHERE id = ? AND occurred_at = created_at",
+                Integer.class, result.path("reportId").asText()));
     }
 
     @Test

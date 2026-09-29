@@ -17,7 +17,9 @@ const statusLabels = {
 };
 const categoryLabels = {
   LIGHTING: "Освещение", WATER: "Вода", HEATING: "Отопление",
-  ELEVATOR: "Лифт", OTHER: "Другое",
+  ELEVATOR: "Лифт", ENTRANCE_CLEANING: "Уборка подъезда",
+  YARD_CLEANING: "Уборка придомовой территории", WASTE_REMOVAL: "Вывоз мусора",
+  PLAYGROUND: "Детская площадка", OTHER: "Другое",
 };
 const transitions = {
   DRAFT: ["OPEN", "Принять заявку"], OPEN: ["ASSIGNED", "Назначить себе"],
@@ -30,8 +32,16 @@ const issueStage = { DRAFT: 0, OPEN: 1, ASSIGNED: 2, REOPENED: 2, IN_PROGRESS: 3
 const passportLabels = {
   management_company: "Управляющая организация",
   building_year: "Год постройки",
+  floor_count: "Этажность",
+  wall_material: "Материал стен",
+  entrance_count: "Количество подъездов",
+  apartment_count: "Количество квартир",
+  total_area_sqm: "Площадь дома, м²",
+  registered_residents_count: "Зарегистрировано жителей",
+  capital_repairs: "Проведённый капитальный ремонт",
   emergency_contact: "Аварийный контакт",
 };
+const passportFieldOrder = Object.keys(passportLabels);
 
 function passportValue(value) {
   if (value == null) return "Не указано";
@@ -149,7 +159,7 @@ function Brand({ role }) {
     } catch (error) { setNotice(error.message); }
   }
   return <><header className="topbar">
-    <div className="brand"><span className="brand-mark" aria-hidden="true"><i /></span><span>Пульс дома</span></div>
+    <div className="brand"><img className="brand-icon" src="/miniapp/app-icon.png?v=20260929-6" alt="" /><span>Пульс дома</span></div>
     {available.length ? <details ref={menu} className="role-menu">
       <summary aria-label="Выбрать роль">{current?.[1] || role} <span aria-hidden="true">⌄</span></summary>
       <button className="role-menu-backdrop" type="button" aria-label="Закрыть меню ролей" onClick={() => { menu.current.open = false; }} />
@@ -255,7 +265,7 @@ function AttachmentList({ attachments, role, onError }) {
 function IssueDetails({ issue, role, onError }) {
   return <>
     {role === "true" && issue.mergedForMe && <p className="merge-notice">Ваше обращение объединили с другой заявкой. Следите за ходом работ здесь.</p>}
-    <div className="detail-lines"><p className="muted">{issue.address}</p>{issue.category && <p className="muted">Категория: {categoryLabels[issue.category] || issue.category}</p>}{issue.location && <p className="muted">Место: {issue.location}</p>}{issue.occurredAt && <p className="muted">Замечено: {new Date(issue.occurredAt).toLocaleString("ru-RU")}</p>}</div>
+    <div className="detail-lines"><p className="muted">{issue.address}</p>{issue.category && <p className="muted">Категория: {categoryLabels[issue.category] || issue.category}</p>}{issue.location && <p className="muted">Место: {issue.location}</p>}{issue.occurredAt && <p className="muted">Дата и время обращения: {new Date(issue.occurredAt).toLocaleString("ru-RU")}</p>}</div>
     <p className="detail-description">{issue.description || "Активных обращений нет."}</p>
     {issue.plannedDate && <div className={`planned-date ${issueOverdue(issue) ? "planned-date-overdue" : ""}`}>
       <strong>{issueOverdue(issue) ? "Плановый срок прошёл" : "Планируем выполнить до"} {passportDate(`${issue.plannedDate}T12:00:00`)}</strong>
@@ -272,18 +282,21 @@ function IssueDetails({ issue, role, onError }) {
 
 function HousePassport({ passport, loading, error }) {
   const summary = loading ? "Загружаем сведения…" : error ? "Не удалось загрузить сведения" : passport ? `${countLabel(passport.fields.length, "поле", "поля", "полей")} · ${countLabel(passport.contacts?.length || 0, "контакт", "контакта", "контактов")}` : "Сведения о доме";
+  const known = new Map(passport?.fields.map(field => [field.key, field]) || []);
+  const displayFields = passport ? [...passportFieldOrder.map(key => known.get(key) || { key, value: null }),
+    ...passport.fields.filter(field => !passportFieldOrder.includes(field.key))] : [];
   return <DisclosureCard className="passport-card" title="Паспорт дома" summary={summary}>
-    <p className="muted">Сведения о доме с источником и датой каждого поля</p>
+    <p className="muted">Сведения о доме. Для заполненных полей указаны источник и дата получения.</p>
     {loading ? <p className="muted">Загружаем сведения о доме…</p> : error ? <p className="notice" role="alert">{error}</p> : passport && <>
       <h3 className="passport-address">{passport.address}</h3>
-      {passport.fields.length ? <div className="passport-fields">{passport.fields.map(field => {
+      <div className="passport-fields">{displayFields.map(field => {
         const sourceUrl = safeSourceUrl(field.sourceUrl);
         return <div className="passport-field" key={field.key}>
           <div className="passport-field-label">{passportLabels[field.key] || field.key.replaceAll("_", " ")}</div>
           <div className="passport-field-value">{passportValue(field.value)}</div>
-          <div className="passport-field-source">Источник: {sourceUrl ? <a href={sourceUrl} target="_blank" rel="noopener noreferrer">{field.source}</a> : field.source} · получено {passportDate(field.fetchedAt)}{field.validAt && ` · актуально на ${passportDate(field.validAt)}`}</div>
+          {field.source && <div className="passport-field-source">Источник: {sourceUrl ? <a href={sourceUrl} target="_blank" rel="noopener noreferrer">{field.source}</a> : field.source} · получено {passportDate(field.fetchedAt)}{field.validAt && ` · актуально на ${passportDate(field.validAt)}`}</div>}
         </div>;
-      })}</div> : <p className="muted passport-empty">Поля паспорта пока не заполнены. Данные появятся здесь вместе с источником и датой получения.</p>}
+      })}</div>
       {!!passport.contacts?.length && <div className="passport-contacts"><h4>Контакты дома</h4><div className="passport-fields">{passport.contacts.map(contact => <div className="passport-field" key={contact.id}>
         <div className="passport-field-label">{contact.type === "EMERGENCY" ? "Аварийный контакт" : "Местный контакт"}</div>
         <div className="passport-field-value">{contact.title}</div>
@@ -402,7 +415,6 @@ function Resident() {
         report = await request("/v1/reports", { method: "POST", body: JSON.stringify({
           houseId: selectedHouseId, category: form.elements.category.value,
           location: form.elements.location.value.trim(),
-          occurredAt: new Date(form.elements["occurred-at"].value).toISOString(),
           text: form.elements.description.value.trim(),
         }) });
         id = report.reportId;
@@ -461,15 +473,9 @@ function Resident() {
   function again() {
     setReportId(null); setReportData(null); setUploaded(0); setCandidates([]); setIssue(null); setIssueMessage("");
     setStep("form"); setShowReportForm(true); setWithdrawReason(""); setWithdrawTargetId(null); setNotice("");
-    localNow.current = new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 16);
-    requestAnimationFrame(() => {
-      formRef.current?.reset();
-      const date = formRef.current?.elements["occurred-at"];
-      if (date) date.value = localNow.current;
-    });
+    requestAnimationFrame(() => formRef.current?.reset());
   }
 
-  const localNow = useRef(new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 16));
   const selectedHouse = houses.find(house => house.id === selectedHouseId);
   const canReport = selectedHouse?.memberships?.some(item => item.role === "RESIDENT" && item.verificationStatus === "VERIFIED");
   const houseIssues = issues.filter(item => item.houseId === selectedHouseId);
@@ -486,9 +492,9 @@ function Resident() {
       {step === "form" && showReportForm && canReport && <Card className="form-card">
         <div className="form-title"><SectionHeading title="Сообщить о проблеме" subtitle={`Дом: ${selectedHouse?.address || "не выбран"}`} /><button className="form-close" type="button" disabled={busy} onClick={() => reportId ? withdrawReport(reportId, "Создание заявки отменено пользователем", "Создание заявки отменено.") : setShowReportForm(false)}>Отмена</button></div>
         <form ref={formRef} onSubmit={submitReport}>
-          <Field id="category" label="Категория"><select id="category" name="category" required disabled={!!reportId} defaultValue=""><option value="">Выберите категорию</option><option value="LIGHTING">Освещение</option><option value="WATER">Вода</option><option value="HEATING">Отопление</option><option value="ELEVATOR">Лифт</option><option value="OTHER">Другое</option></select></Field>
+          <Field id="category" label="Категория"><select id="category" name="category" required disabled={!!reportId} defaultValue=""><option value="">Выберите категорию</option><option value="LIGHTING">Освещение</option><option value="WATER">Вода</option><option value="HEATING">Отопление</option><option value="ELEVATOR">Лифт</option><option value="ENTRANCE_CLEANING">Уборка подъезда</option><option value="YARD_CLEANING">Уборка придомовой территории</option><option value="WASTE_REMOVAL">Вывоз мусора</option><option value="PLAYGROUND">Детская площадка</option><option value="OTHER">Другое</option></select></Field>
           <Field id="location" label="Где именно?"><input id="location" name="location" maxLength="160" placeholder="Например, подъезд 1, этаж 2" required disabled={!!reportId} /></Field>
-          <Field id="occurred-at" label="Когда заметили?"><input id="occurred-at" name="occurred-at" type="datetime-local" defaultValue={localNow.current} required disabled={!!reportId} /></Field>
+          <Field id="appeal-time" label="Дата и время обращения"><output id="appeal-time" className="automatic-time">Запишем автоматически при отправке обращения</output></Field>
           <Field id="description" label="Что произошло?"><textarea id="description" name="description" maxLength="4000" minLength="8" placeholder="Опишите, что случилось и как это влияет на жителей" required disabled={!!reportId} /></Field>
           <Field id="attachments" label="Фото, видео или документ"><input id="attachments" name="attachments" type="file" accept="image/jpeg,image/png,video/mp4,application/pdf" multiple /></Field>
           <p className="hint">До 5 файлов по 10 МБ. Содержимое файлов не анализируется.</p>

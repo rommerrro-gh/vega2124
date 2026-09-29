@@ -54,6 +54,7 @@ public class ReportService {
         }
 
         Instant now = Instant.now();
+        Instant recordedAt = command.occurredAt() == null ? now : command.occurredAt();
         Report report = new Report();
         report.id = UUID.randomUUID().toString();
         report.correlationId = UUID.randomUUID().toString();
@@ -70,7 +71,7 @@ public class ReportService {
                         ?, ?, ?)
                 """, report.id, report.houseId, report.authorId, report.rawText, normalized,
                 report.category, command.location(), command.location(), locationKey,
-                command.occurredAt() == null ? null : command.occurredAt().toString(),
+                recordedAt.toString(),
                 report.correlationId, now.toString());
         audit(report.authorId, "REPORT_CREATED", "report", report.id, now);
 

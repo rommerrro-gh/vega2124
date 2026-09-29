@@ -41,7 +41,14 @@ public class DemoDataConfig {
             jdbc.update("""
                     INSERT OR IGNORE INTO house_fields(house_id, key, value_json, source, fetched_at)
                     VALUES ('demo-house-1', 'management_company', '"Демонстрационная УК"', 'Демо-данные', '2026-09-28T00:00:00Z'),
-                           ('demo-house-1', 'building_year', '2005', 'Демо-данные', '2026-09-28T00:00:00Z')
+                           ('demo-house-1', 'building_year', '2005', 'Демо-данные', '2026-09-28T00:00:00Z'),
+                           ('demo-house-1', 'floor_count', '9', 'Демо-данные', '2026-09-28T00:00:00Z'),
+                           ('demo-house-1', 'wall_material', '"кирпич"', 'Демо-данные', '2026-09-28T00:00:00Z'),
+                           ('demo-house-1', 'entrance_count', '4', 'Демо-данные', '2026-09-28T00:00:00Z'),
+                           ('demo-house-1', 'apartment_count', '144', 'Демо-данные', '2026-09-28T00:00:00Z'),
+                           ('demo-house-1', 'total_area_sqm', '9600', 'Демо-данные', '2026-09-28T00:00:00Z'),
+                           ('demo-house-1', 'registered_residents_count', '312', 'Демо-данные', '2026-09-28T00:00:00Z'),
+                           ('demo-house-1', 'capital_repairs', '["2021 — замена лифтов","2024 — ремонт кровли"]', 'Демо-данные', '2026-09-28T00:00:00Z')
                     """);
         };
     }
