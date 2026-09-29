@@ -29,6 +29,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 
 @SpringBootTest
 @AutoConfigureMockMvc
@@ -53,6 +54,15 @@ class MiniAppFlowTest {
     @Autowired ObjectMapper mapper;
     @Autowired JdbcTemplate jdbc;
     @Autowired MiniAppService issues;
+
+    @Test
+    void miniAppCanBeEmbeddedByMaxWebClient() throws Exception {
+        mvc.perform(get("/miniapp/index.html"))
+                .andExpect(status().isOk())
+                .andExpect(header().doesNotExist("X-Frame-Options"))
+                .andExpect(header().string("Content-Security-Policy",
+                        "frame-ancestors 'self' https://web.max.ru https://max.ru"));
+    }
 
     @Test
     void houseAdminIsScopedToOneHouseAndAuditsContactsAndInvitations() throws Exception {
