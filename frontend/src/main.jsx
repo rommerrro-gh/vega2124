@@ -230,22 +230,6 @@ function Notice({ message }) {
   return message ? <div className={`notice${message.startsWith("Нет доступа.") ? " notice-error" : ""}`} role="alert">{message}</div> : null;
 }
 
-function QuickLink({ dispatcher = false }) {
-  return <div className="quick-link">
-    <span className="quick-link-icon" aria-hidden="true">{dispatcher ? "↙" : "↗"}</span>
-    <div><strong>{dispatcher ? "Мини-приложение жителя" : "Кабинет диспетчера"}</strong><small>{dispatcher ? "Вернуться к своим заявкам" : "Очередь заявок вашего дома"}</small></div>
-    <Button mode="tertiary" type="button" onClick={() => navigate(dispatcher ? "/miniapp/index.html" : "/dispatcher/index.html")}>Открыть</Button>
-  </div>;
-}
-
-function AdminLink() {
-  return <div className="quick-link">
-    <span className="quick-link-icon" aria-hidden="true">⌂</span>
-    <div><strong>Кабинет администратора дома</strong><small>Контакты и приглашения жителей</small></div>
-    <Button mode="tertiary" type="button" onClick={() => navigate("/admin/index.html")}>Открыть</Button>
-  </div>;
-}
-
 function InvitationToken({ token, role = "admin" }) {
   const [username, setUsername] = useState("");
   useEffect(() => { api(role, "/v1/access/config").then(config => setUsername(config.botUsername || "")).catch(() => {}); }, []);
@@ -334,8 +318,6 @@ function Resident() {
   const [polls, setPolls] = useState([]);
   const [pollBusy, setPollBusy] = useState(false);
   const [issues, setIssues] = useState([]);
-  const [dispatcher, setDispatcher] = useState(false);
-  const [access, setAccess] = useState([]);
   const [notice, setNotice] = useState("");
   const [step, setStep] = useState("form");
   const [showReportForm, setShowReportForm] = useState(false);
@@ -356,11 +338,11 @@ function Resident() {
 
   useEffect(() => {
     async function load() {
-      const [myHouses, myIssues, dispatcherHouses, roles, selected] = await Promise.all([
-        request("/v1/me/houses"), request("/v1/me/issues"), request("/v1/me/dispatcher-houses"),
+      const [myHouses, myIssues, roles, selected] = await Promise.all([
+        request("/v1/me/houses"), request("/v1/me/issues"),
         request("/v1/access/me"), request("/v1/me/active-house"),
       ]);
-      setHouses(myHouses); setIssues(myIssues); setDispatcher(dispatcherHouses.length > 0); setAccess(roles);
+      setHouses(myHouses); setIssues(myIssues);
       if (myHouses.length) setSelectedHouseId(myHouses.find(house => house.id === selected.houseId)?.id || myHouses[0].id);
       if (!roles.length) setNotice("Профиль создан. Чтобы получить доступ, откройте приглашение от администратора.");
     }
@@ -529,10 +511,6 @@ function Resident() {
         <Button mode="tertiary" className="quiet-action" type="button" stretched onClick={() => { again(); setShowReportForm(false); }}>На главную</Button>
       </Card>}
     </div>
-    {dispatcher && <QuickLink />}
-    {houses.some(house => house.memberships?.some(access => access.role === "HOUSE_ADMIN" && access.verificationStatus === "VERIFIED")) && <AdminLink />}
-    {access.some(item => item.role === "UK_ADMIN") && <div className="quick-link"><strong>Кабинет УК</strong><Button mode="tertiary" onClick={() => navigate("/uk/index.html")}>Открыть</Button></div>}
-    {access.some(item => item.role === "SYSTEM_ADMIN") && <div className="quick-link"><strong>Управление системой</strong><Button mode="tertiary" onClick={() => navigate("/system/index.html")}>Открыть</Button></div>}
     <footer>Пульс дома <span>·</span> Сделаем дом лучше вместе</footer>
   </main>;
 }
@@ -627,7 +605,6 @@ function Admin() {
     <Brand role="Администратору" />
     <section className="hero"><div className="hero-copy"><div className="hero-kicker"><span className="live-dot" /> Кабинет дома</div><h1>Информация<br />для жителей</h1><p>Поддерживайте контакты дома и приглашайте новых участников.</p></div></section>
     <Notice message={notice} />
-    <div className="quick-link"><span className="quick-link-icon" aria-hidden="true">↙</span><div><strong>Мини-приложение жителя</strong><small>Посмотреть паспорт дома</small></div><Button mode="tertiary" type="button" onClick={() => navigate("/miniapp/index.html?demoSession=admin")}>Открыть</Button></div>
     {!!houses.length && <div className="content-grid">
       <Card><SectionHeading number="01" title="Дом" subtitle="Изменения доступны только для выбранного дома" /><Field id="admin-house" label="Администрируемый дом"><select id="admin-house" value={houseId} onChange={event => { setHouseId(event.target.value); resetContact(); }}>{houses.map(house => <option key={house.id} value={house.id}>{house.address}</option>)}</select></Field></Card>
       <Card><SectionHeading number="02" title="Контакты" subtitle="Локальные сведения с датой изменения в паспорте дома" />
@@ -751,7 +728,7 @@ function Dispatcher() {
       && issueStage[item.status] >= issueStage[issue.status]) : [];
 
   return <main className="shell">
-    <Brand role="Диспетчеру" /><Hero dispatcher /><Notice message={notice} /><QuickLink dispatcher />
+    <Brand role="Диспетчеру" /><Hero dispatcher /><Notice message={notice} />
     <div className="content-grid">
       <Card className="queue-card"><SectionHeading number="01" title="Очередь заявок" subtitle="Обращения жителей по вашему дому" />
         <Field id="house" label="Дом"><select id="house" value={houseId} onChange={event => setHouseId(event.target.value)}><option value="">Выберите дом</option>{houses.map(h => <option value={h.id} key={h.id}>{h.address}</option>)}</select></Field>
