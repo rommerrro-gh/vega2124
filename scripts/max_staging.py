@@ -40,6 +40,14 @@ def get_json(url, token=None):
         return json.load(response)
 
 
+def subscription_items(response):
+    if isinstance(response, dict):
+        response = response.get("subscriptions")
+    if not isinstance(response, list):
+        raise ValueError("MAX вернул неожиданный формат списка подписок")
+    return response
+
+
 def check(public_url, token, secret, api_url):
     errors = []
     if not token:
@@ -70,8 +78,8 @@ def check(public_url, token, secret, api_url):
         print("OK: mini app доступен по HTTPS")
         get_json(api_url + "/me", token)
         print("OK: токен принят MAX API")
-        subscriptions = get_json(api_url + "/subscriptions", token)
-        count = len(subscriptions) if isinstance(subscriptions, list) else "получены"
+        subscriptions = subscription_items(get_json(api_url + "/subscriptions", token))
+        count = len(subscriptions)
         print("OK: подписки webhook доступны, количество:", count)
         return True
     except (urllib.error.URLError, ValueError, json.JSONDecodeError) as error:
@@ -81,9 +89,9 @@ def check(public_url, token, secret, api_url):
 
 def subscribe(public_url, token, secret, api_url):
     try:
-        existing = get_json(api_url + "/subscriptions", token)
-        if isinstance(existing, list) and any(item.get("url") == public_url + "/webhooks/max"
-                                              for item in existing if isinstance(item, dict)):
+        existing = subscription_items(get_json(api_url + "/subscriptions", token))
+        if any(item.get("url") == public_url + "/webhooks/max"
+               for item in existing if isinstance(item, dict)):
             print("OK: webhook MAX уже зарегистрирован для этого адреса")
             return True
     except (urllib.error.URLError, ValueError, json.JSONDecodeError) as error:
