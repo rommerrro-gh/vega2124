@@ -33,6 +33,8 @@ max:
   api:
     base-url: ${MAX_API_BASE_URL:https://platform-api2.max.ru}
     token: ${MAX_BOT_TOKEN:}
+guided-demo:
+  code-sha256: ${GUIDED_DEMO_CODE_SHA256:}
 integration:
   external:
     base-url: ${CONTRACT_ADAPTER_URL:http://localhost:8081}

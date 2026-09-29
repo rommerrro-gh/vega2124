@@ -34,6 +34,11 @@ class MaxNotificationTest {
             client.sendText("123456", "Проверьте заявку").block(Duration.ofSeconds(5));
             assertTrue(request.get().startsWith("POST /messages?user_id=123456 test-token "));
             assertTrue(request.get().contains("\"text\":\"Проверьте заявку\""));
+            client.sendWelcome("123456", "t802_hakaton_max_bot", "Добро пожаловать")
+                    .block(Duration.ofSeconds(5));
+            assertTrue(request.get().contains("\"type\":\"inline_keyboard\""));
+            assertTrue(request.get().contains("\"type\":\"open_app\""));
+            assertTrue(request.get().contains("\"web_app\":\"t802_hakaton_max_bot\""));
         } finally {
             server.stop(0);
         }

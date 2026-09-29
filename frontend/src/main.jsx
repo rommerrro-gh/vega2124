@@ -106,29 +106,80 @@ async function downloadAttachment(role, attachment, onError) {
   } catch (error) { onError(error.message); }
 }
 
-function Brand({ role }) {
-  return <header className="topbar">
-    <div className="brand"><span className="brand-mark" aria-hidden="true"><i /></span><span>Пульс дома</span></div>
-    <span className="max-chip"><span className="max-dot" /> {role} · MAX</span>
-  </header>;
-}
-
-const demoPages = [
-  ["Житель", "/miniapp/index.html"],
-  ["Диспетчер", "/dispatcher/index.html"],
-  ["Администратор дома", "/admin/index.html"],
-  ["Администратор УК", "/uk/index.html"],
-  ["Системный администратор", "/system/index.html"],
+const rolePages = [
+  ["RESIDENT", "Житель", "/miniapp/index.html"],
+  ["DISPATCHER", "Диспетчер", "/dispatcher/index.html"],
+  ["HOUSE_ADMIN", "Администратор дома", "/admin/index.html"],
+  ["UK_ADMIN", "Администратор УК", "/uk/index.html"],
+  ["SYSTEM_ADMIN", "Системный администратор", "/system/index.html"],
 ];
 
-function DemoRoleSwitcher() {
+function Brand({ role }) {
+  const [access, setAccess] = useState([]);
+  const [demo, setDemo] = useState(null);
+  const [localDemo, setLocalDemo] = useState(false);
+  const [notice, setNotice] = useState("");
+  const [help, setHelp] = useState(false);
+  useEffect(() => {
+    Promise.all([api("true", "/v1/access/me"), api("true", "/v1/guided-demo"), api("true", "/v1/access/config")])
+      .then(([roles, state, config]) => { setAccess(roles); setDemo(state); setLocalDemo(config.demoMode === true); }).catch(() => {});
+  }, []);
+  const available = localDemo ? rolePages : rolePages.filter(([name]) => access.some(item => item.role === name));
+  const current = rolePages.find(([, , path]) => location.pathname === path);
+  async function demoAction(action) {
+    setNotice("");
+    try {
+      await api("true", `/v1/guided-demo/${action}`, { method: "POST" });
+      navigate("/miniapp/index.html");
+    } catch (error) { setNotice(error.message); }
+  }
+  return <><header className="topbar">
+    <div className="brand"><span className="brand-mark" aria-hidden="true"><i /></span><span>Пульс дома</span></div>
+    {available.length ? <details className="role-menu">
+      <summary aria-label="Выбрать роль">{current?.[1] || role} <span aria-hidden="true">⌄</span></summary>
+      <nav aria-label="Доступные роли">
+        {available.map(([name, label, path]) => <button key={name} type="button"
+          aria-current={location.pathname === path ? "page" : undefined}
+          onClick={() => navigate(path)}>{label}{location.pathname === path ? " ✓" : ""}</button>)}
+        {demo?.active && <><hr /><span className="role-menu-caption">Демонстрационный режим · тестовые данные</span>
+          <button type="button" onClick={() => setHelp(value => !value)}>Инструкция по сценарию</button>
+          <button type="button" onClick={() => demoAction("restart")}>Начать заново</button>
+          <button type="button" onClick={() => demoAction("exit")}>Выйти из демонстрации</button></>}
+      </nav>
+    </details> : <span className="max-chip"><span className="max-dot" /> {role} · MAX</span>}
+  </header>{demo?.active && <div className="guided-demo-badge">Демонстрационный режим · {demo.address}</div>}
+    {help && <div className="guided-demo-help"><strong>Проверка сценария</strong><ol>
+      <li>В роли жителя посмотрите паспорт дома и опрос. Создайте обращение «Не работает свет в подъезде», место «Подъезд 1, этаж 2».</li>
+      <li>Присоединитесь к похожей заявке или создайте новую.</li>
+      <li>Переключитесь в диспетчера и проведите заявку до выполнения.</li>
+      <li>Проверьте сообщение от бота, вернитесь в роль жителя и подтвердите результат.</li>
+    </ol></div>}{notice && <div className="notice" role="alert">{notice}</div>}</>;
+}
+
+function GuidedDemoEntry() {
   const [enabled, setEnabled] = useState(false);
-  useEffect(() => { api("true", "/v1/access/config").then(config => setEnabled(config.demoMode === true)).catch(() => {}); }, []);
+  const [code, setCode] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [notice, setNotice] = useState("");
+  useEffect(() => { api("true", "/v1/guided-demo").then(state => setEnabled(state.enabled && !state.active)).catch(() => {}); }, []);
+  async function activate(value) {
+    setBusy(true); setNotice("");
+    try {
+      await api("true", "/v1/guided-demo/activate", { method: "POST", body: JSON.stringify({ code: value }) });
+      navigate("/miniapp/index.html");
+    } catch (error) { setNotice(error.message); setBusy(false); }
+  }
+  useEffect(() => {
+    if (!enabled) return;
+    const start = window.WebApp?.initDataUnsafe?.start_param || new URLSearchParams(location.search).get("WebAppStartParam") || "";
+    if (start.startsWith("demo_") && start.length > 5) activate(start.slice(5));
+  }, [enabled]);
   if (!enabled) return null;
-  return <nav className="demo-role-switcher" aria-label="Демонстрационные роли">
-    <strong>Демонстрационный стенд</strong><span>Выберите роль для проверки:</span>
-    <div>{demoPages.map(([label, path]) => <button key={path} type="button" className={location.pathname === path ? "active" : ""} aria-current={location.pathname === path ? "page" : undefined} onClick={() => navigate(path)}>{label}</button>)}</div>
-  </nav>;
+  return <Card className="guided-demo-entry"><SectionHeading title="Проверяете проект?" subtitle="Введите код: для вас подготовится отдельный тестовый дом внутри MAX." />
+    <form onSubmit={event => { event.preventDefault(); activate(code); }}>
+      <Field id="demo-code" label="Код демонстрации"><input id="demo-code" value={code} maxLength="128" autoComplete="off" required onChange={event => setCode(event.target.value)} /></Field>
+      <Button mode="primary" type="submit" disabled={busy}>Запустить демонстрацию</Button>
+    </form>{notice && <Notice message={notice} />}</Card>;
 }
 
 function Hero({ dispatcher = false }) {
@@ -429,6 +480,7 @@ function Resident() {
   if (initialLoading) return <main className="shell"><Brand role="Жителю" /><div className="resident-hero"><Hero /></div><Card className="loading-card"><p role="status">Загружаем данные вашего дома…</p></Card></main>;
   return <main className="shell">
     <Brand role="Жителю" /><div className="resident-hero"><Hero /></div><Notice message={notice} />
+    <GuidedDemoEntry />
     {selectedHouse && <div className="house-switcher"><span className="house-switcher-icon" aria-hidden="true">⌂</span><div className="house-switcher-copy"><span>Ваш дом</span>{houses.length > 1 ? <select aria-label="Выбранный дом" value={selectedHouseId} disabled={step !== "form" || !!reportId} onChange={event => { setSelectedHouseId(event.target.value); request("/v1/me/active-house", { method: "PUT", body: JSON.stringify({ houseId: event.target.value }) }).catch(fail); }}>{houses.map(house => <option key={house.id} value={house.id}>{house.address}</option>)}</select> : <strong>{selectedHouse.address}</strong>}</div></div>}
     {!!awaitingVerification.length && step === "form" && <div className="priority-notice"><div><strong>Подтвердите выполнение работ</strong><p>{countLabel(awaitingVerification.length, "заявка ждёт", "заявки ждут", "заявок ждут")} вашего ответа.</p></div><Button mode="secondary" type="button" onClick={() => showIssue(awaitingVerification[0])}>Открыть</Button></div>}
     {selectedHouse && canReport && step === "form" && !showReportForm && <div className="start-action"><div><strong>Заметили проблему?</strong><p>Проверьте похожие заявки и сообщите о новой.</p></div><Button mode="primary" type="button" onClick={() => setShowReportForm(true)}>Сообщить о проблеме <span aria-hidden="true">→</span></Button></div>}
@@ -715,7 +767,10 @@ const accessRoleLabels = {
 };
 
 function InvitationGate() {
-  const [token, setToken] = useState(() => new URLSearchParams(location.search).get("invite") || window.WebApp?.initDataUnsafe?.start_param || "");
+  const [token, setToken] = useState(() => {
+    const start = new URLSearchParams(location.search).get("invite") || window.WebApp?.initDataUnsafe?.start_param || "";
+    return start.startsWith("demo_") ? "" : start;
+  });
   const [dismissed, setDismissed] = useState(false);
   const [invitation, setInvitation] = useState(null);
   const [legacy, setLegacy] = useState(false);
@@ -737,7 +792,13 @@ function InvitationGate() {
   useEffect(() => {
     if (!token && !dismissed) {
       const lastMode = localStorage.getItem("pulse-last-mode");
-      if (lastMode && lastMode !== "/miniapp/index.html") navigate(lastMode);
+      if (lastMode && lastMode !== "/miniapp/index.html") {
+        api(role, "/v1/access/me").then(roles => {
+          const destination = rolePages.find(([name, , path]) => path === lastMode && roles.some(item => item.role === name));
+          if (destination) navigate(lastMode);
+          else localStorage.removeItem("pulse-last-mode");
+        }).catch(() => {});
+      }
     }
   }, [token, dismissed]);
   if (!token) return <Resident />;
@@ -847,5 +908,5 @@ function UkAdmin() {
 }
 
 createRoot(document.getElementById("app")).render(
-  <MaxUI><DemoRoleSwitcher />{document.body.dataset.page === "dispatcher" ? <Dispatcher /> : document.body.dataset.page === "admin" ? <Admin /> : document.body.dataset.page === "system" ? <SystemAdmin /> : document.body.dataset.page === "uk" ? <UkAdmin /> : <InvitationGate />}</MaxUI>
+  <MaxUI>{document.body.dataset.page === "dispatcher" ? <Dispatcher /> : document.body.dataset.page === "admin" ? <Admin /> : document.body.dataset.page === "system" ? <SystemAdmin /> : document.body.dataset.page === "uk" ? <UkAdmin /> : <InvitationGate />}</MaxUI>
 );

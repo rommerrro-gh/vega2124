@@ -12,6 +12,7 @@ import org.springframework.stereotype.Component;
 import org.springframework.context.annotation.Profile;
 import ru.pulsedoma.issues.CreateReportCommand;
 import ru.pulsedoma.issues.ReportService;
+import ru.pulsedoma.max.MaxApiClient;
 
 import java.time.Duration;
 import java.time.Instant;
@@ -24,15 +25,21 @@ public final class MaxWebhookWorker {
     private final ObjectMapper mapper;
     private final JdbcTemplate jdbc;
     private final ReportService reports;
+    private final MaxApiClient max;
+    private final String botUsername;
     private final String queueKey;
     private Instant retryAfter = Instant.MIN;
 
     public MaxWebhookWorker(StringRedisTemplate redis, ObjectMapper mapper, JdbcTemplate jdbc,
-                            ReportService reports, @Value("${max.webhook.queue-key}") String queueKey) {
+                            ReportService reports, MaxApiClient max,
+                            @Value("${max.bot.username:}") String botUsername,
+                            @Value("${max.webhook.queue-key}") String queueKey) {
         this.redis = redis;
         this.mapper = mapper;
         this.jdbc = jdbc;
         this.reports = reports;
+        this.max = max;
+        this.botUsername = botUsername;
         this.queueKey = queueKey;
     }
 
@@ -53,6 +60,14 @@ public final class MaxWebhookWorker {
         boolean locked = false;
         try {
             JsonNode update = mapper.readTree(payload);
+            if ("bot_started".equals(update.path("update_type").asText())) {
+                String maxUserId = required(update.path("user").path("user_id"), "user.user_id");
+                String key = queueKey + ":welcome:" + maxUserId + ":" + update.path("timestamp").asText();
+                if (!Boolean.TRUE.equals(redis.opsForValue().setIfAbsent(key, "1", Duration.ofDays(1)))) return;
+                try { welcome(maxUserId); }
+                catch (Exception e) { redis.delete(key); throw e; }
+                return;
+            }
             if (!"message_created".equals(update.path("update_type").asText())) return;
             JsonNode message = update.path("message");
             messageId = required(message.path("body").path("mid"), "body.mid");
@@ -64,13 +79,23 @@ public final class MaxWebhookWorker {
                 return;
             }
             locked = true;
-            String text = required(message.path("body").path("text"), "text");
+            String text = message.path("body").path("text").asText("").strip();
             String maxUserId = required(message.path("sender").path("user_id"), "sender.user_id");
             String chatId = required(message.path("recipient").path("chat_id"), "recipient.chat_id");
-            String authorId = jdbc.queryForObject("SELECT id FROM users WHERE max_user_id = ?", String.class, maxUserId);
-            String houseId = jdbc.queryForObject("SELECT house_id FROM chat_bindings WHERE chat_id = ? AND active = 1",
-                    String.class, chatId);
-            reports.createReport(new CreateReportCommand(houseId, authorId, text, null));
+            if (text.strip().equalsIgnoreCase("/start") || text.strip().equalsIgnoreCase("/help")
+                    || text.strip().equalsIgnoreCase("помощь")) {
+                welcome(maxUserId);
+            } else if (text.isBlank()) {
+                welcome(maxUserId);
+            } else {
+                var houses = jdbc.query("SELECT house_id FROM chat_bindings WHERE chat_id = ? AND active = 1",
+                        (rs, row) -> rs.getString(1), chatId);
+                if (houses.isEmpty()) welcome(maxUserId);
+                else {
+                    String authorId = jdbc.queryForObject("SELECT id FROM users WHERE max_user_id = ?", String.class, maxUserId);
+                    reports.createReport(new CreateReportCommand(houses.get(0), authorId, text, null));
+                }
+            }
             redis.opsForSet().add(doneKey, messageId);
             redis.opsForHash().delete(queueKey + ":attempts", messageId);
         } catch (Exception e) {
@@ -88,6 +113,15 @@ public final class MaxWebhookWorker {
         } finally {
             if (locked) redis.delete(lockKey);
         }
+    }
+
+    private void welcome(String userId) {
+        max.sendWelcome(userId, botUsername, "Пульс дома — сервис вашего многоквартирного дома в MAX.\n\n" +
+                "Здесь можно посмотреть паспорт дома и полезные контакты, участвовать в опросах, " +
+                "сообщить о проблеме или присоединиться к похожему обращению, следить за работой " +
+                "и подтвердить результат после уведомления. Диспетчеры и администраторы работают в своих кабинетах.\n\n" +
+                "Откройте мини-приложение кнопкой ниже. Если вы проверяете проект, введите там код демонстрации.")
+                .block(Duration.ofSeconds(10));
     }
 
     private static String required(JsonNode node, String field) {

@@ -5,6 +5,7 @@ import org.springframework.stereotype.Component;
 import org.springframework.web.reactive.function.client.WebClient;
 import reactor.core.publisher.Mono;
 import java.util.Map;
+import java.util.List;
 
 @Component
 public final class MaxApiClient {
@@ -25,5 +26,15 @@ public final class MaxApiClient {
         return client.post().uri(builder -> builder.path("/messages").queryParam("user_id", userId).build())
                 .header("Authorization", token).bodyValue(Map.of("text", text))
                 .retrieve().bodyToMono(String.class);
+    }
+
+    public Mono<String> sendWelcome(String userId, String botUsername, String text) {
+        Map<String, Object> body = botUsername.isBlank() ? Map.of("text", text) : Map.of(
+                "text", text,
+                "attachments", List.of(Map.of("type", "inline_keyboard", "payload", Map.of(
+                        "buttons", List.of(List.of(Map.of("type", "open_app", "text", "Открыть Пульс дома",
+                                "web_app", botUsername)))))));
+        return client.post().uri(builder -> builder.path("/messages").queryParam("user_id", userId).build())
+                .header("Authorization", token).bodyValue(body).retrieve().bodyToMono(String.class);
     }
 }

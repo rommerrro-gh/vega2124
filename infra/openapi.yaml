@@ -6,6 +6,35 @@ info:
 servers:
   - url: http://localhost:8080
 paths:
+  /v1/guided-demo:
+    get:
+      operationId: guidedDemoStatus
+      summary: Статус личной демонстрации пользователя MAX
+      responses:
+        '200': {description: Статус демонстрации, content: {application/json: {schema: {$ref: '#/components/schemas/GuidedDemoView'}}}}
+        '401': {description: Требуется подписанный вход MAX}
+  /v1/guided-demo/activate:
+    post:
+      operationId: activateGuidedDemo
+      summary: Создать изолированный тестовый дом по коду демонстрации
+      requestBody: {required: true, content: {application/json: {schema: {type: object, required: [code], properties: {code: {type: string, minLength: 1, maxLength: 128}}}}}}
+      responses:
+        '200': {description: Демонстрация активна, content: {application/json: {schema: {$ref: '#/components/schemas/GuidedDemoView'}}}}
+        '400': {description: Неверный код или демонстрация недоступна}
+        '401': {description: Требуется подписанный вход MAX}
+  /v1/guided-demo/restart:
+    post:
+      operationId: restartGuidedDemo
+      summary: Создать новый тестовый дом, закрыв доступ к предыдущему
+      responses:
+        '200': {description: Новая демонстрация активна, content: {application/json: {schema: {$ref: '#/components/schemas/GuidedDemoView'}}}}
+        '400': {description: Демонстрация не активна}
+  /v1/guided-demo/exit:
+    post:
+      operationId: exitGuidedDemo
+      summary: Закрыть доступ к личному тестовому дому
+      responses:
+        '200': {description: Демонстрация завершена, content: {application/json: {schema: {$ref: '#/components/schemas/GuidedDemoView'}}}}
   /:
     get:
       operationId: openMiniApp
@@ -915,6 +944,14 @@ paths:
                 $ref: '#/components/schemas/ErrorResponse'
 components:
   schemas:
+    GuidedDemoView:
+      type: object
+      required: [enabled, active]
+      properties:
+        enabled: {type: boolean}
+        active: {type: boolean}
+        houseId: {type: [string, 'null']}
+        address: {type: [string, 'null']}
     AccessHouse:
       type: object
       properties:
