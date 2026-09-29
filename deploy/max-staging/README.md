@@ -19,6 +19,6 @@ sudo certbot certonly --nginx -d www.pulsedoma.ru
 
 После выпуска сертификата скопируйте `nginx-demo.conf` в `/etc/nginx/sites-available/pulsedoma`, а `nginx-max.conf` в `/etc/nginx/sites-available/pulsedoma-max`. Включите второй сайт ссылкой из `/etc/nginx/sites-enabled/`, проверьте конфигурацию командой `sudo nginx -t` и только после успешной проверки выполните `sudo systemctl reload nginx`. Первый файл сохраняет демо на основном домене; второй маршрутизирует `www` в отдельный backend.
 
-После переключения проверьте оба адреса: `/actuator/health` должен возвращать `{"status":"UP"}`. В настройках тестового бота MAX установите кнопку мини-приложения на `https://www.pulsedoma.ru/miniapp/index.html`. Затем в `/home/deploy/pulsedoma-max` запустите `python3 scripts/max_staging.py check` и, если проверка успешна, `python3 scripts/max_staging.py subscribe`.
+После переключения проверьте оба адреса: `/actuator/health` должен возвращать `{"status":"UP"}`. Для выданного организаторами бота передайте `https://www.pulsedoma.ru/miniapp/index.html` через [форму подключения](https://sbor-ssylok-dlya-mini-prilojeniy.testograf.ru/), используя регистрационные данные капитана команды. Затем в `/home/deploy/pulsedoma-max` запустите `python3 scripts/max_staging.py check` и, если проверка успешна, `python3 scripts/max_staging.py subscribe`.
 
 Далее выполните [сценарий проверки](../../docs/max-staging.md) с отдельными аккаунтами MAX для жителя, диспетчера и администратора. Не используйте демопрофиль для проверки подписи MAX и доставки уведомлений.
