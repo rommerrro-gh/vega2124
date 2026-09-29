@@ -159,7 +159,7 @@ function Brand({ role }) {
     } catch (error) { setNotice(error.message); }
   }
   return <><header className="topbar">
-    <div className="brand"><img className="brand-icon" src="/miniapp/app-icon.png?v=20260929-6" alt="" /><span>Пульс дома</span></div>
+    <div className="brand"><span className="brand-icon-frame"><img className="brand-icon" src="/miniapp/app-icon.png?v=20260929-6" alt="" /></span><span>Пульс дома</span></div>
     {available.length ? <details ref={menu} className="role-menu">
       <summary aria-label="Выбрать роль">{current?.[1] || role} <span aria-hidden="true">⌄</span></summary>
       <button className="role-menu-backdrop" type="button" aria-label="Закрыть меню ролей" onClick={() => { menu.current.open = false; }} />
@@ -175,7 +175,7 @@ function Brand({ role }) {
     </details> : <span className="max-chip"><span className="max-dot" /> {role} · MAX</span>}
   </header>{demo?.active && <div className="guided-demo-badge">Демонстрационный режим · {demo.address}</div>}
     {help && <div className="guided-demo-help"><strong>Проверка сценария</strong><ol>
-      <li>В роли жителя посмотрите паспорт дома и опрос. Создайте обращение «Не работает свет в подъезде», место «Подъезд 1, этаж 2».</li>
+      <li>В роли жителя переключите два дома: у них одна УК, но разные паспорта и опросы. Вернитесь в первый дом и создайте обращение «Не работает свет в подъезде», место «Подъезд 1, этаж 2».</li>
       <li>Присоединитесь к похожей заявке или создайте новую.</li>
       <li>Переключитесь в диспетчера и проведите заявку до выполнения.</li>
       <li>Проверьте сообщение от бота, вернитесь в роль жителя и подтвердите результат.</li>
@@ -201,7 +201,7 @@ function GuidedDemoEntry() {
     if (start.startsWith("demo_") && start.length > 5) activate(start.slice(5));
   }, [enabled]);
   if (!enabled) return null;
-  return <Card className="guided-demo-entry"><SectionHeading title="Проверяете проект?" subtitle="Введите код: для вас подготовится отдельный тестовый дом внутри MAX." />
+  return <Card className="guided-demo-entry"><SectionHeading title="Проверяете проект?" subtitle="Введите код: для вас подготовятся два тестовых дома одной УК внутри MAX." />
     <form onSubmit={event => { event.preventDefault(); activate(code); }}>
       <Field id="demo-code" label="Код демонстрации"><input id="demo-code" value={code} maxLength="128" autoComplete="off" required onChange={event => setCode(event.target.value)} /></Field>
       <Button mode="primary" type="submit" disabled={busy}>Запустить демонстрацию</Button>
@@ -485,7 +485,7 @@ function Resident() {
   return <main className="shell">
     <Brand role="Жителю" /><div className="resident-hero"><Hero /></div><Notice message={notice} />
     <GuidedDemoEntry />
-    {selectedHouse && <div className="house-switcher"><span className="house-switcher-icon" aria-hidden="true">⌂</span><div className="house-switcher-copy"><span>Ваш дом</span>{houses.length > 1 ? <select aria-label="Выбранный дом" value={selectedHouseId} disabled={step !== "form" || !!reportId} onChange={event => { setSelectedHouseId(event.target.value); request("/v1/me/active-house", { method: "PUT", body: JSON.stringify({ houseId: event.target.value }) }).catch(fail); }}>{houses.map(house => <option key={house.id} value={house.id}>{house.address}</option>)}</select> : <strong>{selectedHouse.address}</strong>}</div></div>}
+    {selectedHouse && <div className="house-switcher"><span className="house-switcher-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M3.5 10.5 12 3.5l8.5 7v9a1 1 0 0 1-1 1h-15a1 1 0 0 1-1-1z"/><path d="M9.5 20.5v-6h5v6"/></svg></span><div className="house-switcher-copy"><span>Ваш дом</span>{houses.length > 1 ? <select aria-label="Выбранный дом" value={selectedHouseId} disabled={step !== "form" || !!reportId} onChange={event => { setSelectedHouseId(event.target.value); request("/v1/me/active-house", { method: "PUT", body: JSON.stringify({ houseId: event.target.value }) }).catch(fail); }}>{houses.map(house => <option key={house.id} value={house.id}>{house.address}</option>)}</select> : <strong>{selectedHouse.address}</strong>}</div></div>}
     {!!awaitingVerification.length && step === "form" && <div className="priority-notice"><div><strong>Подтвердите выполнение работ</strong><p>{countLabel(awaitingVerification.length, "заявка ждёт", "заявки ждут", "заявок ждут")} вашего ответа.</p></div><Button mode="secondary" type="button" onClick={() => showIssue(awaitingVerification[0])}>Открыть</Button></div>}
     {selectedHouse && canReport && step === "form" && !showReportForm && <div className="start-action"><div><strong>Заметили проблему?</strong><p>Проверьте похожие заявки и сообщите о новой.</p></div><Button mode="primary" type="button" onClick={() => setShowReportForm(true)}>Сообщить о проблеме <span aria-hidden="true">→</span></Button></div>}
     <div className="content-grid">
@@ -642,7 +642,7 @@ function Admin() {
           <p className="hint">Опрос не заменяет официальное голосование собственников.</p>
           <Button mode="primary" className="brand-button" type="submit" stretched disabled={busy}>Создать опрос</Button>
         </form>
-        <div className="poll-list">{polls.map(poll => <PollCard key={poll.id} poll={poll} />)}</div>
+        <div className="poll-list admin-poll-list">{polls.map(poll => <PollCard key={poll.id} poll={poll} />)}</div>
       </Card>
     </div>}
     <footer>Пульс дома <span>·</span> Кабинет администратора</footer>

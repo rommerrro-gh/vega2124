@@ -67,30 +67,42 @@ public class GuidedDemoService {
         jdbc.update("""
                 UPDATE notification_outbox SET cancelled_at = ?
                 WHERE recipient_user_id = ? AND sent_at IS NULL AND cancelled_at IS NULL
-                  AND issue_id IN (SELECT id FROM issues WHERE house_id = ?)
-                """, Instant.now().toString(), userId, houseId);
-        jdbc.update("UPDATE guided_demo_sessions SET active = 0 WHERE user_id = ? AND house_id = ? AND active = 1", userId, houseId);
-        jdbc.update("UPDATE house_memberships SET access_status = 'REVOKED' WHERE user_id = ? AND house_id = ? AND role IN ('RESIDENT', 'DISPATCHER', 'HOUSE_ADMIN')", userId, houseId);
+                  AND issue_id IN (SELECT id FROM issues WHERE house_id IN
+                    (SELECT dh.house_id FROM guided_demo_houses dh JOIN guided_demo_sessions s ON s.id = dh.session_id
+                     WHERE s.user_id = ? AND s.house_id = ? AND s.active = 1))
+                """, Instant.now().toString(), userId, userId, houseId);
+        jdbc.update("""
+                UPDATE house_memberships SET access_status = 'REVOKED'
+                WHERE user_id = ? AND role IN ('RESIDENT', 'DISPATCHER', 'HOUSE_ADMIN') AND house_id IN
+                  (SELECT dh.house_id FROM guided_demo_houses dh JOIN guided_demo_sessions s ON s.id = dh.session_id
+                   WHERE s.user_id = ? AND s.house_id = ? AND s.active = 1)
+                """, userId, userId, houseId);
         jdbc.update("""
                 UPDATE organization_memberships SET access_status = 'REVOKED'
                 WHERE user_id = ? AND role = 'UK_ADMIN' AND organization_id IN
-                  (SELECT organization_id FROM guided_demo_sessions WHERE user_id = ? AND house_id = ?)
+                  (SELECT organization_id FROM guided_demo_sessions WHERE user_id = ? AND house_id = ? AND active = 1)
                 """, userId, userId, houseId);
         jdbc.update("""
                 UPDATE uk_admin_houses SET access_status = 'REVOKED'
-                WHERE user_id = ? AND house_id = ? AND organization_id IN
-                  (SELECT organization_id FROM guided_demo_sessions WHERE user_id = ? AND house_id = ?)
-                """, userId, houseId, userId, houseId);
+                WHERE user_id = ? AND house_id IN
+                  (SELECT dh.house_id FROM guided_demo_houses dh JOIN guided_demo_sessions s ON s.id = dh.session_id
+                   WHERE s.user_id = ? AND s.house_id = ? AND s.active = 1)
+                  AND organization_id IN (SELECT organization_id FROM guided_demo_sessions WHERE user_id = ? AND house_id = ? AND active = 1)
+                """, userId, userId, houseId, userId, houseId);
         jdbc.update("""
                 UPDATE users SET active_house_id = (
                     SELECT previous_house_id FROM guided_demo_sessions WHERE user_id = ? AND house_id = ?
-                ) WHERE id = ? AND active_house_id = ?
-                """, userId, houseId, userId, houseId);
+                ) WHERE id = ? AND active_house_id IN
+                  (SELECT dh.house_id FROM guided_demo_houses dh JOIN guided_demo_sessions s ON s.id = dh.session_id
+                   WHERE s.user_id = ? AND s.house_id = ? AND s.active = 1)
+                """, userId, houseId, userId, userId, houseId);
+        jdbc.update("UPDATE guided_demo_sessions SET active = 0 WHERE user_id = ? AND house_id = ? AND active = 1", userId, houseId);
     }
 
     private DemoView create(String userId) {
         String org = UUID.randomUUID().toString();
         String house = UUID.randomUUID().toString();
+        String secondHouse = UUID.randomUUID().toString();
         String session = UUID.randomUUID().toString();
         String neighbor = UUID.randomUUID().toString();
         String now = Instant.now().toString();
@@ -117,6 +129,17 @@ public class GuidedDemoService {
                 session, userId, org, house, previousHouse, now);
         jdbc.update("INSERT INTO guided_demo_organizations(session_id, organization_id) VALUES (?, ?)", session, org);
         jdbc.update("INSERT INTO guided_demo_houses(session_id, house_id) VALUES (?, ?)", session, house);
+        String secondAddress = "Казань, второй демонстрационный дом " + session.substring(0, 8);
+        jdbc.update("INSERT INTO houses(id, address) VALUES (?, ?)", secondHouse, secondAddress);
+        jdbc.update("INSERT INTO organization_houses(organization_id, house_id, status) VALUES (?, ?, 'ACTIVE')", org, secondHouse);
+        for (String role : List.of("RESIDENT", "DISPATCHER", "HOUSE_ADMIN")) {
+            jdbc.update("""
+                    INSERT INTO house_memberships(house_id, user_id, role, verification_status, access_status, source_organization_id)
+                    VALUES (?, ?, ?, 'VERIFIED', 'ACTIVE', ?)
+                    """, secondHouse, userId, role, org);
+        }
+        jdbc.update("INSERT INTO uk_admin_houses(organization_id, user_id, house_id, access_status) VALUES (?, ?, ?, 'ACTIVE')", org, userId, secondHouse);
+        jdbc.update("INSERT INTO guided_demo_houses(session_id, house_id) VALUES (?, ?)", session, secondHouse);
         field(house, "management_company", "\"Демонстрационная УК\"", now);
         field(house, "building_year", "2018", now);
         field(house, "floor_count", "9", now);
@@ -139,6 +162,28 @@ public class GuidedDemoService {
                 """, poll, house, Instant.now().plusSeconds(30L * 86400).toString(), now);
         jdbc.update("INSERT INTO poll_options(id, poll_id, label, position) VALUES (?, ?, 'Да', 0)", UUID.randomUUID().toString(), poll);
         jdbc.update("INSERT INTO poll_options(id, poll_id, label, position) VALUES (?, ?, 'Нет', 1)", UUID.randomUUID().toString(), poll);
+        field(secondHouse, "management_company", "\"Демонстрационная УК\"", now);
+        field(secondHouse, "building_year", "2006", now);
+        field(secondHouse, "floor_count", "5", now);
+        field(secondHouse, "wall_material", "\"панель\"", now);
+        field(secondHouse, "entrance_count", "2", now);
+        field(secondHouse, "apartment_count", "80", now);
+        field(secondHouse, "total_area_sqm", "5200", now);
+        field(secondHouse, "registered_residents_count", "174", now);
+        field(secondHouse, "capital_repairs", "[\"2022 — ремонт фасада\"]", now);
+        field(secondHouse, "emergency_contact", "\"+7 800 000-00-00\"", now);
+        jdbc.update("""
+                INSERT INTO house_contacts(id, house_id, type, title, phone, details, updated_at, updated_by)
+                VALUES (?, ?, 'EMERGENCY', 'Демонстрационная аварийная служба', '+7 800 000-00-00',
+                        'Тестовый номер, звонить не нужно', ?, ?)
+                """, UUID.randomUUID().toString(), secondHouse, now, userId);
+        String secondPoll = UUID.randomUUID().toString();
+        jdbc.update("""
+                INSERT INTO polls(id, house_id, question, is_official, results_hidden_until_close, closes_at, created_at)
+                VALUES (?, ?, 'Нужна ли велопарковка у второго дома?', 0, 0, ?, ?)
+                """, secondPoll, secondHouse, Instant.now().plusSeconds(30L * 86400).toString(), now);
+        jdbc.update("INSERT INTO poll_options(id, poll_id, label, position) VALUES (?, ?, 'Да', 0)", UUID.randomUUID().toString(), secondPoll);
+        jdbc.update("INSERT INTO poll_options(id, poll_id, label, position) VALUES (?, ?, 'Нет', 1)", UUID.randomUUID().toString(), secondPoll);
         String report = UUID.randomUUID().toString();
         String issue = UUID.randomUUID().toString();
         String description = "Не работает свет в подъезде";

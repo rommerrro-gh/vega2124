@@ -57,10 +57,17 @@ class GuidedDemoFlowTest {
         var second = demos.activate("judge-b", CODE);
         assertNotEquals(first.houseId(), second.houseId());
         assertEquals(3, jdbc.queryForObject("SELECT count(*) FROM house_memberships WHERE house_id = ? AND user_id = 'judge-a' AND access_status = 'ACTIVE'", Integer.class, first.houseId()));
-        assertEquals(5, access.myAccess("judge-a").size());
+        assertEquals(8, access.myAccess("judge-a").size());
         assertEquals(1, access.organizations("judge-a").size());
-        assertEquals(1, access.allHouses("judge-a").size());
-        assertEquals(first.houseId(), access.allHouses("judge-a").get(0).id());
+        assertEquals(2, access.allHouses("judge-a").size());
+        assertTrue(access.allHouses("judge-a").stream().anyMatch(h -> h.id().equals(first.houseId())));
+        String anotherHouse = access.allHouses("judge-a").stream().map(h -> h.id())
+                .filter(id -> !id.equals(first.houseId())).findFirst().orElseThrow();
+        assertNotEquals(first.houseId(), anotherHouse);
+        assertEquals(3, jdbc.queryForObject("SELECT count(*) FROM house_memberships WHERE house_id = ? AND user_id = 'judge-a' AND access_status = 'ACTIVE'", Integer.class, anotherHouse));
+        assertEquals(2, jdbc.queryForObject("SELECT count(*) FROM organization_houses WHERE organization_id = ? AND status = 'ACTIVE'", Integer.class, access.organizations("judge-a").get(0).id()));
+        assertEquals(1, jdbc.queryForObject("SELECT count(*) FROM polls WHERE house_id = ?", Integer.class, anotherHouse));
+        assertEquals("5", jdbc.queryForObject("SELECT value_json FROM house_fields WHERE house_id = ? AND key = 'floor_count'", String.class, anotherHouse));
         assertThrows(BusinessException.class, () -> access.setOrganizationHouse(
                 access.organizations("judge-a").get(0).id(), second.houseId(), true, "judge-a"));
         access.createOrganization("Вторая тестовая УК", "judge-a");
@@ -75,6 +82,7 @@ class GuidedDemoFlowTest {
         var restarted = demos.restart("judge-a");
         assertNotEquals(first.houseId(), restarted.houseId());
         assertEquals("REVOKED", jdbc.queryForObject("SELECT access_status FROM house_memberships WHERE house_id = ? AND user_id = 'judge-a' AND role = 'RESIDENT'", String.class, first.houseId()));
+        assertEquals("REVOKED", jdbc.queryForObject("SELECT access_status FROM house_memberships WHERE house_id = ? AND user_id = 'judge-a' AND role = 'RESIDENT'", String.class, anotherHouse));
         assertEquals(second.houseId(), demos.status("judge-b").houseId());
         demos.exit("judge-a");
         assertFalse(demos.status("judge-a").active());
