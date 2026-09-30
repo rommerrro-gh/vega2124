@@ -2,7 +2,7 @@ name: Build
 
 on:
   push:
-    branches: [feature/pulse-doma-skeleton]
+    branches: [main, feature/pulse-doma-skeleton]
   pull_request:
 
 jobs:
