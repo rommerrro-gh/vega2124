@@ -1,6 +1,7 @@
 target/
 **/target/
 .env
+node_modules/
 *.db
 *.db-shm
 *.db-wal
@@ -9,5 +10,8 @@ target/
 *.ipr
 *.iws
 out/
+data/
 .run/
 .DS_Store
+__pycache__/
+*.pyc

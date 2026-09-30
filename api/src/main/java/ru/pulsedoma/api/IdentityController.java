@@ -9,26 +9,54 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RestController;
+import ru.pulsedoma.issues.MiniAppService;
+import java.security.Principal;
+import java.util.List;
 
 @Validated
 @RestController
 public class IdentityController {
+    private final MiniAppService miniApp;
+
+    public IdentityController(MiniAppService miniApp) {
+        this.miniApp = miniApp;
+    }
     @PostMapping("/v1/invitations/{token}/accept")
-    public void acceptInvitation(@PathVariable @NotBlank String token,
-                                 @Valid @RequestBody AcceptInvitationRequest request) {
-        throw PendingOperation.notImplemented();
+    public MiniAppService.HouseView acceptInvitation(@PathVariable @NotBlank String token,
+                                                      Principal principal) {
+        return miniApp.acceptInvitation(token, principal.getName());
+    }
+
+    @GetMapping("/v1/invitations/{token}")
+    public MiniAppService.LegacyInvitationView legacyInvitation(@PathVariable @NotBlank String token) {
+        return miniApp.legacyInvitation(token);
     }
 
     @GetMapping("/v1/me/houses")
-    public void getMyHouses() {
-        throw PendingOperation.notImplemented();
+    public List<MiniAppService.HouseView> getMyHouses(Principal principal) {
+        return miniApp.houses(principal.getName());
+    }
+
+    @GetMapping("/v1/me/issues")
+    public List<MiniAppService.IssueView> getMyIssues(Principal principal) {
+        return miniApp.myIssues(principal.getName());
+    }
+
+    @GetMapping("/v1/me/dispatcher-houses")
+    public List<MiniAppService.HouseView> getDispatcherHouses(Principal principal) {
+        return miniApp.dispatcherHouses(principal.getName());
     }
 
     @PutMapping("/v1/me/active-house")
-    public void setActiveHouse(@Valid @RequestBody SetActiveHouseRequest request) {
-        throw PendingOperation.notImplemented();
+    public void setActiveHouse(@Valid @RequestBody SetActiveHouseRequest request, Principal principal) {
+        miniApp.setActiveHouse(request.houseId(), principal.getName());
     }
 
-    public record AcceptInvitationRequest(@NotBlank String maxUserId) {}
+    @GetMapping("/v1/me/active-house")
+    public ActiveHouseView activeHouse(Principal principal) {
+        return new ActiveHouseView(miniApp.activeHouse(principal.getName()));
+    }
+
     public record SetActiveHouseRequest(@NotBlank String houseId) {}
+    public record ActiveHouseView(String houseId) {}
 }

@@ -4,8 +4,177 @@ info:
   version: 0.1.0
   description: Контракт из §10 ТЗ. Все маршруты присутствуют; незавершённые операции возвращают 501.
 servers:
+  - url: https://www.pulsedoma.ru
+    description: MAX-стенд с проверкой подписанного WebApp.initData
+  - url: https://pulsedoma.ru
+    description: Браузерный демостенд с тестовыми ролями
   - url: http://localhost:8080
+    description: Локальный запуск
 paths:
+  /v1/guided-demo:
+    get:
+      operationId: guidedDemoStatus
+      summary: Статус личной демонстрации пользователя MAX
+      responses:
+        '200': {description: Статус демонстрации, content: {application/json: {schema: {$ref: '#/components/schemas/GuidedDemoView'}}}}
+        '401': {description: Требуется подписанный вход MAX}
+  /v1/guided-demo/activate:
+    post:
+      operationId: activateGuidedDemo
+      summary: Создать изолированный тестовый дом по коду демонстрации
+      requestBody: {required: true, content: {application/json: {schema: {type: object, required: [code], properties: {code: {type: string, minLength: 1, maxLength: 128}}}}}}
+      responses:
+        '200': {description: Демонстрация активна, content: {application/json: {schema: {$ref: '#/components/schemas/GuidedDemoView'}}}}
+        '400': {description: Неверный код или демонстрация недоступна}
+        '401': {description: Требуется подписанный вход MAX}
+  /v1/guided-demo/restart:
+    post:
+      operationId: restartGuidedDemo
+      summary: Создать новый тестовый дом, закрыв доступ к предыдущему
+      responses:
+        '200': {description: Новая демонстрация активна, content: {application/json: {schema: {$ref: '#/components/schemas/GuidedDemoView'}}}}
+        '400': {description: Демонстрация не активна}
+  /v1/guided-demo/exit:
+    post:
+      operationId: exitGuidedDemo
+      summary: Закрыть доступ к личному тестовому дому
+      responses:
+        '200': {description: Демонстрация завершена, content: {application/json: {schema: {$ref: '#/components/schemas/GuidedDemoView'}}}}
+  /:
+    get:
+      operationId: openMiniApp
+      summary: Перейти с корня сайта в мини-приложение
+      responses:
+        '302': {description: Переход в мини-приложение, headers: {Location: {schema: {type: string}, description: /miniapp/index.html}}}
+  /v1/access/config:
+    get:
+      operationId: accessConfig
+      summary: Конфигурация приглашений и демонстрационного режима
+      responses:
+        '200': {description: Конфигурация ссылки и демонстрационного режима, content: {application/json: {schema: {type: object, properties: {botUsername: {type: string}, demoMode: {type: boolean}}}}}}
+  /v1/access/me:
+    get:
+      operationId: myAccess
+      summary: Активные роли текущего пользователя
+      responses:
+        '200': {description: Список ролей, content: {application/json: {schema: {type: array, items: {$ref: '#/components/schemas/AccessView'}}}}}
+  /v1/access/organizations:
+    get:
+      operationId: accessOrganizations
+      summary: УК и их дома для системного администратора
+      responses:
+        '200': {description: Список УК, content: {application/json: {schema: {type: array, items: {$ref: '#/components/schemas/AccessOrganization'}}}}}
+        '403': {description: Нет роли системного администратора}
+    post:
+      operationId: createAccessOrganization
+      summary: Создать УК
+      requestBody: {required: true, content: {application/json: {schema: {type: object, required: [name], properties: {name: {type: string, maxLength: 200}}}}}}
+      responses:
+        '201': {description: УК создана, content: {application/json: {schema: {$ref: '#/components/schemas/AccessOrganization'}}}}
+        '403': {description: Нет роли системного администратора}
+  /v1/access/my-organizations:
+    get:
+      operationId: myAccessOrganizations
+      summary: УК и дома в области текущего администратора
+      responses:
+        '200': {description: Список УК, content: {application/json: {schema: {type: array, items: {$ref: '#/components/schemas/AccessOrganization'}}}}}
+  /v1/access/houses:
+    get:
+      operationId: allAccessHouses
+      summary: Все дома для системного администратора
+      responses:
+        '200': {description: Список домов, content: {application/json: {schema: {type: array, items: {$ref: '#/components/schemas/AccessHouse'}}}}}
+        '403': {description: Нет роли системного администратора}
+    post:
+      operationId: createAccessHouse
+      summary: Создать дом
+      requestBody: {required: true, content: {application/json: {schema: {type: object, required: [address], properties: {address: {type: string, maxLength: 300}}}}}}
+      responses:
+        '201': {description: Дом создан, content: {application/json: {schema: {$ref: '#/components/schemas/AccessHouse'}}}}
+        '403': {description: Нет роли системного администратора}
+  /v1/access/organizations/{organizationId}/houses/{houseId}:
+    put:
+      operationId: setAccessOrganizationHouse
+      summary: Закрепить или приостановить дом в УК
+      parameters:
+        - {name: organizationId, in: path, required: true, schema: {type: string}}
+        - {name: houseId, in: path, required: true, schema: {type: string}}
+      requestBody: {required: true, content: {application/json: {schema: {type: object, required: [active], properties: {active: {type: boolean}}}}}}
+      responses:
+        '200': {description: Область УК обновлена, content: {application/json: {schema: {$ref: '#/components/schemas/AccessOrganization'}}}}
+        '403': {description: Нет роли системного администратора}
+  /v1/access/invitations:
+    get:
+      operationId: createdAccessInvitations
+      summary: Приглашения, созданные текущим пользователем
+      responses:
+        '200': {description: Список приглашений, content: {application/json: {schema: {type: array, items: {$ref: '#/components/schemas/AccessInvitation'}}}}}
+    post:
+      operationId: createAccessInvitation
+      summary: Создать приглашение в пределах своей области доступа
+      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/CreateAccessInvitation'}}}}
+      responses:
+        '201': {description: Токен показывается только в этом ответе, content: {application/json: {schema: {type: object, properties: {token: {type: string}, invitation: {$ref: '#/components/schemas/AccessInvitation'}}}}}}
+        '403': {description: Нет права пригласить в выбранные дома}
+  /v1/access/invitations/{token}:
+    get:
+      operationId: previewAccessInvitation
+      summary: Просмотр приглашения перед принятием
+      parameters:
+        - {name: token, in: path, required: true, schema: {type: string}}
+      responses:
+        '200': {description: Роль и область доступа, content: {application/json: {schema: {$ref: '#/components/schemas/AccessInvitation'}}}}
+        '400': {description: Приглашение недействительно}
+  /v1/access/invitations/{token}/accept:
+    post:
+      operationId: acceptAccessInvitation
+      summary: Принять приглашение после входа через MAX
+      parameters:
+        - {name: token, in: path, required: true, schema: {type: string}}
+      responses:
+        '200': {description: Доступ назначен, content: {application/json: {schema: {$ref: '#/components/schemas/AccessInvitation'}}}}
+        '400': {description: Приглашение недействительно}
+  /v1/access/invitations/{id}/revoke:
+    post:
+      operationId: revokeAccessInvitation
+      summary: Отозвать приглашение
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string}}
+      responses:
+        '200': {description: Приглашение отозвано, content: {application/json: {schema: {$ref: '#/components/schemas/AccessInvitation'}}}}
+        '403': {description: Нет права отзыва}
+  /v1/access/organizations/{organizationId}/assignments:
+    get:
+      operationId: ukStaffAssignments
+      summary: Диспетчеры и администраторы домов в области администратора УК
+      parameters:
+        - {name: organizationId, in: path, required: true, schema: {type: string}}
+      responses:
+        '200': {description: Назначения, content: {application/json: {schema: {type: array, items: {$ref: '#/components/schemas/AccessView'}}}}}
+  /v1/access/organizations/{organizationId}/admins:
+    get:
+      operationId: ukAdminAssignments
+      summary: Администраторы УК для системного администратора
+      parameters:
+        - {name: organizationId, in: path, required: true, schema: {type: string}}
+      responses:
+        '200': {description: Назначения, content: {application/json: {schema: {type: array, items: {$ref: '#/components/schemas/AccessView'}}}}}
+  /v1/access/houses/{houseId}/residents:
+    get:
+      operationId: houseResidentAssignments
+      summary: Жители для администратора дома
+      parameters:
+        - {name: houseId, in: path, required: true, schema: {type: string}}
+      responses:
+        '200': {description: Назначения, content: {application/json: {schema: {type: array, items: {$ref: '#/components/schemas/AccessView'}}}}}
+  /v1/access/assignments/revoke:
+    post:
+      operationId: revokeAccessAssignment
+      summary: Отозвать роль в своей области доступа
+      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/RevokeAccessRequest'}}}}
+      responses:
+        '204': {description: Доступ отозван}
+        '403': {description: Нет права отзыва}
   /webhooks/max:
     post:
       operationId: maxWebhook
@@ -33,46 +202,74 @@ paths:
           required: true
           schema:
             type: string
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/AcceptInvitationRequest'
       responses:
         '200':
-          description: Accepted or returned
-        '400':
-          description: Invalid request
-        '403':
-          description: Access denied until JWT and house scope are implemented
-        '501':
-          description: Scaffold endpoint pending implementation
+          description: Verified house membership created from invitation
           content:
             application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
+              schema: {$ref: '#/components/schemas/HouseView'}
+        '400':
+          description: Invalid request
+        '401': {description: Missing or invalid MAX initData}
+  /v1/invitations/{token}:
+    get:
+      operationId: previewLegacyInvitation
+      summary: Просмотр ранее выданного приглашения жителя
+      parameters:
+        - {name: token, in: path, required: true, schema: {type: string}}
+      responses:
+        '200': {description: Дом и срок действия, content: {application/json: {schema: {type: object, properties: {houseId: {type: string}, address: {type: string}, expiresAt: {type: string}}}}}}
+        '400': {description: Приглашение недействительно}
   /v1/me/houses:
     get:
       operationId: getMyHouses
       summary: getMyHouses
       responses:
         '200':
-          description: Accepted or returned
-        '400':
-          description: Invalid request
-        '403':
-          description: Access denied until JWT and house scope are implemented
-        '501':
-          description: Scaffold endpoint pending implementation
+          description: Verified houses available to the current MAX user
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ErrorResponse'
+                type: array
+                items: {$ref: '#/components/schemas/HouseView'}
+        '400':
+          description: Invalid request
+        '401': {description: Missing or invalid MAX initData}
+  /v1/me/issues:
+    get:
+      operationId: getMyIssues
+      summary: List issues joined by the current resident
+      responses:
+        '200':
+          description: Current resident's issues
+          content:
+            application/json:
+              schema:
+                type: array
+                items: {$ref: '#/components/schemas/IssueView'}
+        '401': {description: Missing or invalid MAX initData}
+  /v1/me/dispatcher-houses:
+    get:
+      operationId: getDispatcherHouses
+      summary: List houses where the current user is a verified dispatcher
+      responses:
+        '200':
+          description: Dispatcher houses
+          content:
+            application/json:
+              schema:
+                type: array
+                items: {$ref: '#/components/schemas/HouseView'}
+        '401': {description: Missing or invalid MAX initData}
   /v1/me/active-house:
+    get:
+      operationId: getActiveHouse
+      summary: Последний выбранный дом
+      responses:
+        '200': {description: Выбранный дом, content: {application/json: {schema: {type: object, properties: {houseId: {type: [string, 'null']}}}}}}
     put:
       operationId: setActiveHouse
-      summary: setActiveHouse
+      summary: Сохранить выбранный дом
       requestBody:
         required: true
         content:
@@ -81,17 +278,11 @@ paths:
               $ref: '#/components/schemas/SetActiveHouseRequest'
       responses:
         '200':
-          description: Accepted or returned
+          description: Дом сохранён
         '400':
           description: Invalid request
         '403':
-          description: Access denied until JWT and house scope are implemented
-        '501':
-          description: Scaffold endpoint pending implementation
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
+          description: Нет подтверждённого доступа к дому
   /v1/reports:
     post:
       operationId: createReport
@@ -103,22 +294,19 @@ paths:
             schema:
               $ref: '#/components/schemas/CreateReportRequest'
       responses:
-        '200':
-          description: Accepted or returned
-        '400':
-          description: Invalid request
-        '403':
-          description: Access denied until JWT and house scope are implemented
-        '501':
-          description: Scaffold endpoint pending implementation
+        '201':
+          description: Report saved and duplicate candidates returned; no issue is created until user decision
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ErrorResponse'
+                $ref: '#/components/schemas/CreateReportResponse'
+        '400':
+          description: Invalid request
+        '401': {description: Missing or invalid MAX initData}
   /v1/reports/{id}/withdraw:
     post:
       operationId: withdrawReport
-      summary: withdrawReport
+      summary: Withdraw the current user's report and detach it from an active issue
       parameters:
         - name: id
           in: path
@@ -132,18 +320,57 @@ paths:
             schema:
               $ref: '#/components/schemas/WithdrawReportRequest'
       responses:
+        '204': {description: Report withdrawn and hidden from active issue}
+        '400': {description: Invalid request}
+        '401': {description: Missing or invalid MAX initData}
+        '404': {description: Report is not owned by the current user}
+        '409': {description: Already withdrawn or issue verification has begun}
+  /v1/reports/{reportId}/attachments:
+    post:
+      operationId: uploadReportAttachment
+      summary: Add a private JPEG or PNG photo to the current user's unlinked report
+      description: Only JPEG and PNG photos up to 10 MB are accepted, at most five per report. Previously stored files remain readable.
+      parameters:
+        - name: reportId
+          in: path
+          required: true
+          schema: {type: string}
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file]
+              properties:
+                file: {type: string, format: binary}
+      responses:
         '200':
-          description: Accepted or returned
-        '400':
-          description: Invalid request
-        '403':
-          description: Access denied until JWT and house scope are implemented
-        '501':
-          description: Scaffold endpoint pending implementation
+          description: Attachment saved
           content:
             application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
+              schema: {$ref: '#/components/schemas/AttachmentView'}
+        '400': {description: Invalid format, size, count or report access}
+        '401': {description: Missing or invalid MAX initData}
+  /v1/attachments/{id}:
+    get:
+      operationId: readAttachment
+      summary: Download an attachment as its author, issue participant or house dispatcher
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: {type: string}
+      responses:
+        '200':
+          description: Private attachment content
+          content:
+            image/jpeg: {schema: {type: string, format: binary}}
+            image/png: {schema: {type: string, format: binary}}
+            video/mp4: {schema: {type: string, format: binary}}
+            application/pdf: {schema: {type: string, format: binary}}
+        '400': {description: Attachment not available}
+        '401': {description: Missing or invalid MAX initData}
   /v1/issues/candidates:
     get:
       operationId: getIssueCandidates
@@ -182,17 +409,29 @@ paths:
               $ref: '#/components/schemas/CreateIssueRequest'
       responses:
         '200':
-          description: Accepted or returned
-        '400':
-          description: Invalid request
-        '403':
-          description: Access denied until JWT and house scope are implemented
-        '501':
-          description: Scaffold endpoint pending implementation
+          description: New draft issue created from the current user's unlinked report
           content:
             application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
+              schema: {$ref: '#/components/schemas/IssueView'}
+        '400':
+          description: Invalid request
+        '401': {description: Missing or invalid MAX initData}
+  /v1/issues/{id}:
+    get:
+      operationId: getIssue
+      summary: Issue card for a verified member of its house
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: {type: string}
+      responses:
+        '200':
+          description: Issue card
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/IssueView'}
+        '401': {description: Missing or invalid MAX initData}
   /v1/issues/{id}/join:
     post:
       operationId: joinIssue
@@ -211,21 +450,17 @@ paths:
               $ref: '#/components/schemas/JoinIssueRequest'
       responses:
         '200':
-          description: Accepted or returned
-        '400':
-          description: Invalid request
-        '403':
-          description: Access denied until JWT and house scope are implemented
-        '501':
-          description: Scaffold endpoint pending implementation
+          description: Current user's unlinked report joined to an active issue in the same house
           content:
             application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
+              schema: {$ref: '#/components/schemas/IssueView'}
+        '400':
+          description: Invalid request
+        '401': {description: Missing or invalid MAX initData}
   /v1/issues/{id}/merge:
     post:
       operationId: mergeIssues
-      summary: mergeIssues
+      summary: Move active reports from this issue into another issue in the same house as dispatcher
       parameters:
         - name: id
           in: path
@@ -240,21 +475,19 @@ paths:
               $ref: '#/components/schemas/MergeIssueRequest'
       responses:
         '200':
-          description: Accepted or returned
-        '400':
-          description: Invalid request
-        '403':
-          description: Access denied until JWT and house scope are implemented
-        '501':
-          description: Scaffold endpoint pending implementation
+          description: Target issue after merge
           content:
             application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
+              schema: {$ref: '#/components/schemas/IssueView'}
+        '400': {description: Invalid request or different houses}
+        '401': {description: Missing or invalid MAX initData}
+        '403': {description: Verified dispatcher role required for the source house}
+        '404': {description: Issue not found}
+        '409': {description: Inactive issue or target is at an earlier work stage}
   /v1/issues/{id}/split:
     post:
       operationId: splitIssue
-      summary: splitIssue
+      summary: Detach one report into a new draft issue as dispatcher
       parameters:
         - name: id
           in: path
@@ -269,17 +502,15 @@ paths:
               $ref: '#/components/schemas/SplitIssueRequest'
       responses:
         '200':
-          description: Accepted or returned
-        '400':
-          description: Invalid request
-        '403':
-          description: Access denied until JWT and house scope are implemented
-        '501':
-          description: Scaffold endpoint pending implementation
+          description: New draft issue containing the detached report
           content:
             application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
+              schema: {$ref: '#/components/schemas/IssueView'}
+        '400': {description: Invalid request or issue has fewer than two active reports}
+        '401': {description: Missing or invalid MAX initData}
+        '403': {description: Verified dispatcher role required for the issue house}
+        '404': {description: Issue or report not found}
+        '409': {description: Issue is no longer active}
   /v1/issues/{id}/status:
     patch:
       operationId: changeIssueStatus
@@ -298,17 +529,76 @@ paths:
               $ref: '#/components/schemas/ChangeStatusRequest'
       responses:
         '200':
-          description: Accepted or returned
+          description: Dispatcher changed status and wrote a status event
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/IssueView'}
         '400':
           description: Invalid request
-        '403':
-          description: Access denied until JWT and house scope are implemented
-        '501':
-          description: Scaffold endpoint pending implementation
+        '401': {description: Missing or invalid MAX initData}
+        '403': {description: Dispatcher house access required}
+  /v1/issues/{id}/planned-date:
+    patch:
+      operationId: setIssuePlannedDate
+      summary: Set or change the planned completion date for an issue
+      description: Verified dispatcher of the house may set a date without a time. Changes require a reason, are kept in history, and notify participants with MAX IDs.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: {type: string}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/SetPlannedDateRequest'}
+      responses:
+        '200':
+          description: Updated issue with planned date history
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/IssueView'}
+        '400': {description: Date is in the past or reason is missing for a change}
+        '401': {description: Missing or invalid MAX initData}
+        '403': {description: Verified dispatcher role required}
+        '404': {description: Issue unavailable}
+        '409': {description: Issue is no longer editable or date is unchanged}
+  /v1/dispatcher/issues:
+    get:
+      operationId: listDispatcherIssues
+      summary: Queue of issues for a dispatcher in one house
+      parameters:
+        - name: houseId
+          in: query
+          required: true
+          schema: {type: string, minLength: 1}
+      responses:
+        '200':
+          description: Issue queue
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ErrorResponse'
+                type: array
+                items: {$ref: '#/components/schemas/IssueView'}
+        '403': {description: Dispatcher house access required}
+        '401': {description: Missing or invalid MAX initData}
+  /v1/dispatcher/issues/{id}:
+    get:
+      operationId: getDispatcherIssue
+      summary: Issue card for a dispatcher
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: {type: string}
+      responses:
+        '200':
+          description: Issue card
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/IssueView'}
+        '403': {description: Dispatcher house access required}
+        '401': {description: Missing or invalid MAX initData}
   /v1/issues/{id}/verify:
     post:
       operationId: verifyIssue
@@ -327,17 +617,14 @@ paths:
               $ref: '#/components/schemas/VerifyIssueRequest'
       responses:
         '200':
-          description: Accepted or returned
-        '400':
-          description: Invalid request
-        '403':
-          description: Access denied until JWT and house scope are implemented
-        '501':
-          description: Scaffold endpoint pending implementation
+          description: Verification recorded; the issue closes when all participants confirm or reopens after a rejection
           content:
             application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
+              schema: {$ref: '#/components/schemas/IssueView'}
+        '400':
+          description: Invalid request, duplicate response or expired verification window
+        '401': {description: Missing or invalid MAX initData}
+        '404': {description: Issue unavailable to the current user}
   /v1/issues/{id}/comments:
     post:
       operationId: addIssueComment
@@ -393,7 +680,7 @@ paths:
   /v1/houses/{id}:
     get:
       operationId: getHouse
-      summary: getHouse
+      summary: House passport with a source and retrieval date for every populated field
       parameters:
         - name: id
           in: path
@@ -402,17 +689,140 @@ paths:
             type: string
       responses:
         '200':
-          description: Accepted or returned
-        '400':
-          description: Invalid request
-        '403':
-          description: Access denied until JWT and house scope are implemented
-        '501':
-          description: Scaffold endpoint pending implementation
+          description: Passport of a house with verified membership
           content:
             application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
+              schema: {$ref: '#/components/schemas/HousePassport'}
+        '400':
+          description: Invalid request
+        '401': {description: Missing or invalid MAX initData}
+        '404': {description: House does not exist or is unavailable to the current user}
+  /v1/houses/{houseId}/contacts:
+    parameters:
+      - name: houseId
+        in: path
+        required: true
+        schema: {type: string}
+    get:
+      operationId: listHouseContacts
+      summary: Contacts visible to verified house members
+      responses:
+        '200':
+          description: Local and emergency contacts
+          content:
+            application/json:
+              schema: {type: array, items: {$ref: '#/components/schemas/HouseContact'}}
+        '401': {description: Missing or invalid MAX initData}
+        '404': {description: House unavailable}
+    post:
+      operationId: createHouseContact
+      summary: Create a local contact as verified house admin
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/HouseContactRequest'}
+      responses:
+        '201':
+          description: Contact created and audited
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/HouseContact'}
+        '400': {description: Invalid contact}
+        '401': {description: Missing or invalid MAX initData}
+        '403': {description: Verified house admin role required}
+  /v1/houses/{houseId}/contacts/{contactId}:
+    parameters:
+      - name: houseId
+        in: path
+        required: true
+        schema: {type: string}
+      - name: contactId
+        in: path
+        required: true
+        schema: {type: string}
+    put:
+      operationId: updateHouseContact
+      summary: Update a local contact as verified house admin
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/HouseContactRequest'}
+      responses:
+        '200':
+          description: Contact updated and audited
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/HouseContact'}
+        '400': {description: Invalid contact}
+        '401': {description: Missing or invalid MAX initData}
+        '403': {description: Verified house admin role required}
+        '404': {description: Contact unavailable in this house}
+    delete:
+      operationId: deleteHouseContact
+      summary: Delete a local contact as verified house admin
+      responses:
+        '204': {description: Contact deleted and audited}
+        '401': {description: Missing or invalid MAX initData}
+        '403': {description: Verified house admin role required}
+        '404': {description: Contact unavailable in this house}
+  /v1/houses/{houseId}/invitations:
+    parameters:
+      - name: houseId
+        in: path
+        required: true
+        schema: {type: string}
+    get:
+      operationId: listHouseInvitations
+      summary: List invitation metadata without tokens
+      responses:
+        '200':
+          description: Invitations in this house
+          content:
+            application/json:
+              schema: {type: array, items: {$ref: '#/components/schemas/HouseInvitation'}}
+        '401': {description: Missing or invalid MAX initData}
+        '403': {description: Verified house admin role required}
+    post:
+      operationId: createHouseInvitation
+      summary: Create a resident invitation; raw token returned once
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/CreateHouseInvitationRequest'}
+      responses:
+        '201':
+          description: Invitation created and audited
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/CreatedHouseInvitation'}
+        '400': {description: Invalid duration or activation limit}
+        '401': {description: Missing or invalid MAX initData}
+        '403': {description: Verified house admin role required}
+  /v1/houses/{houseId}/invitations/{invitationId}/revoke:
+    post:
+      operationId: revokeHouseInvitation
+      summary: Revoke a resident invitation as verified house admin
+      parameters:
+        - name: houseId
+          in: path
+          required: true
+          schema: {type: string}
+        - name: invitationId
+          in: path
+          required: true
+          schema: {type: string}
+      responses:
+        '200':
+          description: Invitation revoked
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/HouseInvitation'}
+        '401': {description: Missing or invalid MAX initData}
+        '403': {description: Verified house admin role required}
+        '404': {description: Invitation unavailable in this house}
   /v1/houses/{id}/events:
     get:
       operationId: getHouseEvents
@@ -437,9 +847,27 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
   /v1/houses/{id}/polls:
+    get:
+      operationId: listHousePolls
+      summary: List preliminary polls for a verified resident of this house
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: {type: string}
+      responses:
+        '200':
+          description: House polls with the current user's choice and visible aggregate results
+          content:
+            application/json:
+              schema:
+                type: array
+                items: {$ref: '#/components/schemas/HousePoll'}
+        '401': {description: Missing or invalid MAX initData}
+        '404': {description: No verified resident membership in this house}
     post:
       operationId: createPoll
-      summary: createPoll
+      summary: Create a preliminary, non-official poll as the verified house admin
       parameters:
         - name: id
           in: path
@@ -453,18 +881,43 @@ paths:
             schema:
               $ref: '#/components/schemas/CreatePollRequest'
       responses:
-        '200':
-          description: Accepted or returned
-        '400':
-          description: Invalid request
-        '403':
-          description: Access denied until JWT and house scope are implemented
-        '501':
-          description: Scaffold endpoint pending implementation
+        '201':
+          description: Preliminary poll created
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ErrorResponse'
+                $ref: '#/components/schemas/HousePoll'
+        '400': {description: Invalid request}
+        '401': {description: Missing or invalid MAX initData}
+        '403': {description: Verified HOUSE_ADMIN role required for this house}
+  /v1/houses/{id}/polls/{pollId}/votes:
+    post:
+      operationId: voteInHousePoll
+      summary: Cast one vote as a verified resident before the poll closes
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: {type: string}
+        - name: pollId
+          in: path
+          required: true
+          schema: {type: string}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/HousePollVoteRequest'}
+      responses:
+        '200':
+          description: Vote recorded; returns updated poll
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/HousePoll'}
+        '400': {description: Invalid request}
+        '401': {description: Missing or invalid MAX initData}
+        '404': {description: House, poll, or option unavailable to this resident}
+        '409': {description: Poll closed or user already voted}
   /v1/connectors/{type}/sync:
     post:
       operationId: syncConnector
@@ -497,6 +950,231 @@ paths:
                 $ref: '#/components/schemas/ErrorResponse'
 components:
   schemas:
+    GuidedDemoView:
+      type: object
+      required: [enabled, active]
+      properties:
+        enabled: {type: boolean}
+        active: {type: boolean}
+        houseId: {type: [string, 'null']}
+        address: {type: [string, 'null']}
+    AccessHouse:
+      type: object
+      properties:
+        id: {type: string}
+        address: {type: string}
+    AccessOrganization:
+      type: object
+      properties:
+        id: {type: string}
+        name: {type: string}
+        houses: {type: array, items: {$ref: '#/components/schemas/AccessHouse'}}
+    AccessView:
+      type: object
+      properties:
+        role: {type: string, enum: [SYSTEM_ADMIN, UK_ADMIN, DISPATCHER, HOUSE_ADMIN, RESIDENT]}
+        organizationId: {type: [string, 'null']}
+        organizationName: {type: [string, 'null']}
+        houseId: {type: [string, 'null']}
+        houseAddress: {type: [string, 'null']}
+        status: {type: string, enum: [ACTIVE, SUSPENDED, REVOKED]}
+        userId: {type: [string, 'null']}
+        displayName: {type: [string, 'null']}
+    AccessInvitation:
+      type: object
+      properties:
+        id: {type: string}
+        role: {type: string, enum: [UK_ADMIN, DISPATCHER, HOUSE_ADMIN, RESIDENT]}
+        organizationId: {type: [string, 'null']}
+        organizationName: {type: [string, 'null']}
+        houses: {type: array, items: {$ref: '#/components/schemas/AccessHouse'}}
+        inviter: {type: string}
+        expiresAt: {type: string, format: date-time}
+        activationLimit: {type: integer}
+        activationCount: {type: integer}
+        revokedAt: {type: [string, 'null'], format: date-time}
+        acceptedByMe: {type: boolean}
+    CreateAccessInvitation:
+      type: object
+      required: [role, houseIds, days, activationLimit]
+      properties:
+        role: {type: string, enum: [UK_ADMIN, DISPATCHER, HOUSE_ADMIN, RESIDENT]}
+        organizationId: {type: [string, 'null']}
+        houseIds: {type: array, minItems: 1, items: {type: string}}
+        days: {type: integer, minimum: 1, maximum: 30}
+        activationLimit: {type: integer, minimum: 1, maximum: 100}
+    RevokeAccessRequest:
+      type: object
+      required: [role, userId]
+      properties:
+        role: {type: string, enum: [UK_ADMIN, DISPATCHER, HOUSE_ADMIN, RESIDENT]}
+        userId: {type: string}
+        organizationId: {type: [string, 'null']}
+        houseId: {type: [string, 'null']}
+    HouseView:
+      type: object
+      required: [id, address, memberships]
+      properties:
+        id: {type: string}
+        address: {type: string}
+        memberships:
+          type: array
+          items: {$ref: '#/components/schemas/HouseMembershipAccess'}
+    HouseMembershipAccess:
+      type: object
+      required: [role, verificationStatus]
+      properties:
+        role: {type: string, enum: [RESIDENT, HOUSE_ADMIN, DISPATCHER]}
+        verificationStatus: {type: string, enum: [INVITED, PENDING, VERIFIED, REJECTED]}
+    HousePassport:
+      type: object
+      required: [id, address, fields, contacts]
+      properties:
+        id: {type: string}
+        address: {type: string}
+        fields:
+          type: array
+          items: {$ref: '#/components/schemas/HousePassportField'}
+        contacts:
+          type: array
+          items: {$ref: '#/components/schemas/HouseContact'}
+    HousePoll:
+      type: object
+      description: Preliminary poll; never an official owners' meeting or binding vote
+      required: [id, houseId, question, official, closesAt, createdAt, closed, resultsVisible, options]
+      properties:
+        id: {type: string}
+        houseId: {type: string}
+        question: {type: string}
+        official: {type: boolean, const: false}
+        closesAt: {type: string, format: date-time}
+        createdAt: {type: string, format: date-time}
+        closed: {type: boolean}
+        resultsVisible: {type: boolean}
+        myOptionId: {type: [string, 'null']}
+        options:
+          type: array
+          items: {$ref: '#/components/schemas/HousePollOption'}
+    HousePollOption:
+      type: object
+      required: [id, label, votes]
+      properties:
+        id: {type: string}
+        label: {type: string}
+        votes: {type: integer, minimum: 0, description: Zero while resultsVisible is false}
+    HousePollVoteRequest:
+      type: object
+      required: [optionId]
+      properties:
+        optionId: {type: string, minLength: 1}
+    HouseContact:
+      type: object
+      required: [id, type, title, phone, updatedAt]
+      properties:
+        id: {type: string}
+        type: {type: string, enum: [EMERGENCY, LOCAL]}
+        title: {type: string}
+        phone: {type: string}
+        details: {type: [string, 'null']}
+        updatedAt: {type: string, format: date-time}
+    HouseContactRequest:
+      type: object
+      required: [type, title, phone]
+      properties:
+        type: {type: string, enum: [EMERGENCY, LOCAL]}
+        title: {type: string, minLength: 1, maxLength: 120}
+        phone: {type: string, pattern: '^[+0-9() .-]{2,40}$'}
+        details: {type: [string, 'null'], maxLength: 500}
+    HouseInvitation:
+      type: object
+      required: [id, expiresAt, activationLimit, activationCount, createdAt]
+      properties:
+        id: {type: string}
+        expiresAt: {type: string, format: date-time}
+        activationLimit: {type: integer}
+        activationCount: {type: integer}
+        revokedAt: {type: [string, 'null'], format: date-time}
+        createdAt: {type: string, format: date-time}
+    CreateHouseInvitationRequest:
+      type: object
+      required: [days, activationLimit]
+      properties:
+        days: {type: integer, minimum: 1, maximum: 30}
+        activationLimit: {type: integer, minimum: 1, maximum: 100}
+    CreatedHouseInvitation:
+      type: object
+      required: [token, invitation]
+      properties:
+        token: {type: string}
+        invitation: {$ref: '#/components/schemas/HouseInvitation'}
+    HousePassportField:
+      type: object
+      required: [key, value, source, fetchedAt]
+      properties:
+        key: {type: string}
+        value: {}
+        source: {type: string}
+        sourceUrl: {type: [string, 'null'], format: uri}
+        fetchedAt: {type: string, format: date-time}
+        validAt: {type: [string, 'null'], format: date-time}
+        confidence: {type: [number, 'null'], minimum: 0, maximum: 1}
+    IssueView:
+      type: object
+      required: [id, houseId, address, status, description, participants, attachments, reports, plannedDateHistory, mergedForMe]
+      properties:
+        id: {type: string}
+        houseId: {type: string}
+        address: {type: string}
+        category: {type: string, nullable: true}
+        status: {type: string}
+        description: {type: string}
+        location: {type: string, nullable: true}
+        occurredAt: {type: string, format: date-time, nullable: true}
+        verificationDueAt: {type: string, format: date-time, nullable: true}
+        plannedDate: {type: [string, 'null'], format: date, description: Completion target in Europe/Moscow calendar dates}
+        dispatcherComment:
+          type: object
+          nullable: true
+          description: Latest nonempty dispatcher comment on a status change
+          properties:
+            text: {type: string}
+            status: {type: string}
+            changedAt: {type: string, format: date-time}
+        plannedDateHistory:
+          type: array
+          items: {$ref: '#/components/schemas/PlannedDateChange'}
+        participants: {type: integer}
+        mergedForMe: {type: boolean, description: The current resident has an active report moved here by a dispatcher merge}
+        attachments:
+          type: array
+          items: {$ref: '#/components/schemas/AttachmentView'}
+        reports:
+          type: array
+          description: Active reports visible to the current user; residents see only their own, dispatchers see all
+          items: {$ref: '#/components/schemas/LinkedReportView'}
+    LinkedReportView:
+      type: object
+      required: [id, description, author, createdAt]
+      properties:
+        id: {type: string}
+        description: {type: string}
+        author: {type: string}
+        createdAt: {type: string}
+    PlannedDateChange:
+      type: object
+      required: [newDate, previousDateMissed, changedAt]
+      properties:
+        previousDate: {type: [string, 'null'], format: date}
+        newDate: {type: string, format: date}
+        previousDateMissed: {type: boolean}
+        reason: {type: [string, 'null']}
+        changedAt: {type: string, format: date-time}
+    AttachmentView:
+      type: object
+      required: [id, mime]
+      properties:
+        id: {type: string}
+        mime: {type: string}
     ErrorResponse:
       type: object
       required: [code, message, details, correlationId]
@@ -511,11 +1189,6 @@ components:
       properties:
         update_type: {type: string, minLength: 1}
       additionalProperties: true
-    AcceptInvitationRequest:
-      type: object
-      required: [maxUserId]
-      properties:
-        maxUserId: {type: string, minLength: 1}
     SetActiveHouseRequest:
       type: object
       required: [houseId]
@@ -523,10 +1196,59 @@ components:
         houseId: {type: string, minLength: 1}
     CreateReportRequest:
       type: object
-      required: [houseId, text]
+      required: [houseId, text, category]
+      anyOf:
+        - required: [locationFeatures]
+        - required: [location]
       properties:
         houseId: {type: string, minLength: 1}
         text: {type: string, minLength: 1, maxLength: 4000}
+        category: {type: string, enum: [LIGHTING, WATER, HEATING, ELEVATOR, ENTRANCE_CLEANING, YARD_CLEANING, WASTE_REMOVAL, PLAYGROUND, OTHER]}
+        location: {type: string, minLength: 1, maxLength: 160, description: Legacy free text place}
+        locationFeatures: {$ref: '#/components/schemas/LocationFeatures'}
+        occurredAt: {type: string, format: date-time, description: Optional occurrence time; defaults to server receipt time}
+    LocationFeatures:
+      type: object
+      required: [area]
+      description: Category-specific place. Entrance/floor required for local indoor problems; liftType required for elevators; coverage required for entrance cleaning. Apartment numbers are not collected.
+      properties:
+        area: {type: string, enum: [ENTRANCE, APARTMENT, BASEMENT, YARD, WHOLE_HOUSE, OTHER]}
+        entrance: {type: [integer, 'null'], minimum: 1, maximum: 100}
+        floor: {type: [integer, 'null'], minimum: 1, maximum: 200}
+        liftType: {type: [string, 'null'], enum: [PASSENGER, CARGO, UNKNOWN, null]}
+        liftNumber: {type: [integer, 'null'], minimum: 1, maximum: 100}
+        coverage: {type: [string, 'null'], enum: [LOCAL, ENTIRE, null]}
+        object: {type: [string, 'null'], enum: [SWING, SLIDE, SANDBOX, OTHER, WHOLE_PLAYGROUND, null]}
+        site: {type: [integer, 'null'], minimum: 1, maximum: 100}
+        details: {type: [string, 'null'], maxLength: 160}
+    CreateReportResponse:
+      type: object
+      required: [reportId, correlationId, candidates]
+      properties:
+        reportId: {type: string, format: uuid}
+        correlationId: {type: string, format: uuid}
+        candidates:
+          type: array
+          items:
+            type: object
+            required: [issueId, score, reasons]
+            properties:
+              issue:
+                type: object
+                description: Preview for a verified resident of the same house, without attachments or author data
+                properties:
+                  id: {type: string}
+                  houseId: {type: string}
+                  address: {type: string}
+                  category: {type: string}
+                  description: {type: string}
+                  location: {type: string}
+                  participants: {type: integer}
+              issueId: {type: string}
+              score: {type: number, format: double}
+              reasons:
+                type: array
+                items: {type: string}
     WithdrawReportRequest:
       type: object
       required: [reason]
@@ -534,12 +1256,9 @@ components:
         reason: {type: string, minLength: 1, maxLength: 1000}
     CreateIssueRequest:
       type: object
-      required: [houseId, category, description, priority]
+      required: [reportId]
       properties:
-        houseId: {type: string, minLength: 1}
-        category: {type: string, minLength: 1}
-        description: {type: string, minLength: 1}
-        priority: {type: string, enum: [LOW, NORMAL, HIGH, EMERGENCY]}
+        reportId: {type: string, minLength: 1}
     JoinIssueRequest:
       type: object
       required: [reportId]
@@ -564,6 +1283,12 @@ components:
           type: string
           enum: [DRAFT, OPEN, ASSIGNED, IN_PROGRESS, RESOLVED, VERIFICATION_72H, CLOSED_CONFIRMED, CLOSED_UNCONFIRMED, REVIEW_REQUIRED, REOPENED, WITHDRAWN, REJECTED]
         reason: {type: string, minLength: 1}
+    SetPlannedDateRequest:
+      type: object
+      required: [date]
+      properties:
+        date: {type: string, format: date}
+        reason: {type: string, maxLength: 1000, description: Required when changing an existing date}
     VerifyIssueRequest:
       type: object
       required: [confirmed]
@@ -584,15 +1309,16 @@ components:
         description: {type: string, minLength: 1, maxLength: 4000}
     CreatePollRequest:
       type: object
-      required: [question, options]
+      required: [question, options, closesAt]
       properties:
         question: {type: string, minLength: 1, maxLength: 500}
         options:
           type: array
           minItems: 2
           maxItems: 20
-          items: {type: string, minLength: 1}
+          items: {type: string, minLength: 1, maxLength: 200}
         closesAt: {type: string, format: date-time}
+        resultsHiddenUntilClose: {type: boolean, default: false}
     SyncRequest:
       type: object
       required: [houseId]

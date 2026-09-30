@@ -5,11 +5,15 @@ package ru.pulsedoma.bootstrap;
  * FR-ISS-001, FR-ISS-002, FR-ISS-003, FR-ISS-004, FR-ISS-005: report/issue flow TODO.
  * FR-ISS-006, FR-ISS-007, FR-ISS-008, FR-ISS-009, FR-ISS-010: dispatcher and verification TODO.
  * FR-ISS-011, FR-ISS-012, FR-ISS-013, FR-ISS-014, FR-ISS-015: incident, comments, withdrawal, export TODO.
- * FR-HUB-001, FR-HUB-002, FR-HUB-003, FR-HUB-004: address and passport TODO.
+ * FR-HUB-001: address normalization through FIAS TODO.
+ * FR-HUB-002, AC-09: passport values and provenance are displayed; automatic sourcing TODO.
+ * FR-HUB-003: official UK/TSZh and RSO data TODO.
+ * FR-HUB-004: house admins manage local and emergency contacts; external sourcing TODO.
  * FR-HUB-005, FR-HUB-006, FR-HUB-007, FR-HUB-008, FR-HUB-009: events and polls TODO.
- * FR-HUB-010, FR-HUB-011, FR-HUB-012: invitations and utilities TODO.
+ * FR-HUB-010: house admins create, limit and revoke resident invitations; QR presentation TODO.
+ * FR-HUB-011, FR-HUB-012: utilities and outages TODO.
  * AC-01, AC-02, AC-03, AC-04, AC-05, AC-06: end-to-end acceptance TODO.
- * AC-07, AC-08, AC-09, AC-10, AC-11, AC-12: end-to-end acceptance TODO.
+ * AC-07, AC-08, AC-10, AC-11, AC-12: end-to-end acceptance TODO.
  * AC-13, AC-14, AC-15, AC-16, AC-17, AC-18: end-to-end acceptance TODO.
  * NFR-001: webhook response latency requires measurement.
  * NFR-002, NFR-003: API and duplicate search performance requires measurement.

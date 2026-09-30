@@ -15,8 +15,8 @@
         <!-- Libraries used by the single Java service. -->
         <module>common</module>
         <module>domain-identity</module>
-        <module>domain-issues</module>
         <module>domain-duplicates</module>
+        <module>domain-issues</module>
         <module>domain-house</module>
         <module>integration-max</module>
         <module>integration-external</module>

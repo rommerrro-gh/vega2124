@@ -2,12 +2,15 @@ services:
   backend:
     build: .
     ports:
-      - "8080:8080"
+      - "${HOST_BIND_IP:-0.0.0.0}:8080:8080"
     environment:
+      SPRING_PROFILES_ACTIVE: ${SPRING_PROFILES_ACTIVE:-}
       SQLITE_URL: jdbc:sqlite:/app/data/pulse-doma.db
       REDIS_HOST: redis
       MAX_WEBHOOK_SECRET: ${MAX_WEBHOOK_SECRET:-local-dev-secret}
       MAX_BOT_TOKEN: ${MAX_BOT_TOKEN:-}
+      MAX_BOT_USERNAME: ${MAX_BOT_USERNAME:-}
+      GUIDED_DEMO_CODE_SHA256: ${GUIDED_DEMO_CODE_SHA256:-}
       MINIO_ENDPOINT: http://minio:9000
       MINIO_ACCESS_KEY: ${MINIO_ROOT_USER:-minioadmin}
       MINIO_SECRET_KEY: ${MINIO_ROOT_PASSWORD:-minioadmin}
@@ -43,8 +46,8 @@ services:
       MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minioadmin}
       MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-minioadmin}
     ports:
-      - "9000:9000"
-      - "9001:9001"
+      - "${HOST_BIND_IP:-0.0.0.0}:9000:9000"
+      - "${HOST_BIND_IP:-0.0.0.0}:9001:9001"
     volumes:
       - minio-data:/data
     healthcheck:
@@ -61,6 +64,13 @@ services:
       interval: 5s
       timeout: 3s
       retries: 10
+  staging-seed:
+    profiles: [tools]
+    image: python:3.12-alpine
+    entrypoint: ["python", "/scripts/max_staging_seed.py"]
+    volumes:
+      - sqlite-data:/app/data
+      - ./scripts:/scripts:ro
 volumes:
   sqlite-data:
   redis-data:

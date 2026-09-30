@@ -13,13 +13,20 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
-import ru.pulsedoma.issues.IssuePriority;
 import ru.pulsedoma.issues.IssueStatus;
+import ru.pulsedoma.issues.MiniAppService;
+import java.security.Principal;
+import java.time.LocalDate;
 
 @Validated
 @RestController
 @RequestMapping("/v1/issues")
 public class IssuesController {
+    private final MiniAppService miniApp;
+
+    public IssuesController(MiniAppService miniApp) {
+        this.miniApp = miniApp;
+    }
     @GetMapping("/candidates")
     public void candidates(@RequestParam @NotBlank String houseId,
                            @RequestParam @NotBlank String query) {
@@ -27,33 +34,51 @@ public class IssuesController {
     }
 
     @PostMapping
-    public void create(@Valid @RequestBody CreateIssueRequest request) {
-        throw PendingOperation.notImplemented();
+    public MiniAppService.IssueView create(@Valid @RequestBody CreateIssueRequest request, Principal principal) {
+        return miniApp.createIssue(request.reportId(), principal.getName());
+    }
+
+    @GetMapping("/{id}")
+    public MiniAppService.IssueView get(@PathVariable @NotBlank String id, Principal principal) {
+        return miniApp.issue(id, principal.getName());
     }
 
     @PostMapping("/{id}/join")
-    public void join(@PathVariable @NotBlank String id, @Valid @RequestBody JoinIssueRequest request) {
-        throw PendingOperation.notImplemented();
+    public MiniAppService.IssueView join(@PathVariable @NotBlank String id,
+                                          @Valid @RequestBody JoinIssueRequest request, Principal principal) {
+        return miniApp.joinIssue(id, request.reportId(), principal.getName());
     }
 
     @PostMapping("/{id}/merge")
-    public void merge(@PathVariable @NotBlank String id, @Valid @RequestBody MergeIssueRequest request) {
-        throw PendingOperation.notImplemented();
+    public MiniAppService.IssueView merge(@PathVariable @NotBlank String id,
+                                          @Valid @RequestBody MergeIssueRequest request, Principal principal) {
+        return miniApp.mergeIssues(id, request.targetIssueId(), principal.getName());
     }
 
     @PostMapping("/{id}/split")
-    public void split(@PathVariable @NotBlank String id, @Valid @RequestBody SplitIssueRequest request) {
-        throw PendingOperation.notImplemented();
+    public MiniAppService.IssueView split(@PathVariable @NotBlank String id,
+                                          @Valid @RequestBody SplitIssueRequest request, Principal principal) {
+        return miniApp.splitIssue(id, request.reportId(), request.reason(), principal.getName());
     }
 
     @PatchMapping("/{id}/status")
-    public void changeStatus(@PathVariable @NotBlank String id, @Valid @RequestBody ChangeStatusRequest request) {
-        throw PendingOperation.notImplemented();
+    public MiniAppService.IssueView changeStatus(@PathVariable @NotBlank String id,
+                                                  @Valid @RequestBody ChangeStatusRequest request,
+                                                  Principal principal) {
+        return miniApp.changeStatus(id, principal.getName(), request.status(), request.reason());
+    }
+
+    @PatchMapping("/{id}/planned-date")
+    public MiniAppService.IssueView setPlannedDate(@PathVariable @NotBlank String id,
+            @Valid @RequestBody SetPlannedDateRequest request, Principal principal) {
+        return miniApp.setPlannedDate(id, principal.getName(), request.date(), request.reason());
     }
 
     @PostMapping("/{id}/verify")
-    public void verify(@PathVariable @NotBlank String id, @Valid @RequestBody VerifyIssueRequest request) {
-        throw PendingOperation.notImplemented();
+    public MiniAppService.IssueView verify(@PathVariable @NotBlank String id,
+                                           @Valid @RequestBody VerifyIssueRequest request,
+                                           Principal principal) {
+        return miniApp.verify(id, principal.getName(), request.confirmed(), request.comment());
     }
 
     @PostMapping("/{id}/comments")
@@ -61,12 +86,12 @@ public class IssuesController {
         throw PendingOperation.notImplemented();
     }
 
-    public record CreateIssueRequest(@NotBlank String houseId, @NotBlank String category,
-                                     @NotBlank String description, @NotNull IssuePriority priority) {}
+    public record CreateIssueRequest(@NotBlank String reportId) {}
     public record JoinIssueRequest(@NotBlank String reportId) {}
     public record MergeIssueRequest(@NotBlank String targetIssueId) {}
     public record SplitIssueRequest(@NotBlank String reportId, @NotBlank String reason) {}
     public record ChangeStatusRequest(@NotNull IssueStatus status, @NotBlank String reason) {}
+    public record SetPlannedDateRequest(@NotNull LocalDate date, @Size(max = 1000) String reason) {}
     public record VerifyIssueRequest(@NotNull Boolean confirmed, @Size(max = 2000) String comment) {}
     public record AddCommentRequest(@NotBlank @Size(max = 2000) String text) {}
 }

@@ -13,5 +13,22 @@ public enum IssueStatus {
     REVIEW_REQUIRED,
     REOPENED,
     WITHDRAWN,
-    REJECTED
+    REJECTED;
+
+    public String displayName() {
+        return switch (this) {
+            case DRAFT -> "Ожидает диспетчера";
+            case OPEN -> "Принята";
+            case ASSIGNED -> "Назначена";
+            case IN_PROGRESS -> "В работе";
+            case RESOLVED -> "Выполнена";
+            case VERIFICATION_72H -> "Ожидает вашего подтверждения";
+            case CLOSED_CONFIRMED -> "Закрыта после подтверждения";
+            case CLOSED_UNCONFIRMED -> "Закрыта по истечении срока";
+            case REVIEW_REQUIRED -> "Требует решения диспетчера";
+            case REOPENED -> "Открыта повторно";
+            case WITHDRAWN -> "Отозвана";
+            case REJECTED -> "Отклонена";
+        };
+    }
 }

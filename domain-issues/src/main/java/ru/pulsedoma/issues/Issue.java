@@ -17,6 +17,10 @@ public class Issue {
     @Column(name = "house_id", nullable = false)
     public String houseId;
     public String category;
+    @Column(name = "normalized_text")
+    public String normalizedText;
+    @Column(name = "search_text")
+    public String searchText;
     @Column(name = "zone_json")
     public String zoneJson;
     @Enumerated(EnumType.STRING)

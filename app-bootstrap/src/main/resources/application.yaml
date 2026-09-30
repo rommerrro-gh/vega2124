@@ -1,18 +1,22 @@
 server:
   port: ${SERVER_PORT:8080}
 spring:
+  servlet:
+    multipart:
+      max-file-size: 10MB
+      max-request-size: 11MB
   datasource:
     url: ${SQLITE_URL:jdbc:sqlite:./data/pulse-doma.db}
     hikari:
-      maximum-pool-size: 1
+      maximum-pool-size: 4
   jpa:
     open-in-view: false
     hibernate:
       ddl-auto: none
     database-platform: org.hibernate.community.dialect.SQLiteDialect
   flyway:
-    clean-on-validation-error: true # для разработки
-    clean-disabled: false # для разработки
+    clean-on-validation-error: false
+    clean-disabled: true
     enabled: true
     locations: classpath:db/migration
   data:
@@ -21,12 +25,16 @@ spring:
       port: ${REDIS_PORT:6379}
       timeout: ${REDIS_TIMEOUT:200ms}
 max:
+  bot:
+    username: ${MAX_BOT_USERNAME:}
   webhook:
     secret: ${MAX_WEBHOOK_SECRET:local-dev-secret}
     queue-key: ${MAX_WEBHOOK_QUEUE_KEY:max:webhook:updates}
   api:
     base-url: ${MAX_API_BASE_URL:https://platform-api2.max.ru}
     token: ${MAX_BOT_TOKEN:}
+guided-demo:
+  code-sha256: ${GUIDED_DEMO_CODE_SHA256:}
 integration:
   external:
     base-url: ${CONTRACT_ADAPTER_URL:http://localhost:8081}
