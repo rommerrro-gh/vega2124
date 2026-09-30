@@ -30,8 +30,10 @@
 
 Для сборки вне контейнера требуются Java 21 и Maven 3.9.x. Для запуска через Compose нужен Docker Compose; Dockerfile сам использует Java и Maven внутри контейнера. Создайте `.env` командой `cp .env.example .env`. Браузерный профиль без токена MAX запускается одной командой:
 
+Для Docker-сборки необходим **BuildKit**: Dockerfile использует `COPY --parents` и `RUN --mount=type=cache` с синтаксисом `docker/dockerfile:1.7-labs`. Используйте Docker Compose V2 (`docker compose`) с установленным плагином Buildx. В команде ниже `DOCKER_BUILDKIT=1` явно включает BuildKit; отдельный шаг включения не нужен.
+
 ```sh
-SPRING_PROFILES_ACTIVE=demo docker compose up --build -d
+DOCKER_BUILDKIT=1 SPRING_PROFILES_ACTIVE=demo docker compose up --build -d
 ```
 
 После запуска откройте `http://localhost:8080/miniapp/index.html` и проверьте backend:
@@ -44,7 +46,7 @@ curl http://localhost:8080/actuator/health
 
 ```sh
 docker compose down
-SPRING_PROFILES_ACTIVE=demo docker compose up --build -d
+DOCKER_BUILDKIT=1 SPRING_PROFILES_ACTIVE=demo docker compose up --build -d
 docker compose logs -f backend
 ```
 
