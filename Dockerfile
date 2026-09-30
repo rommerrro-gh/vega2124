@@ -1,7 +1,7 @@
 # syntax=docker/dockerfile:1.7-labs
 FROM maven:3.9.9-eclipse-temurin-21 AS build
 WORKDIR /src
-COPY --parents pom.xml **/pom.xml .
+COPY --parents **/pom.xml ./
 RUN --mount=type=cache,target=/root/.m2 \
     mvn -B -DskipTests dependency:go-offline
 
