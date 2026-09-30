@@ -1,4 +1,13 @@
-# .gitignore
+target/
+**/target/
 .env
-.env.*
-!.env.example
+*.db
+*.db-shm
+*.db-wal
+.idea/
+*.iml
+*.ipr
+*.iws
+out/
+.run/
+.DS_Store
