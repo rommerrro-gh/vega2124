@@ -87,7 +87,7 @@ export function CaseDetail({ item, api, role, headers, context, onChange, onClos
   </section>;
 }
 
-export function ResidentCases({ house, role, api, headers, canSubmit, legacyIssues = [], legacyStatusLabels = {}, onLegacyOpen }) {
+export function ResidentCases({ house, role, api, headers, canSubmit, legacyIssues = [], legacyStatusLabels = {}, onLegacyOpen, initialCaseId }) {
   const [items,setItems]=useState([]),[context,setContext]=useState(null),[detail,setDetail]=useState(null);
   const [compose,setCompose]=useState(false),[draft,setDraft]=useState(null),[files,setFiles]=useState([]);
   const [filter,setFilter]=useState("ALL"),[notice,setNotice]=useState(""),[busy,setBusy]=useState(false),[review,setReview]=useState(false);
@@ -97,6 +97,7 @@ export function ResidentCases({ house, role, api, headers, canSubmit, legacyIssu
     let active=true;setDetail(null);setCompose(false);setDraft(null);setContext(null);setNotice("");setItems([]);setFiles([]);setReview(false);
     Promise.all([api(role,"/v1/cases"),api(role,`/v1/houses/${houseId}/case-context`)]).then(([list,ctx])=>{
       if(!active)return;setItems(list.filter(c=>c.houseId===houseId));setContext(ctx);
+      if(initialCaseId){const target=list.find(c=>c.id===initialCaseId&&c.houseId===houseId);if(target)setDetail(target);else setNotice("Обращение недоступно. Проверьте выбранный дом и доступ.");}
       try{const saved=JSON.parse(sessionStorage.getItem(`pulse-case:${ctx.actorId}:${houseId}`));if(saved&&Date.now()-saved.savedAt<86400000)setDraft(saved);}catch{}
     }).catch(e=>{if(active)setNotice(e.message);});return()=>{active=false;};
   },[houseId,role]);

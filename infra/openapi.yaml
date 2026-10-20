@@ -321,7 +321,11 @@ paths:
   /webhooks/max:
     post:
       operationId: maxWebhook
-      summary: maxWebhook
+      summary: Принять событие MAX в устойчивую очередь
+      description: >-
+        Проверяет секрет и сохраняет событие до подтверждения. Диалоги bot_started и message_created
+        обрабатываются ботом жителя; групповые сообщения не раскрывают персональные обращения.
+        Действия и ответы сохраняются с ключом сообщения для защиты от повторной доставки.
       requestBody:
         required: true
         content:

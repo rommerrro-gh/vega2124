@@ -14,7 +14,8 @@ import java.util.*;
 public class ResidentCaseService {
     private final JdbcTemplate jdbc;
     private final AttachmentStore store;
-    public ResidentCaseService(JdbcTemplate jdbc, AttachmentStore store) { this.jdbc = jdbc; this.store = store; }
+    private final CaseBotNotifications botNotifications;
+    public ResidentCaseService(JdbcTemplate jdbc, AttachmentStore store, CaseBotNotifications botNotifications) { this.jdbc = jdbc; this.store = store; this.botNotifications = botNotifications; }
 
     public record Event(String id, String actor, CaseEventType type, String text, String createdAt) {}
     public record DocumentVersion(String id, int version, String mime, long size, String uploadedBy, String createdAt) {}
@@ -317,6 +318,7 @@ public class ResidentCaseService {
     }
     private void event(String id,String actor,CaseEventType type,String text,String key) {
         jdbc.update("INSERT INTO case_events(id,case_id,actor_id,type,text,client_request_id,created_at) VALUES (?,?,?,?,?,?,?)",UUID.randomUUID().toString(),id,actor,type.name(),text,key,now());
+        botNotifications.enqueue(id,actor,type);
     }
     private void audit(String actor,String action,String id) {
         jdbc.update("INSERT INTO audit_events(id,actor_id,action,entity,entity_id,created_at) VALUES (?,?,?,'resident_case',?,?)",UUID.randomUUID().toString(),actor,action,id,now());

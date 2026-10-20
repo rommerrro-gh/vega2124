@@ -136,9 +136,36 @@ def unsubscribe(public_url, token, api_url):
     return False
 
 
+def register_commands(token, api_url):
+    commands = [
+        {"name": "start", "description": "Меню Пульса дома"},
+        {"name": "new", "description": "Сообщить о проблеме"},
+        {"name": "payment", "description": "Вопрос по квитанции"},
+        {"name": "cases", "description": "Мои обращения"},
+        {"name": "house", "description": "Мой дом и контакты"},
+        {"name": "help", "description": "Помощь"},
+        {"name": "cancel", "description": "Удалить черновик"},
+    ]
+    request = urllib.request.Request(api_url + "/me/commands",
+        data=json.dumps({"commands": commands}).encode("utf-8"),
+        headers={"Authorization": token, "Content-Type": "application/json"}, method="PATCH")
+    try:
+        with urllib.request.urlopen(request, timeout=15, context=ssl_context()) as response:
+            json.load(response)
+        actual = get_json(api_url + "/me", token).get("commands", [])
+        if {c["name"] for c in actual} != {c["name"] for c in commands}:
+            print("НЕ ГОТОВО: состав команд бота не подтверждён")
+            return False
+        print("OK: команды бота зарегистрированы, количество:", len(actual))
+        return True
+    except (urllib.error.URLError, ValueError, json.JSONDecodeError):
+        print("НЕ ГОТОВО: не удалось зарегистрировать команды бота")
+        return False
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("command", choices=["check", "subscribe", "unsubscribe"])
+    parser.add_argument("command", choices=["check", "subscribe", "unsubscribe", "register-commands"])
     parser.add_argument("--public-url", help="HTTPS-адрес стенда; по умолчанию MAX_PUBLIC_URL")
     args = parser.parse_args()
     settings = local_settings()
@@ -153,6 +180,8 @@ def main():
         return 0 if unsubscribe(public_url, token, api_url) else 1
     if not check(public_url, token, secret, api_url):
         return 2
+    if args.command == "register-commands" and not register_commands(token, api_url):
+        return 1
     if args.command == "subscribe" and not subscribe(public_url, token, secret, api_url):
         return 1
     return 0

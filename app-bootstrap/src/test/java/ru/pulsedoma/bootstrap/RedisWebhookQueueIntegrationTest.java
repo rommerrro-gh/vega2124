@@ -49,8 +49,7 @@ class RedisWebhookQueueIntegrationTest {
 
             restarted.enqueue("{\"update_type\":\"ignored\"}");
             restarted.claim(); // The previous process stopped before acknowledging this delivery.
-            new MaxWebhookWorker(restarted, redis, new ObjectMapper(), mock(JdbcTemplate.class),
-                    mock(MaxMessageReportHandler.class), mock(MaxApiClient.class), "").poll();
+            new MaxWebhookWorker(restarted, redis, new ObjectMapper(), mock(MaxResidentBot.class)).poll();
             assertNull(restarted.claim());
             assertEquals(0L, redis.opsForList().size(key + ":inflight"));
         } finally {

@@ -28,6 +28,11 @@ public final class MaxApiClient {
                 .retrieve().bodyToMono(String.class);
     }
 
+    public Mono<String> sendMessage(String userId, Map<String,Object> body) {
+        return client.post().uri(builder -> builder.path("/messages").queryParam("user_id", userId).build())
+                .header("Authorization", token).bodyValue(body).retrieve().bodyToMono(String.class);
+    }
+
     public Mono<String> sendWelcome(String userId, String botUsername, String text) {
         Map<String, Object> body = botUsername.isBlank() ? Map.of("text", text) : Map.of(
                 "text", text,

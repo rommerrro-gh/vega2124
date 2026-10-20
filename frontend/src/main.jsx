@@ -458,6 +458,7 @@ function Resident() {
   const [placeFeatures, setPlaceFeatures] = useState({});
   const [houses, setHouses] = useState([]);
   const [selectedHouseId, setSelectedHouseId] = useState("");
+  const [initialCaseId, setInitialCaseId] = useState(null);
   const [passport, setPassport] = useState(null);
   const [passportLoading, setPassportLoading] = useState(false);
   const [passportError, setPassportError] = useState("");
@@ -489,7 +490,18 @@ function Resident() {
         request("/v1/access/me"), request("/v1/me/active-house"),
       ]);
       setHouses(myHouses); setIssues(myIssues);
-      if (myHouses.length) setSelectedHouseId(myHouses.find(house => house.id === selected.houseId)?.id || myHouses[0].id);
+      const launch = window.WebApp?.initDataUnsafe?.start_param || new URLSearchParams(location.search).get("WebAppStartParam") || "";
+      const match = typeof launch === "string" && /^case_([0-9a-f-]{36})$/.exec(launch);
+      let linkedHouse = null;
+      if (match) {
+        try {
+          // A launch parameter selects a view; only the authenticated API grants access.
+          const linked = await request(`/v1/cases/${match[1]}`);
+          if (linked.isAuthor && myHouses.some(h => h.id === linked.houseId)) { linkedHouse = linked.houseId; setInitialCaseId(linked.id); }
+          else setNotice("Обращение недоступно для этого профиля.");
+        } catch (error) { setNotice(error.message); }
+      }
+      if (myHouses.length) setSelectedHouseId(linkedHouse || myHouses.find(house => house.id === selected.houseId)?.id || myHouses[0].id);
       if (!roles.length) setNotice("Профиль создан. Чтобы получить доступ, откройте приглашение от администратора.");
     }
     load().catch(fail).finally(() => setInitialLoading(false));
@@ -616,7 +628,7 @@ function Resident() {
     <GuidedDemoEntry />
     {selectedHouse && <div className="house-switcher"><span className="house-switcher-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M3.5 10.5 12 3.5l8.5 7v9a1 1 0 0 1-1 1h-15a1 1 0 0 1-1-1z"/><path d="M9.5 20.5v-6h5v6"/></svg></span><div className="house-switcher-copy"><span>Ваш дом</span>{houses.length > 1 ? <select aria-label="Выбранный дом" value={selectedHouseId} disabled={step !== "form" || !!reportId} onChange={event => { setSelectedHouseId(event.target.value); setPlaceFeatures(defaultPlace(reportCategory)); request("/v1/me/active-house", { method: "PUT", body: JSON.stringify({ houseId: event.target.value }) }).catch(fail); }}>{houses.map(house => <option key={house.id} value={house.id}>{house.address}</option>)}</select> : <strong>{selectedHouse.address}</strong>}</div></div>}
     {!!awaitingVerification.length && step === "form" && <div className="priority-notice"><div><strong>Подтвердите выполнение работ</strong><p>{countLabel(awaitingVerification.length, "заявка ждёт", "заявки ждут", "заявок ждут")} вашего ответа.</p></div><Button mode="secondary" type="button" onClick={() => showIssue(awaitingVerification[0])}>Открыть</Button></div>}
-    {selectedHouse && step === "form" && <ResidentCases key={`${demoSession}:${selectedHouseId}`} house={selectedHouse} role={demoSession} api={api} headers={authHeaders} canSubmit={canReport} legacyIssues={houseIssues} legacyStatusLabels={statusLabels} onLegacyOpen={showIssue} />}
+    {selectedHouse && step === "form" && <ResidentCases key={`${demoSession}:${selectedHouseId}`} house={selectedHouse} role={demoSession} api={api} headers={authHeaders} canSubmit={canReport} initialCaseId={initialCaseId} legacyIssues={houseIssues} legacyStatusLabels={statusLabels} onLegacyOpen={showIssue} />}
     {selectedHouse && canReport && step === "form" && !showReportForm && <div className="start-action"><div><strong>Хотите найти похожую проблему?</strong><p>Можно дополнительно указать категорию и место.</p></div><Button mode="secondary" type="button" onClick={() => setShowReportForm(true)}>Проверить похожие заявки</Button></div>}
     <div className="content-grid">
       {step === "form" && showReportForm && canReport && <Card className="form-card">
