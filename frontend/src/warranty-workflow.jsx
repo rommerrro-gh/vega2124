@@ -1,3 +1,4 @@
+import {HouseTariffs} from "./house-tariffs.jsx";
 import React, {useEffect,useState} from "react";
 
 const fn={COORDINATOR:"Координатор",ENGINEER:"Инженер",WARRANTY:"Гарантийный специалист",CONTRACTOR:"Исполнитель"};
@@ -115,6 +116,7 @@ export function WorkPortal({api,headers,brand,renderCase,inviteToken=""}){
  {!!houses.length&&<section className="case-panel"><label>Рабочий дом<select value={houseId} onChange={e=>setHouseId(e.target.value)}>{houses.map(h=><option key={h.id} value={h.id}>{h.address}</option>)}</select></label><div className="case-actions"><button type="button" className="case-link" onClick={()=>load().catch(e=>setNotice(e.message))}>Обновить очередь</button><a className="case-link" href={`/miniapp/index.html?view=resident${location.hash}`}>К кабинету жителя</a></div></section>}
  {!houses.length&&!token&&<section className="case-panel"><h2>Рабочие назначения пока не подключены</h2><p>Откройте приглашение от администратора УК. Если вы уже сотрудник, попросите назначить вас на нужные обращения.</p></section>}
  {detail?renderCase({item:detail,context,role,onChange:c=>{setDetail(c);setItems(list=>list.map(i=>i.id===c.id?c:i));},onClose:()=>setDetail(null)}):houseId&&<section className="case-panel"><h2>Рабочая очередь</h2><label>Показать<select value={filter} onChange={e=>setFilter(e.target.value)}><option value="ALL">Все доступные</option><option value="WARRANTY">Строительные дефекты</option><option value="OVERDUE">Прошёл срок шага или задания</option></select></label><div className="case-list">{visible.map(c=><button key={c.id} type="button" className="case-list-item" disabled={!c.fullAccess&&!context?.canManagePermissions} onClick={()=>setDetail(c)}><small>Обращение №{c.number}</small><strong>{c.description}</strong><span>{c.nextStep}</span>{c.openWorkCount>0&&<small>Открытых заданий: {c.openWorkCount}</small>}{c.overdueWorkCount>0&&<strong className="workflow-overdue">Прошёл срок заданий: {c.overdueWorkCount}</strong>}<small>{date(c.dueAt)}</small></button>)}{!visible.length&&<p className="muted">В этой очереди обращений пока нет.</p>}</div></section>}
+ {houseId&&<HouseTariffs key={`tariffs:${houseId}`} houseId={houseId} role={role} api={api} headers={headers} optional/>}
  {house?.canManageRegistry&&<WorkflowStaff key={houseId} houseId={houseId} role={role} api={api}/>}{house?.canReadRegistry&&<WarrantyRegistry key={houseId} houseId={houseId} role={role} api={api} headers={headers} canManage={house.canManageRegistry}/>}
  </div></main>;
 }

@@ -129,7 +129,7 @@ export function ResidentCases({ house, role, api, headers, canSubmit, legacyIssu
     {!!waiting.length&&!detail&&!compose&&<div className="case-next"><strong>Нужен ваш ответ · {waiting.length}</strong><p>{waiting[0].nextStep}</p><button type="button" onClick={()=>setDetail(waiting[0])}>Открыть обращение</button></div>}
     {!detail&&!compose&&canSubmit&&<div className="case-start">
       <button type="button" disabled={!context} onClick={()=>begin("PROBLEM")}><span aria-hidden="true">＋</span><strong>Сообщить о проблеме</strong><small>Опишите, что случилось. Мы определим, кто поможет.</small></button>
-      <button type="button" disabled={!context} onClick={()=>begin("PAYMENT")}><span aria-hidden="true">₽</span><strong>Вопрос по квитанции</strong><small>Можно написать без квитанции и лицевого счёта.</small></button>
+      <button id="resident-payment-start" type="button" disabled={!context} onClick={()=>begin("PAYMENT")}><span aria-hidden="true">₽</span><strong>Вопрос по квитанции</strong><small>Можно написать без квитанции и лицевого счёта.</small></button>
       <button type="button" className="case-link" disabled={!context} onClick={()=>begin("GENERAL")}>Написать другой вопрос</button>
       {draft&&<div className="case-draft"><strong>Есть сохранённый черновик</strong><button type="button" onClick={()=>{setCompose(true);setReview(!!draft.pending);}}>Продолжить</button>{!draft.pending&&<button type="button" className="case-link" onClick={()=>{setDraft(null);try{sessionStorage.removeItem(storageKey);}catch{}}}>Удалить черновик</button>}</div>}
     </div>}

@@ -9,6 +9,8 @@ import org.springframework.transaction.support.TransactionTemplate;
 import ru.pulsedoma.common.BusinessException;
 import ru.pulsedoma.issues.*;
 import java.time.Instant;
+import java.time.LocalDate;
+import java.time.ZoneId;
 import java.util.*;
 
 /** Private-dialog state machine. Domain changes, inbox deduplication and reply are one transaction. */
@@ -20,12 +22,13 @@ public class MaxResidentBot {
     private final ObjectMapper mapper;
     private final ResidentCaseService cases;
     private final MiniAppService app;
+    private final HouseTariffService tariffs;
     private final MaxBotMessages messages;
     private final MaxBotMedia media;
     private final TransactionTemplate tx;
     public MaxResidentBot(JdbcTemplate jdbc,ObjectMapper mapper,ResidentCaseService cases,MiniAppService app,
-                          MaxBotMessages messages,MaxBotMedia media,PlatformTransactionManager manager) {
-        this.jdbc=jdbc;this.mapper=mapper;this.cases=cases;this.app=app;this.messages=messages;this.media=media;this.tx=new TransactionTemplate(manager);
+                          MaxBotMessages messages,MaxBotMedia media,PlatformTransactionManager manager,HouseTariffService tariffs) {
+        this.tariffs=tariffs;this.jdbc=jdbc;this.mapper=mapper;this.cases=cases;this.app=app;this.messages=messages;this.media=media;this.tx=new TransactionTemplate(manager);
     }
     public void handle(JsonNode update) {
         String type=update.path("update_type").asText();
@@ -103,6 +106,22 @@ public class MaxResidentBot {
             if(all.isEmpty())content.append("\nНовых обращений пока нет. Прежние заявки доступны в приложении.");
             else content.append("\n\nПрежние заявки также доступны в приложении.");
             buttons.add("Мой дом");buttons.add("Меню");reply(key,user,house,null,messages.body(content.toString(),buttons,null));return;
+        }
+        if(text.equals("Тарифы")||text.equals("/tariffs")||text.matches("Ещё тарифы [0-9]{1,9}")) {
+            String house=activeHouse(user);
+            if(house==null){reply(key,user,null,null,messages.body("Выберите подключённый дом, чтобы посмотреть его тарифы.",List.of("Мой дом","Меню"),null));return;}
+            var catalogue=tariffs.catalogue(house,LocalDate.now(ZoneId.of("Europe/Moscow")),user);
+            int page=text.startsWith("Ещё тарифы ")?Integer.parseInt(text.substring(text.lastIndexOf(' ')+1)):0;
+            int from=Math.min(catalogue.rates().size(),Math.min(page,10000)*4),to=Math.min(catalogue.rates().size(),from+4);
+            StringBuilder content=new StringBuilder("Тарифы и платежи\nДом: "+address(house)+"\nНа "+catalogue.date());
+            for(var rate:catalogue.rates().subList(from,to))content.append("\n\n").append(rate.title()).append(": ").append(rate.amount().stripTrailingZeros().toPlainString()).append(" ₽ / ").append(rate.unitLabel())
+                .append("\n").append(MaxBotMessages.limit(rate.provider(),100)).append("\nДля кого: ").append(MaxBotMessages.limit(rate.applicability(),180)).append("\nС ").append(rate.validFrom()).append(rate.effectiveUntil()==null?"":" по "+rate.effectiveUntil())
+                .append("\nОснование: ").append(MaxBotMessages.limit(rate.sourceReference(),180));
+            if(catalogue.rates().isEmpty())content.append("\n\nНа эту дату проверенные ставки пока не опубликованы. Это не означает, что плата отсутствует. Можно задать вопрос сотруднику.");
+            if(!catalogue.upcoming().isEmpty())content.append("\n\nЕсть опубликованные будущие изменения. Периоды, пояснения и документы доступны в разделе «Платежи и тарифы» приложения.");
+            content.append("\n\nЭто справочные ставки. Личная сумма зависит от объёма и условий начисления. Документы и история — в приложении.");
+            var buttons=new ArrayList<String>();if(to<catalogue.rates().size())buttons.add("Ещё тарифы "+(page+1));buttons.add("Вопрос по квитанции");buttons.add("Мой дом");buttons.add("Меню");
+            reply(key,user,house,null,messages.body(content.toString(),buttons,null));return;
         }
         if(text.equals("Мой дом")||text.equals("/house")||text.equals("Сменить дом")||text.matches("Выбрать дом №[0-9]{1,9}")) {
             if(!hasDraft(s))idle(user);

@@ -50,6 +50,15 @@ class MaxResidentBotFlowTest {
     ResidentCaseService.CaseView create(){return cases.create(HOUSE,CaseKind.GENERAL,"Вопрос "+UUID.randomUUID(),null,UUID.randomUUID().toString(),USER);}
     void review(ResidentCaseService.CaseView c,CaseStatus status){cases.update(c.id(),c.kind(),status,"Уточните, когда заметили проблему",Instant.now().plusSeconds(3600),null,c.revision(),"Обновлён следующий шаг","demo-dispatcher-1");}
     MaxBotDelivery delivery(){return new MaxBotDelivery(jdbc,mapper,cases,messages,max,"test-token");}
+    @Test void tariffMenuPreservesDraftAndShowsNoInventedAmounts()throws Exception{
+        say("Сообщить о проблеме");say("Протечка в подъезде");
+        say("Тарифы");assertTrue(last().contains("пока не опубликованы"));assertTrue(last().contains("Это не означает"));
+        say("Продолжить");assertTrue(last().contains("Протечка в подъезде"));
+    }
+    @Test void tariffMenuChecksCurrentHouseAccess()throws Exception{
+        jdbc.update("UPDATE house_memberships SET access_status='REVOKED' WHERE user_id=?",USER);
+        say("/tariffs");assertTrue(last().contains("Выберите подключённый дом"));
+    }
     @Test void menuWorksForNewUserWithoutGrantingHouseAccess()throws Exception{
         var u=update("new-user","/start",null);((com.fasterxml.jackson.databind.node.ObjectNode)u.path("message").path("sender")).put("user_id",88888);
         bot.handle(u);assertTrue(last().contains("Вопрос по квитанции"));
