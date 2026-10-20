@@ -86,7 +86,9 @@ public class MaxResidentBot {
         JsonNode attachments=update.path("message").path("body").path("attachments");
         if(start||Set.of("/start","/help","Помощь","Меню","/menu").contains(text)) {
             if(s.state()==State.REPLY||s.state()==State.CONFIRM||s.state()==State.REOPEN)idle(user);
-            reply(key,user,null,null,messages.body("Пульс дома. Опишите проблему или вопрос по квитанции — выбирать организацию не нужно.\n\nЗдесь можно подать обращение, узнать следующий шаг и срок, ответить сотруднику и проверить результат. Фото и документы необязательны. При непосредственной опасности звоните 112."
+            String content=Set.of("/help","Помощь").contains(text)?messages.help():
+                Set.of("Меню","/menu").contains(text)?"Что хотите сделать? Выберите действие ниже.":messages.introduction(!residentHouses(user).isEmpty());
+            reply(key,user,null,null,messages.body(content
                 +(hasDraft(s)?"\n\nУ вас есть черновик. Нажмите «Продолжить».":""),hasDraft(s)?with("Продолжить",messages.menu()):messages.menu(),null));return;
         }
         if(text.equals("Мои обращения")||text.equals("/cases")||text.matches("Ещё обращения [0-9]{1,9}")) {
