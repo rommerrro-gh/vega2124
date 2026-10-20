@@ -280,6 +280,9 @@ public class AccessActivationService {
             authorizeIssuer(role, organizationId, List.of(houseId), actor);
             jdbc.update("UPDATE house_memberships SET access_status = 'REVOKED' WHERE house_id = ? AND user_id = ? AND role = ?",
                     houseId, userId, role.name());
+            // Explicit case privileges must not survive revocation through another remaining house role.
+            jdbc.update("DELETE FROM case_billing_permissions WHERE house_id = ? AND user_id = ?", houseId, userId);
+            jdbc.update("DELETE FROM case_collaborators WHERE user_id = ? AND case_id IN (SELECT id FROM resident_cases WHERE house_id = ?)", userId, houseId);
             if (role == AccessRole.HOUSE_ADMIN) jdbc.update("""
                     UPDATE access_invitations SET revoked_at = ? WHERE created_by = ? AND revoked_at IS NULL
                       AND role = 'RESIDENT' AND id IN

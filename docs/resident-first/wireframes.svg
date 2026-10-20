@@ -1,0 +1,229 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1380" height="2920" viewBox="0 0 1380 2920" role="img" aria-labelledby="title description">
+<title id="title">Пульс дома: схемы экранов этапа 1</title>
+<desc id="description">Двенадцать схем: главный экран, сообщение о проблеме, вопрос по квитанции, проверка перед отправкой, карточка обращения, бот, первичное рассмотрение, осмотр, гарантийная служба, подрядчик, начисления, настройки организации. Это проект будущих экранов, не работающий интерфейс.</desc>
+<rect width="1380" height="2920" fill="#f2f4f3"/>
+<text x="36" y="52" font-family="Arial, sans-serif" font-size="28" font-weight="700" fill="#23382f">ПУЛЬС ДОМА · ЭТАП 1</text>
+<text x="36" y="84" font-family="Arial, sans-serif" font-size="18" font-weight="400" fill="#23382f">Схемы будущих экранов. Для обсуждения сценариев; функции ещё не реализованы.</text>
+<rect x="30" y="118" width="420" height="660" rx="12" fill="#ffffff" stroke="#d7dfdb"/>
+<text x="52" y="153" font-family="Arial, sans-serif" font-size="15" font-weight="400" fill="#5c7066">01 · Житель</text>
+<text x="52" y="190" font-family="Arial, sans-serif" font-size="23" font-weight="700" fill="#23382f">Главная</text>
+<rect x="54" y="212" width="360" height="70" rx="12" fill="#edf5ef" stroke="#d7dfdb"/>
+<text x="66" y="238" font-family="Arial, sans-serif" font-size="16" font-weight="400" fill="#23382f">Ваш дом: ул. Баумана, 12</text>
+<text x="66" y="262" font-family="Arial, sans-serif" font-size="16" font-weight="400" fill="#23382f">Сменить дом</text>
+<rect x="54" y="294" width="360" height="70" rx="12" fill="#f5f6f5" stroke="#d7dfdb"/>
+<text x="66" y="320" font-family="Arial, sans-serif" font-size="16" font-weight="400" fill="#23382f">Нужен ваш ответ</text>
+<text x="66" y="344" font-family="Arial, sans-serif" font-size="16" font-weight="400" fill="#23382f">Подтвердите время осмотра</text>
+<rect x="54" y="376" width="360" height="46" rx="12" fill="#f5f6f5" stroke="#d7dfdb"/>
+<text x="66" y="402" font-family="Arial, sans-serif" font-size="16" font-weight="400" fill="#23382f">Сообщить о проблеме</text>
+<rect x="54" y="434" width="360" height="46" rx="12" fill="#f5f6f5" stroke="#d7dfdb"/>
+<text x="66" y="460" font-family="Arial, sans-serif" font-size="16" font-weight="400" fill="#23382f">Вопрос по квитанции</text>
+<text x="66" y="518" font-family="Arial, sans-serif" font-size="16" font-weight="400" fill="#23382f">Мои обращения · 2 активных</text>
+<text x="66" y="542" font-family="Arial, sans-serif" font-size="16" font-weight="400" fill="#23382f">Мой дом · контакты и документы</text>
+<rect x="54" y="693" width="372" height="48" rx="10" fill="#245b42" stroke="#245b42"/>
+<text x="66" y="723" font-family="Arial, sans-serif" font-size="16" font-weight="700" fill="#ffffff">Написать другой вопрос</text>
+<text x="54" y="762" font-family="Arial, sans-serif" font-size="11" font-weight="400" fill="#6b7b73">СХЕМА · НЕ РАБОЧИЙ ЭКРАН</text>
+<rect x="480" y="118" width="420" height="660" rx="12" fill="#ffffff" stroke="#d7dfdb"/>
+<text x="502" y="153" font-family="Arial, sans-serif" font-size="15" font-weight="400" fill="#5c7066">02 · Житель</text>
+<text x="502" y="190" font-family="Arial, sans-serif" font-size="23" font-weight="700" fill="#23382f">Что случилось?</text>
+<rect x="504" y="212" width="360" height="46" rx="12" fill="#edf5ef" stroke="#d7dfdb"/>
+<text x="516" y="238" font-family="Arial, sans-serif" font-size="16" font-weight="400" fill="#23382f">Ваш дом: ул. Баумана, 12</text>
+<rect x="504" y="270" width="360" height="70" rx="12" fill="#f5f6f5" stroke="#d7dfdb"/>
+<text x="516" y="296" font-family="Arial, sans-serif" font-size="16" font-weight="400" fill="#23382f">После дождя мокнет стена.</text>
+<text x="516" y="320" font-family="Arial, sans-serif" font-size="16" font-weight="400" fill="#23382f">Не знаю, откуда течёт.</text>
+<text x="516" y="378" font-family="Arial, sans-serif" font-size="16" font-weight="400" fill="#23382f">Где вы это заметили?</text>
+<text x="516" y="402" font-family="Arial, sans-serif" font-size="16" font-weight="400" fill="#23382f">В подъезде / Не могу определить</text>
+<rect x="504" y="434" width="360" height="70" rx="12" fill="#f5f6f5" stroke="#d7dfdb"/>
+<text x="516" y="460" font-family="Arial, sans-serif" font-size="16" font-weight="400" fill="#23382f">Фото — по желанию</text>
+<text x="516" y="484" font-family="Arial, sans-serif" font-size="16" font-weight="400" fill="#23382f">Можно продолжить без фотографии</text>
+<text x="516" y="542" font-family="Arial, sans-serif" font-size="16" font-weight="400" fill="#23382f">Организацию выбирать не нужно.</text>
+<text x="516" y="566" font-family="Arial, sans-serif" font-size="16" font-weight="400" fill="#23382f">Мы разберёмся, кто поможет.</text>
+<rect x="504" y="693" width="372" height="48" rx="10" fill="#245b42" stroke="#245b42"/>
+<text x="516" y="723" font-family="Arial, sans-serif" font-size="16" font-weight="700" fill="#ffffff">Проверить перед отправкой</text>
+<text x="504" y="762" font-family="Arial, sans-serif" font-size="11" font-weight="400" fill="#6b7b73">СХЕМА · НЕ РАБОЧИЙ ЭКРАН</text>
+<rect x="930" y="118" width="420" height="660" rx="12" fill="#ffffff" stroke="#d7dfdb"/>
+<text x="952" y="153" font-family="Arial, sans-serif" font-size="15" font-weight="400" fill="#5c7066">03 · Житель</text>
+<text x="952" y="190" font-family="Arial, sans-serif" font-size="23" font-weight="700" fill="#23382f">Вопрос по квитанции</text>
+<rect x="954" y="212" width="360" height="46" rx="12" fill="#edf5ef" stroke="#d7dfdb"/>
+<text x="966" y="238" font-family="Arial, sans-serif" font-size="16" font-weight="400" fill="#23382f">Ваш дом: ул. Баумана, 12</text>
+<rect x="954" y="270" width="360" height="70" rx="12" fill="#f5f6f5" stroke="#d7dfdb"/>
+<text x="966" y="296" font-family="Arial, sans-serif" font-size="16" font-weight="400" fill="#23382f">Сумма стала больше.</text>
+<text x="966" y="320" font-family="Arial, sans-serif" font-size="16" font-weight="400" fill="#23382f">Не понимаю почему.</text>
+<rect x="954" y="352" width="360" height="70" rx="12" fill="#f5f6f5" stroke="#d7dfdb"/>
+<text x="966" y="378" font-family="Arial, sans-serif" font-size="16" font-weight="400" fill="#23382f">Приложить квитанцию</text>
+<text x="966" y="402" font-family="Arial, sans-serif" font-size="16" font-weight="400" fill="#23382f">Сейчас нет под рукой</text>
+<text x="966" y="460" font-family="Arial, sans-serif" font-size="16" font-weight="400" fill="#23382f">Знать лицевой счёт, поставщика</text>
+<text x="966" y="484" font-family="Arial, sans-serif" font-size="16" font-weight="400" fill="#23382f">или причину изменения не нужно.</text>
+<text x="966" y="542" font-family="Arial, sans-serif" font-size="16" font-weight="400" fill="#23382f">Если понадобятся сведения,</text>
+<text x="966" y="566" font-family="Arial, sans-serif" font-size="16" font-weight="400" fill="#23382f">объясним, где их получить.</text>
+<rect x="954" y="693" width="372" height="48" rx="10" fill="#245b42" stroke="#245b42"/>
+<text x="966" y="723" font-family="Arial, sans-serif" font-size="16" font-weight="700" fill="#ffffff">Проверить перед отправкой</text>
+<text x="954" y="762" font-family="Arial, sans-serif" font-size="11" font-weight="400" fill="#6b7b73">СХЕМА · НЕ РАБОЧИЙ ЭКРАН</text>
+<rect x="30" y="808" width="420" height="660" rx="12" fill="#ffffff" stroke="#d7dfdb"/>
+<text x="52" y="843" font-family="Arial, sans-serif" font-size="15" font-weight="400" fill="#5c7066">04 · Житель</text>
+<text x="52" y="880" font-family="Arial, sans-serif" font-size="23" font-weight="700" fill="#23382f">Проверьте сообщение</text>
+<rect x="54" y="902" width="360" height="70" rx="12" fill="#edf5ef" stroke="#d7dfdb"/>
+<text x="66" y="928" font-family="Arial, sans-serif" font-size="16" font-weight="400" fill="#23382f">Адрес: ул. Баумана, 12</text>
+<text x="66" y="952" font-family="Arial, sans-serif" font-size="16" font-weight="400" fill="#23382f">Изменить</text>
+<rect x="54" y="984" width="360" height="70" rx="12" fill="#f5f6f5" stroke="#d7dfdb"/>
+<text x="66" y="1010" font-family="Arial, sans-serif" font-size="16" font-weight="400" fill="#23382f">После дождя мокнет стена.</text>
+<text x="66" y="1034" font-family="Arial, sans-serif" font-size="16" font-weight="400" fill="#23382f">Не знаю, откуда течёт.</text>
+<text x="66" y="1092" font-family="Arial, sans-serif" font-size="16" font-weight="400" fill="#23382f">Место: пока не определено</text>
+<text x="66" y="1116" font-family="Arial, sans-serif" font-size="16" font-weight="400" fill="#23382f">Фотографии: не приложены</text>
+<rect x="54" y="1148" width="360" height="70" rx="12" fill="#f5f6f5" stroke="#d7dfdb"/>
+<text x="66" y="1174" font-family="Arial, sans-serif" font-size="16" font-weight="400" fill="#23382f">Получателя определит сотрудник.</text>
+<text x="66" y="1198" font-family="Arial, sans-serif" font-size="16" font-weight="400" fill="#23382f">Можно отправить как есть.</text>
+<text x="66" y="1256" font-family="Arial, sans-serif" font-size="16" font-weight="400" fill="#23382f">Мы примем вопрос и сообщим</text>
+<text x="66" y="1280" font-family="Arial, sans-serif" font-size="16" font-weight="400" fill="#23382f">о следующем шаге.</text>
+<rect x="54" y="1383" width="372" height="48" rx="10" fill="#245b42" stroke="#245b42"/>
+<text x="66" y="1413" font-family="Arial, sans-serif" font-size="16" font-weight="700" fill="#ffffff">Отправить обращение</text>
+<text x="54" y="1452" font-family="Arial, sans-serif" font-size="11" font-weight="400" fill="#6b7b73">СХЕМА · НЕ РАБОЧИЙ ЭКРАН</text>
+<rect x="480" y="808" width="420" height="660" rx="12" fill="#ffffff" stroke="#d7dfdb"/>
+<text x="502" y="843" font-family="Arial, sans-serif" font-size="15" font-weight="400" fill="#5c7066">05 · Житель</text>
+<text x="502" y="880" font-family="Arial, sans-serif" font-size="23" font-weight="700" fill="#23382f">Мокнет стена</text>
+<rect x="504" y="902" width="360" height="70" rx="12" fill="#edf5ef" stroke="#d7dfdb"/>
+<text x="516" y="928" font-family="Arial, sans-serif" font-size="16" font-weight="400" fill="#23382f">Обращение № 104 · ваш дом</text>
+<text x="516" y="952" font-family="Arial, sans-serif" font-size="16" font-weight="400" fill="#23382f">Назначаем осмотр</text>
+<rect x="504" y="984" width="360" height="70" rx="12" fill="#f5f6f5" stroke="#d7dfdb"/>
+<text x="516" y="1010" font-family="Arial, sans-serif" font-size="16" font-weight="400" fill="#23382f">Кто ведёт: диспетчер УК</text>
+<text x="516" y="1034" font-family="Arial, sans-serif" font-size="16" font-weight="400" fill="#23382f">Дальше: согласовать время</text>
+<text x="516" y="1092" font-family="Arial, sans-serif" font-size="16" font-weight="400" fill="#23382f">Срок согласования уточняется.</text>
+<text x="516" y="1116" font-family="Arial, sans-serif" font-size="16" font-weight="400" fill="#23382f">Сейчас от вас ничего не нужно.</text>
+<rect x="504" y="1148" width="360" height="46" rx="12" fill="#f5f6f5" stroke="#d7dfdb"/>
+<text x="516" y="1174" font-family="Arial, sans-serif" font-size="16" font-weight="400" fill="#23382f">История · документы · ответы</text>
+<text x="516" y="1232" font-family="Arial, sans-serif" font-size="16" font-weight="400" fill="#23382f">После отказа можно запросить</text>
+<text x="516" y="1256" font-family="Arial, sans-serif" font-size="16" font-weight="400" fill="#23382f">объяснение и повторную проверку.</text>
+<rect x="504" y="1383" width="372" height="48" rx="10" fill="#245b42" stroke="#245b42"/>
+<text x="516" y="1413" font-family="Arial, sans-serif" font-size="16" font-weight="700" fill="#ffffff">Добавить сведения</text>
+<text x="504" y="1452" font-family="Arial, sans-serif" font-size="11" font-weight="400" fill="#6b7b73">СХЕМА · НЕ РАБОЧИЙ ЭКРАН</text>
+<rect x="930" y="808" width="420" height="660" rx="12" fill="#ffffff" stroke="#d7dfdb"/>
+<text x="952" y="843" font-family="Arial, sans-serif" font-size="15" font-weight="400" fill="#5c7066">06 · Бот MAX</text>
+<text x="952" y="880" font-family="Arial, sans-serif" font-size="23" font-weight="700" fill="#23382f">Тот же путь в чате</text>
+<rect x="954" y="902" width="360" height="70" rx="12" fill="#edf5ef" stroke="#d7dfdb"/>
+<text x="966" y="928" font-family="Arial, sans-serif" font-size="16" font-weight="400" fill="#23382f">Пульс дома</text>
+<text x="966" y="952" font-family="Arial, sans-serif" font-size="16" font-weight="400" fill="#23382f">Ваш дом: ул. Баумана, 12</text>
+<rect x="954" y="984" width="360" height="70" rx="12" fill="#f5f6f5" stroke="#d7dfdb"/>
+<text x="966" y="1010" font-family="Arial, sans-serif" font-size="16" font-weight="400" fill="#23382f">Сообщить о проблеме</text>
+<text x="966" y="1034" font-family="Arial, sans-serif" font-size="16" font-weight="400" fill="#23382f">Вопрос по квитанции</text>
+<text x="966" y="1092" font-family="Arial, sans-serif" font-size="16" font-weight="400" fill="#23382f">Мои обращения · Мой дом</text>
+<rect x="954" y="1124" width="360" height="70" rx="12" fill="#f5f6f5" stroke="#d7dfdb"/>
+<text x="966" y="1150" font-family="Arial, sans-serif" font-size="16" font-weight="400" fill="#23382f">Опишите, что случилось.</text>
+<text x="966" y="1174" font-family="Arial, sans-serif" font-size="16" font-weight="400" fill="#23382f">Фото можно добавить позже.</text>
+<text x="966" y="1232" font-family="Arial, sans-serif" font-size="16" font-weight="400" fill="#23382f">Назад · Продолжить без файла</text>
+<text x="966" y="1256" font-family="Arial, sans-serif" font-size="16" font-weight="400" fill="#23382f">Тот же черновик в приложении</text>
+<rect x="954" y="1383" width="372" height="48" rx="10" fill="#245b42" stroke="#245b42"/>
+<text x="966" y="1413" font-family="Arial, sans-serif" font-size="16" font-weight="700" fill="#ffffff">Открыть обращение</text>
+<text x="954" y="1452" font-family="Arial, sans-serif" font-size="11" font-weight="400" fill="#6b7b73">СХЕМА · НЕ РАБОЧИЙ ЭКРАН</text>
+<rect x="30" y="1498" width="420" height="660" rx="12" fill="#ffffff" stroke="#d7dfdb"/>
+<text x="52" y="1533" font-family="Arial, sans-serif" font-size="15" font-weight="400" fill="#5c7066">07 · Координатор</text>
+<text x="52" y="1570" font-family="Arial, sans-serif" font-size="23" font-weight="700" fill="#23382f">Первичное рассмотрение</text>
+<rect x="54" y="1592" width="360" height="70" rx="12" fill="#edf5ef" stroke="#d7dfdb"/>
+<text x="66" y="1618" font-family="Arial, sans-serif" font-size="16" font-weight="400" fill="#23382f">Очередь вашего дома</text>
+<text x="66" y="1642" font-family="Arial, sans-serif" font-size="16" font-weight="400" fill="#23382f">Обращение № 104</text>
+<rect x="54" y="1674" width="360" height="70" rx="12" fill="#f5f6f5" stroke="#d7dfdb"/>
+<text x="66" y="1700" font-family="Arial, sans-serif" font-size="16" font-weight="400" fill="#23382f">Исходное сообщение жителя</text>
+<text x="66" y="1724" font-family="Arial, sans-serif" font-size="16" font-weight="400" fill="#23382f">Мокнет стена, причина неизвестна</text>
+<text x="66" y="1782" font-family="Arial, sans-serif" font-size="16" font-weight="400" fill="#23382f">Оценить срочность</text>
+<text x="66" y="1806" font-family="Arial, sans-serif" font-size="16" font-weight="400" fill="#23382f">Назначить осмотр или исполнителя</text>
+<rect x="54" y="1838" width="360" height="70" rx="12" fill="#f5f6f5" stroke="#d7dfdb"/>
+<text x="66" y="1864" font-family="Arial, sans-serif" font-size="16" font-weight="400" fill="#23382f">Запросить понятное уточнение</text>
+<text x="66" y="1888" font-family="Arial, sans-serif" font-size="16" font-weight="400" fill="#23382f">Назначить ответственного</text>
+<text x="66" y="1946" font-family="Arial, sans-serif" font-size="16" font-weight="400" fill="#23382f">До подтверждения передачи</text>
+<text x="66" y="1970" font-family="Arial, sans-serif" font-size="16" font-weight="400" fill="#23382f">координатор сопровождает дело.</text>
+<rect x="54" y="2073" width="372" height="48" rx="10" fill="#245b42" stroke="#245b42"/>
+<text x="66" y="2103" font-family="Arial, sans-serif" font-size="16" font-weight="700" fill="#ffffff">Назначить следующий шаг</text>
+<text x="54" y="2142" font-family="Arial, sans-serif" font-size="11" font-weight="400" fill="#6b7b73">СХЕМА · НЕ РАБОЧИЙ ЭКРАН</text>
+<rect x="480" y="1498" width="420" height="660" rx="12" fill="#ffffff" stroke="#d7dfdb"/>
+<text x="502" y="1533" font-family="Arial, sans-serif" font-size="15" font-weight="400" fill="#5c7066">08 · Инженер</text>
+<text x="502" y="1570" font-family="Arial, sans-serif" font-size="23" font-weight="700" fill="#23382f">Осмотр</text>
+<rect x="504" y="1592" width="360" height="70" rx="12" fill="#edf5ef" stroke="#d7dfdb"/>
+<text x="516" y="1618" font-family="Arial, sans-serif" font-size="16" font-weight="400" fill="#23382f">Обращение № 104</text>
+<text x="516" y="1642" font-family="Arial, sans-serif" font-size="16" font-weight="400" fill="#23382f">Согласование времени и доступа</text>
+<rect x="504" y="1674" width="360" height="70" rx="12" fill="#f5f6f5" stroke="#d7dfdb"/>
+<text x="516" y="1700" font-family="Arial, sans-serif" font-size="16" font-weight="400" fill="#23382f">Участники и полномочия</text>
+<text x="516" y="1724" font-family="Arial, sans-serif" font-size="16" font-weight="400" fill="#23382f">Наблюдения · фото · измерения</text>
+<text x="516" y="1782" font-family="Arial, sans-serif" font-size="16" font-weight="400" fill="#23382f">Один осмотр — несколько дефектов</text>
+<text x="516" y="1806" font-family="Arial, sans-serif" font-size="16" font-weight="400" fill="#23382f">Причина может быть не определена</text>
+<rect x="504" y="1838" width="360" height="70" rx="12" fill="#f5f6f5" stroke="#d7dfdb"/>
+<text x="516" y="1864" font-family="Arial, sans-serif" font-size="16" font-weight="400" fill="#23382f">Акт · черновик / подписи</text>
+<text x="516" y="1888" font-family="Arial, sans-serif" font-size="16" font-weight="400" fill="#23382f">Неявка и возражения — отдельно</text>
+<text x="516" y="1946" font-family="Arial, sans-serif" font-size="16" font-weight="400" fill="#23382f">Предварительный вывод сохраняется</text>
+<text x="516" y="1970" font-family="Arial, sans-serif" font-size="16" font-weight="400" fill="#23382f">с автором и датой.</text>
+<rect x="504" y="2073" width="372" height="48" rx="10" fill="#245b42" stroke="#245b42"/>
+<text x="516" y="2103" font-family="Arial, sans-serif" font-size="16" font-weight="700" fill="#ffffff">Сохранить результат осмотра</text>
+<text x="504" y="2142" font-family="Arial, sans-serif" font-size="11" font-weight="400" fill="#6b7b73">СХЕМА · НЕ РАБОЧИЙ ЭКРАН</text>
+<rect x="930" y="1498" width="420" height="660" rx="12" fill="#ffffff" stroke="#d7dfdb"/>
+<text x="952" y="1533" font-family="Arial, sans-serif" font-size="15" font-weight="400" fill="#5c7066">09 · Застройщик</text>
+<text x="952" y="1570" font-family="Arial, sans-serif" font-size="23" font-weight="700" fill="#23382f">Гарантийное требование</text>
+<rect x="954" y="1592" width="360" height="70" rx="12" fill="#edf5ef" stroke="#d7dfdb"/>
+<text x="966" y="1618" font-family="Arial, sans-serif" font-size="16" font-weight="400" fill="#23382f">Только переданные вашей</text>
+<text x="966" y="1642" font-family="Arial, sans-serif" font-size="16" font-weight="400" fill="#23382f">организации дела</text>
+<rect x="954" y="1674" width="360" height="70" rx="12" fill="#f5f6f5" stroke="#d7dfdb"/>
+<text x="966" y="1700" font-family="Arial, sans-serif" font-size="16" font-weight="400" fill="#23382f">Основания и акт осмотра</text>
+<text x="966" y="1724" font-family="Arial, sans-serif" font-size="16" font-weight="400" fill="#23382f">Документы и позиции участников</text>
+<text x="966" y="1782" font-family="Arial, sans-serif" font-size="16" font-weight="400" fill="#23382f">Запросить обследование</text>
+<text x="966" y="1806" font-family="Arial, sans-serif" font-size="16" font-weight="400" fill="#23382f">Зафиксировать решение и причины</text>
+<rect x="954" y="1838" width="360" height="70" rx="12" fill="#f5f6f5" stroke="#d7dfdb"/>
+<text x="966" y="1864" font-family="Arial, sans-serif" font-size="16" font-weight="400" fill="#23382f">Назначить связанные работы</text>
+<text x="966" y="1888" font-family="Arial, sans-serif" font-size="16" font-weight="400" fill="#23382f">Отказ: обоснование и материалы</text>
+<text x="966" y="1946" font-family="Arial, sans-serif" font-size="16" font-weight="400" fill="#23382f">Требование и рабочее задание</text>
+<text x="966" y="1970" font-family="Arial, sans-serif" font-size="16" font-weight="400" fill="#23382f">имеют отдельные состояния.</text>
+<rect x="954" y="2073" width="372" height="48" rx="10" fill="#245b42" stroke="#245b42"/>
+<text x="966" y="2103" font-family="Arial, sans-serif" font-size="16" font-weight="700" fill="#ffffff">Зафиксировать решение</text>
+<text x="954" y="2142" font-family="Arial, sans-serif" font-size="11" font-weight="400" fill="#6b7b73">СХЕМА · НЕ РАБОЧИЙ ЭКРАН</text>
+<rect x="30" y="2188" width="420" height="660" rx="12" fill="#ffffff" stroke="#d7dfdb"/>
+<text x="52" y="2223" font-family="Arial, sans-serif" font-size="15" font-weight="400" fill="#5c7066">10 · Исполнитель</text>
+<text x="52" y="2260" font-family="Arial, sans-serif" font-size="23" font-weight="700" fill="#23382f">Назначенные работы</text>
+<rect x="54" y="2282" width="360" height="70" rx="12" fill="#edf5ef" stroke="#d7dfdb"/>
+<text x="66" y="2308" font-family="Arial, sans-serif" font-size="16" font-weight="400" fill="#23382f">Только ваши задания</text>
+<text x="66" y="2332" font-family="Arial, sans-serif" font-size="16" font-weight="400" fill="#23382f">Не весь архив дома</text>
+<rect x="54" y="2364" width="360" height="70" rx="12" fill="#f5f6f5" stroke="#d7dfdb"/>
+<text x="66" y="2390" font-family="Arial, sans-serif" font-size="16" font-weight="400" fill="#23382f">Объём работ и нужные материалы</text>
+<text x="66" y="2414" font-family="Arial, sans-serif" font-size="16" font-weight="400" fill="#23382f">Согласованный срок и доступ</text>
+<text x="66" y="2472" font-family="Arial, sans-serif" font-size="16" font-weight="400" fill="#23382f">Перенос требует причины</text>
+<text x="66" y="2496" font-family="Arial, sans-serif" font-size="16" font-weight="400" fill="#23382f">Отчёт и фотографии результата</text>
+<rect x="54" y="2528" width="360" height="70" rx="12" fill="#f5f6f5" stroke="#d7dfdb"/>
+<text x="66" y="2554" font-family="Arial, sans-serif" font-size="16" font-weight="400" fill="#23382f">Выполнено исполнителем</text>
+<text x="66" y="2578" font-family="Arial, sans-serif" font-size="16" font-weight="400" fill="#23382f">Далее: независимая приёмка</text>
+<text x="66" y="2636" font-family="Arial, sans-serif" font-size="16" font-weight="400" fill="#23382f">Неуспешная проверка возвращает</text>
+<text x="66" y="2660" font-family="Arial, sans-serif" font-size="16" font-weight="400" fill="#23382f">работу на доработку.</text>
+<rect x="54" y="2763" width="372" height="48" rx="10" fill="#245b42" stroke="#245b42"/>
+<text x="66" y="2793" font-family="Arial, sans-serif" font-size="16" font-weight="700" fill="#ffffff">Передать на проверку</text>
+<text x="54" y="2832" font-family="Arial, sans-serif" font-size="11" font-weight="400" fill="#6b7b73">СХЕМА · НЕ РАБОЧИЙ ЭКРАН</text>
+<rect x="480" y="2188" width="420" height="660" rx="12" fill="#ffffff" stroke="#d7dfdb"/>
+<text x="502" y="2223" font-family="Arial, sans-serif" font-size="15" font-weight="400" fill="#5c7066">11 · Расчётный отдел</text>
+<text x="502" y="2260" font-family="Arial, sans-serif" font-size="23" font-weight="700" fill="#23382f">Проверка начисления</text>
+<rect x="504" y="2282" width="360" height="70" rx="12" fill="#edf5ef" stroke="#d7dfdb"/>
+<text x="516" y="2308" font-family="Arial, sans-serif" font-size="16" font-weight="400" fill="#23382f">Личное дело · ограниченный доступ</text>
+<text x="516" y="2332" font-family="Arial, sans-serif" font-size="16" font-weight="400" fill="#23382f">Право на счёт проверяется отдельно</text>
+<rect x="504" y="2364" width="360" height="70" rx="12" fill="#f5f6f5" stroke="#d7dfdb"/>
+<text x="516" y="2390" font-family="Arial, sans-serif" font-size="16" font-weight="400" fill="#23382f">Вопрос и доступные документы</text>
+<text x="516" y="2414" font-family="Arial, sans-serif" font-size="16" font-weight="400" fill="#23382f">Подтверждённые значения</text>
+<text x="516" y="2472" font-family="Arial, sans-serif" font-size="16" font-weight="400" fill="#23382f">Непонятные данные — на уточнение</text>
+<text x="516" y="2496" font-family="Arial, sans-serif" font-size="16" font-weight="400" fill="#23382f">Формула и источник видны</text>
+<rect x="504" y="2528" width="360" height="70" rx="12" fill="#f5f6f5" stroke="#d7dfdb"/>
+<text x="516" y="2554" font-family="Arial, sans-serif" font-size="16" font-weight="400" fill="#23382f">Объяснение или исправление</text>
+<text x="516" y="2578" font-family="Arial, sans-serif" font-size="16" font-weight="400" fill="#23382f">Отражение в квитанции — отдельно</text>
+<text x="516" y="2636" font-family="Arial, sans-serif" font-size="16" font-weight="400" fill="#23382f">Соседи не видят суммы,</text>
+<text x="516" y="2660" font-family="Arial, sans-serif" font-size="16" font-weight="400" fill="#23382f">долги и личные документы.</text>
+<rect x="504" y="2763" width="372" height="48" rx="10" fill="#245b42" stroke="#245b42"/>
+<text x="516" y="2793" font-family="Arial, sans-serif" font-size="16" font-weight="700" fill="#ffffff">Сохранить результат проверки</text>
+<text x="504" y="2832" font-family="Arial, sans-serif" font-size="11" font-weight="400" fill="#6b7b73">СХЕМА · НЕ РАБОЧИЙ ЭКРАН</text>
+<rect x="930" y="2188" width="420" height="660" rx="12" fill="#ffffff" stroke="#d7dfdb"/>
+<text x="952" y="2223" font-family="Arial, sans-serif" font-size="15" font-weight="400" fill="#5c7066">12 · Организация</text>
+<text x="952" y="2260" font-family="Arial, sans-serif" font-size="23" font-weight="700" fill="#23382f">Обработка и замещение</text>
+<rect x="954" y="2282" width="360" height="46" rx="12" fill="#edf5ef" stroke="#d7dfdb"/>
+<text x="966" y="2308" font-family="Arial, sans-serif" font-size="16" font-weight="400" fill="#23382f">Настройки в области полномочий</text>
+<rect x="954" y="2340" width="360" height="70" rx="12" fill="#f5f6f5" stroke="#d7dfdb"/>
+<text x="966" y="2366" font-family="Arial, sans-serif" font-size="16" font-weight="400" fill="#23382f">Дома и услуги</text>
+<text x="966" y="2390" font-family="Arial, sans-serif" font-size="16" font-weight="400" fill="#23382f">Первичный ответственный и резерв</text>
+<text x="966" y="2448" font-family="Arial, sans-serif" font-size="16" font-weight="400" fill="#23382f">Проверенные получатели и каналы</text>
+<text x="966" y="2472" font-family="Arial, sans-serif" font-size="16" font-weight="400" fill="#23382f">Источники ставок и гарантий</text>
+<rect x="954" y="2504" width="360" height="70" rx="12" fill="#f5f6f5" stroke="#d7dfdb"/>
+<text x="966" y="2530" font-family="Arial, sans-serif" font-size="16" font-weight="400" fill="#23382f">Нет маршрута: задача сотруднику</text>
+<text x="966" y="2554" font-family="Arial, sans-serif" font-size="16" font-weight="400" fill="#23382f">Не выбор организации жителем</text>
+<text x="966" y="2612" font-family="Arial, sans-serif" font-size="16" font-weight="400" fill="#23382f">Не обещать обслуживание дома</text>
+<text x="966" y="2636" font-family="Arial, sans-serif" font-size="16" font-weight="400" fill="#23382f">без настроенного первичного приёма.</text>
+<rect x="954" y="2763" width="372" height="48" rx="10" fill="#245b42" stroke="#245b42"/>
+<text x="966" y="2793" font-family="Arial, sans-serif" font-size="16" font-weight="700" fill="#ffffff">Проверить готовность приёма</text>
+<text x="954" y="2832" font-family="Arial, sans-serif" font-size="11" font-weight="400" fill="#6b7b73">СХЕМА · НЕ РАБОЧИЙ ЭКРАН</text>
+</svg>

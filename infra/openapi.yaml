@@ -11,6 +11,149 @@ servers:
   - url: http://localhost:8080
     description: Локальный запуск
 paths:
+  /v1/cases:
+    get:
+      operationId: myResidentCases
+      summary: Личные обращения текущего жителя, включая историю и разрешённые документы
+      responses:
+        '200': {description: Доступные собственные обращения, content: {application/json: {schema: {type: array, items: {$ref: '#/components/schemas/ResidentCase'}}}}}
+        '401': {description: Требуется вход MAX или тестовый профиль demo}
+    post:
+      operationId: createResidentCase
+      summary: Принять свободное описание без обязательной категории, места или получателя
+      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/CreateResidentCase'}}}}
+      responses:
+        '201': {description: Зарегистрировано либо возвращён прежний результат того же clientRequestId, content: {application/json: {schema: {$ref: '#/components/schemas/ResidentCase'}}}}
+        '400': {description: Неверные данные; WARRANTY при создании жителем запрещён}
+        '403': {description: Нет активного подтверждённого доступа жителя}
+        '409': {description: Ключ повторён с другим содержимым или приём в доме не подключён}
+  /v1/cases/{id}:
+    parameters:
+      - {name: id, in: path, required: true, schema: {type: string}}
+    get:
+      operationId: residentCase
+      summary: Карточка с проверкой текущих прав; соседство и системная роль не дают доступа
+      responses:
+        '200': {description: Карточка, content: {application/json: {schema: {$ref: '#/components/schemas/ResidentCase'}}}}
+        '404': {description: Обращение отсутствует или недоступно}
+    patch:
+      operationId: reviewResidentCase
+      summary: Назначение направления, ответственного и следующего шага уполномоченным сотрудником
+      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/UpdateResidentCase'}}}}
+      responses:
+        '200': {description: Изменения сохранены, content: {application/json: {schema: {$ref: '#/components/schemas/ResidentCase'}}}}
+        '400': {description: Недопустимое состояние или назначение; финансовое дело нельзя сделать общим}
+        '403': {description: Нет требуемого финансового доступа}
+        '404': {description: Нет права рассмотрения}
+        '409': {description: Устаревшая revision}
+  /v1/houses/{houseId}/case-context:
+    parameters:
+      - {name: houseId, in: path, required: true, schema: {type: string}}
+    get:
+      operationId: residentCaseContext
+      summary: Готовность первичного приёма и сотрудники в разрешённой области
+      responses:
+        '200': {description: Контекст, content: {application/json: {schema: {$ref: '#/components/schemas/CaseContext'}}}}
+        '404': {description: Дом недоступен}
+  /v1/houses/{houseId}/case-queue:
+    parameters:
+      - {name: houseId, in: path, required: true, schema: {type: string}}
+    get:
+      operationId: residentCaseQueue
+      summary: Очередь сотрудников; личные начисления скрыты без отдельного доступа
+      responses:
+        '200': {description: Карточки; при fullAccess=false описание обезличено, события и документы отсутствуют, content: {application/json: {schema: {type: array, items: {$ref: '#/components/schemas/ResidentCase'}}}}}
+        '403': {description: Нет доступа к очереди}
+  /v1/houses/{houseId}/case-billing-permissions/{userId}:
+    parameters:
+      - {name: houseId, in: path, required: true, schema: {type: string}}
+      - {name: userId, in: path, required: true, schema: {type: string}}
+    put:
+      operationId: setCaseBillingPermission
+      summary: Администратор УК выдаёт или отзывает отдельное полномочие в своей области домов
+      requestBody: {required: true, content: {application/json: {schema: {type: object, required: [enabled], properties: {enabled: {type: boolean}}}}}}
+      responses:
+        '204': {description: Право изменено и записано в аудит}
+        '400': {description: Получатель не имеет действующей принадлежности к дому}
+        '403': {description: Нет административного полномочия в этом доме}
+  /v1/cases/{id}/collaborators/{userId}:
+    parameters:
+      - {name: id, in: path, required: true, schema: {type: string}}
+      - {name: userId, in: path, required: true, schema: {type: string}}
+    put:
+      operationId: setCaseCollaborator
+      summary: Администратор УК назначает участника конкретного дела; функция подрядчика не даёт права приёмки
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [function, enabled, revision]
+              properties:
+                function: {type: string, enum: [COORDINATOR, ENGINEER, WARRANTY, CONTRACTOR, BILLING]}
+                enabled: {type: boolean}
+                revision: {type: integer, minimum: 0}
+      responses:
+        '200': {description: Назначение сохранено, content: {application/json: {schema: {$ref: '#/components/schemas/ResidentCase'}}}}
+        '400': {description: Неверная область доступа получателя}
+        '403': {description: Нет административного полномочия}
+        '409': {description: Устаревшая revision}
+  /v1/cases/{id}/messages:
+    parameters:
+      - {name: id, in: path, required: true, schema: {type: string}}
+    post:
+      operationId: addResidentCaseMessage
+      summary: Ответ жителя или сотрудника с защитой от повторной доставки
+      requestBody: {required: true, content: {application/json: {schema: {type: object, required: [text, clientRequestId], properties: {text: {type: string, minLength: 1, maxLength: 4000}, clientRequestId: {type: string, minLength: 1, maxLength: 80}}}}}}
+      responses:
+        '200': {description: Ответ сохранён, content: {application/json: {schema: {$ref: '#/components/schemas/ResidentCase'}}}}
+        '400': {description: Для закрытого дела нужно повторное рассмотрение}
+        '404': {description: Нет доступа}
+        '409': {description: Иное содержание с прежним ключом}
+  /v1/cases/{id}/response:
+    parameters:
+      - {name: id, in: path, required: true, schema: {type: string}}
+    post:
+      operationId: respondToResidentCase
+      summary: Автор подтверждает предложенный результат или запрашивает повторную проверку
+      requestBody: {required: true, content: {application/json: {schema: {type: object, required: [confirmed, revision], properties: {confirmed: {type: boolean}, comment: {type: string, maxLength: 2000}, revision: {type: integer, minimum: 0}}}}}}
+      responses:
+        '200': {description: Ответ сохранён; автоматического закрытия по молчанию нет, content: {application/json: {schema: {$ref: '#/components/schemas/ResidentCase'}}}}
+        '400': {description: Действие не соответствует состоянию}
+        '403': {description: Ответ может дать только автор}
+        '404': {description: Нет доступа}
+        '409': {description: Устаревшая revision}
+  /v1/cases/{id}/documents:
+    parameters:
+      - {name: id, in: path, required: true, schema: {type: string}}
+    post:
+      operationId: uploadResidentCaseDocument
+      summary: Частный PDF или фотография; новая версия не заменяет прежние байты
+      parameters:
+        - {name: title, in: query, schema: {type: string, minLength: 1, maxLength: 160, default: Документ}}
+        - {name: documentId, in: query, schema: {type: string, maxLength: 80}}
+        - {name: expectedVersion, in: query, schema: {type: integer, minimum: 0, default: 0}}
+      requestBody: {required: true, content: {multipart/form-data: {schema: {type: object, required: [file], properties: {file: {type: string, format: binary, description: 'PDF/JPEG/PNG до 10 МБ; проверяется сигнатура'}}}}}}
+      responses:
+        '200': {description: Документ сохранён; повторные байты не создают копию, content: {application/json: {schema: {$ref: '#/components/schemas/ResidentCase'}}}}
+        '400': {description: Неверный файл или превышен лимит документов / версий}
+        '404': {description: Нет доступа к делу или документу}
+        '409': {description: expectedVersion не соответствует актуальной версии}
+  /v1/case-document-versions/{id}:
+    parameters:
+      - {name: id, in: path, required: true, schema: {type: string}}
+    get:
+      operationId: downloadResidentCaseDocument
+      summary: Скачать конкретную версию с повторной проверкой прав и запретом кеширования
+      responses:
+        '200':
+          description: Файл с Content-Disposition attachment и X-Content-Type-Options nosniff
+          content:
+            application/pdf: {schema: {type: string, format: binary}}
+            image/jpeg: {schema: {type: string, format: binary}}
+            image/png: {schema: {type: string, format: binary}}
+        '404': {description: Файл отсутствует или недоступен}
   /v1/guided-demo:
     get:
       operationId: guidedDemoStatus
@@ -1324,3 +1467,90 @@ components:
       required: [houseId]
       properties:
         houseId: {type: string, minLength: 1}
+
+    CreateResidentCase:
+      type: object
+      required: [houseId, description, clientRequestId]
+      properties:
+        houseId: {type: string, minLength: 1}
+        kind: {type: string, enum: [GENERAL, PROBLEM, PAYMENT], default: GENERAL}
+        description: {type: string, minLength: 1, maxLength: 4000}
+        location: {type: [string, 'null'], maxLength: 160}
+        clientRequestId: {type: string, minLength: 1, maxLength: 80}
+    UpdateResidentCase:
+      type: object
+      required: [kind, status, nextStep, revision]
+      properties:
+        kind: {type: string, enum: [GENERAL, PROBLEM, PAYMENT, WARRANTY]}
+        status: {type: string, enum: [IN_REVIEW, WAITING_RESIDENT, IN_PROGRESS, RESULT_PROPOSED]}
+        nextStep: {type: string, minLength: 1, maxLength: 600}
+        reason: {type: string, maxLength: 1000, description: Обязательна при переносе известного срока или смене назначенного ответственного}
+        dueAt: {type: [string, 'null'], format: date-time}
+        responsibleUserId: {type: [string, 'null'], maxLength: 80}
+        revision: {type: integer, minimum: 0}
+    ResidentCase:
+      type: object
+      required: [id, number, houseId, address, kind, status, description, nextStep, revision, fullAccess, canManage, isAuthor, events, documents]
+      properties:
+        id: {type: string}
+        number: {type: integer}
+        houseId: {type: string}
+        address: {type: string}
+        author: {type: [string, 'null']}
+        kind: {type: string, enum: [GENERAL, PROBLEM, PAYMENT, WARRANTY]}
+        status: {type: string, enum: [RECEIVED, IN_REVIEW, WAITING_RESIDENT, IN_PROGRESS, RESULT_PROPOSED, CLOSED, REOPENED]}
+        description: {type: string}
+        location: {type: [string, 'null']}
+        responsibleUserId: {type: [string, 'null']}
+        responsibleName: {type: string}
+        nextStep: {type: string}
+        dueAt: {type: [string, 'null'], format: date-time}
+        revision: {type: integer}
+        createdAt: {type: string, format: date-time}
+        updatedAt: {type: string, format: date-time}
+        fullAccess: {type: boolean}
+        canManage: {type: boolean}
+        isAuthor: {type: boolean}
+        events:
+          type: array
+          items:
+            type: object
+            properties:
+              id: {type: string}
+              actor: {type: string}
+              type: {type: string, enum: [REGISTERED, ASSIGNED, UPDATED, MESSAGE, DOCUMENT, REOPENED, CONFIRMED]}
+              text: {type: string}
+              createdAt: {type: string, format: date-time}
+        documents:
+          type: array
+          items:
+            type: object
+            properties:
+              id: {type: string}
+              title: {type: string}
+              versions:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    id: {type: string}
+                    version: {type: integer}
+                    mime: {type: string, enum: [application/pdf, image/jpeg, image/png]}
+                    size: {type: integer}
+                    uploadedBy: {type: string}
+                    createdAt: {type: string, format: date-time}
+    CaseContext:
+      type: object
+      properties:
+        actorId: {type: string}
+        intakeAvailable: {type: boolean}
+        canManagePermissions: {type: boolean}
+        canReview: {type: boolean}
+        staff:
+          type: array
+          items:
+            type: object
+            properties:
+              id: {type: string}
+              name: {type: string}
+              billingAccess: {type: boolean}
