@@ -28,7 +28,7 @@ public class ResidentCaseService {
                            CaseKind kind, CaseStatus status, String description, String location,
                            String responsibleUserId, String responsibleName, String nextStep, String dueAt,
                            int revision, String createdAt, String updatedAt, boolean fullAccess,
-                           boolean canManage, boolean isAuthor, List<Event> events, List<Document> documents) {}
+                           boolean canManage, boolean isAuthor, List<Event> events, List<Document> documents, int openWorkCount, int overdueWorkCount) {}
     public record FileData(byte[] bytes, String mime) {}
 
     private boolean count(String sql, Object... args) {
@@ -172,7 +172,9 @@ public class ResidentCaseService {
                 SELECT e.*,u.display_name FROM case_events e JOIN users u ON u.id=e.actor_id
                 WHERE e.case_id=? ORDER BY e.rowid
                 """,(rs,n)->new Event(rs.getString("id"),rs.getString("display_name"),CaseEventType.valueOf(rs.getString("type")),rs.getString("text"),rs.getString("created_at")),id):List.of(),
-            full?documents(id):List.of());
+            full?documents(id):List.of(),
+            full?jdbc.queryForObject("SELECT count(*) FROM case_work_orders WHERE case_id=? AND state NOT IN ('ACCEPTED','CANCELLED')",Integer.class,id):0,
+            full?jdbc.queryForObject("SELECT count(*) FROM case_work_orders WHERE case_id=? AND state NOT IN ('ACCEPTED','CANCELLED') AND due_at IS NOT NULL AND datetime(due_at)<datetime('now')",Integer.class,id):0);
     }
     @Transactional
     public CaseView update(String id,CaseKind kind,CaseStatus status,String nextStep,Instant due,

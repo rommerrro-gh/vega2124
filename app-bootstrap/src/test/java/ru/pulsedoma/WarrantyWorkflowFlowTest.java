@@ -178,6 +178,13 @@ class WarrantyWorkflowFlowTest {
         var o=work();assertThrows(BusinessException.class,()->flow.updateWork(o.id(),new WorkflowRequests.WorkUpdate(WorkState.IN_PROGRESS,"Перенос",o.assigneeId(),Instant.now().plusSeconds(100000),o.dueBasis(),null,o.revision(),revision()),CONTRACTOR));
         assertThrows(BusinessException.class,()->workState(o.id(),WorkState.IN_PROGRESS,ENGINEER));
     }
+    @Test void overdueTaskIsVisibleInQueueEvenWithoutACaseDeadline(){
+        var o=work();jdbc.update("UPDATE case_work_orders SET due_at=? WHERE id=?",Instant.now().minusSeconds(60).toString(),o.id());
+        var c=cases.queue(HOUSE,DISPATCHER).stream().filter(x->x.id().equals(caseId)).findFirst().orElseThrow();
+        assertNull(c.dueAt());assertEquals(1,c.openWorkCount());assertEquals(1,c.overdueWorkCount());
+        workState(o.id(),WorkState.IN_PROGRESS,CONTRACTOR);workState(o.id(),WorkState.REPORTED,CONTRACTOR);workState(o.id(),WorkState.ACCEPTED,ADMIN);
+        assertEquals(0,cases.get(caseId,RESIDENT).overdueWorkCount());
+    }
     @Test void reassignmentCannotReuseAnOldExecutorsReport(){
         var o=work();workState(o.id(),WorkState.IN_PROGRESS,CONTRACTOR);workState(o.id(),WorkState.REPORTED,CONTRACTOR);var current=view().orders().get(0);
         assertThrows(BusinessException.class,()->flow.updateWork(o.id(),new WorkflowRequests.WorkUpdate(WorkState.REPORTED,"Смена исполнителя",ENGINEER,Instant.parse(current.dueAt()),current.dueBasis(),null,current.revision(),revision()),ADMIN));

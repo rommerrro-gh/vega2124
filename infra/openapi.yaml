@@ -1732,6 +1732,8 @@ components:
         location: {type: [string, 'null']}
         responsibleUserId: {type: [string, 'null']}
         responsibleName: {type: string}
+        openWorkCount: {type: integer, minimum: 0, description: Число незавершённых заданий}
+        overdueWorkCount: {type: integer, minimum: 0, description: Задания с прошедшим сроком независимо от общего срока дела}
         nextStep: {type: string}
         dueAt: {type: [string, 'null'], format: date-time}
         revision: {type: integer}
