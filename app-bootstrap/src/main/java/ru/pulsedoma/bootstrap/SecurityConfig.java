@@ -41,7 +41,7 @@ public class SecurityConfig {
                         .requestMatchers("/miniapp/**").permitAll()
                         .requestMatchers("/dispatcher/**").permitAll()
                         .requestMatchers("/admin/**").permitAll()
-                        .requestMatchers("/system/**", "/uk/**").permitAll()
+                        .requestMatchers("/system/**", "/uk/**", "/work/**").permitAll()
                         .requestMatchers("/actuator/health", "/v3/api-docs/**", "/swagger-ui/**").permitAll()
                         .anyRequest().denyAll())
                 .addFilterBefore(maxInitDataFilter, UsernamePasswordAuthenticationFilter.class)

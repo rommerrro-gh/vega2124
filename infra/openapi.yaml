@@ -1095,8 +1095,233 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
+  /v1/workflow/houses:
+    get:
+      operationId: "workflowHouses"
+      summary: "Доступные рабочие дома"
+      responses: {"200": {"description": "Операция выполнена", "content": {"application/json": {"schema": {"type": "array", "items": {"$ref": "#/components/schemas/WorkflowHouse"}}}}}, "400": {"description": "Проверьте данные и допустимость действия"}, "401": {"description": "Нужна авторизация"}, "403": {"description": "Нет полномочий"}, "404": {"description": "Материал недоступен"}, "409": {"description": "Ревизия изменилась; обновите карточку"}}
+  /v1/houses/{house}/workflow/staff:
+    get:
+      operationId: "workflowStaff"
+      summary: "Служебные подключения дома"
+      parameters: [{"name": "house", "in": "path", "required": true, "schema": {"type": "string", "minLength": 1}}]
+      responses: {"200": {"description": "Операция выполнена", "content": {"application/json": {"schema": {"type": "array", "items": {"$ref": "#/components/schemas/WorkflowStaff"}}}}}, "400": {"description": "Проверьте данные и допустимость действия"}, "401": {"description": "Нужна авторизация"}, "403": {"description": "Нет полномочий"}, "404": {"description": "Материал недоступен"}, "409": {"description": "Ревизия изменилась; обновите карточку"}}
+  /v1/houses/{house}/workflow/staff/self:
+    post:
+      operationId: "workflowSelfCoordinator"
+      summary: "Явно включить рабочую функцию координатора для администратора УК"
+      parameters: [{"name": "house", "in": "path", "required": true, "schema": {"type": "string", "minLength": 1}}]
+      responses: {"204": {"description": "Операция выполнена"}, "400": {"description": "Проверьте данные и допустимость действия"}, "401": {"description": "Нужна авторизация"}, "403": {"description": "Нет полномочий"}, "404": {"description": "Материал недоступен"}, "409": {"description": "Ревизия изменилась; обновите карточку"}}
+  /v1/houses/{house}/workflow/staff/{user}/revoke:
+    post:
+      operationId: "revokeWorkflowStaff"
+      summary: "Отозвать функцию и назначения в делах"
+      parameters: [{"name": "house", "in": "path", "required": true, "schema": {"type": "string", "minLength": 1}}, {"name": "user", "in": "path", "required": true, "schema": {"type": "string", "minLength": 1}}, {"name": "function", "in": "query", "required": true, "schema": {"$ref": "#/components/schemas/WorkflowFunction"}}]
+      responses: {"204": {"description": "Операция выполнена"}, "400": {"description": "Проверьте данные и допустимость действия"}, "401": {"description": "Нужна авторизация"}, "403": {"description": "Нет полномочий"}, "404": {"description": "Материал недоступен"}, "409": {"description": "Ревизия изменилась; обновите карточку"}}
+  /v1/houses/{house}/workflow/invitations:
+    get:
+      operationId: "workflowInvitations"
+      summary: "Выданные служебные приглашения"
+      parameters: [{"name": "house", "in": "path", "required": true, "schema": {"type": "string", "minLength": 1}}]
+      responses: {"200": {"description": "Операция выполнена", "content": {"application/json": {"schema": {"type": "array", "items": {"$ref": "#/components/schemas/WorkflowInvitation"}}}}}, "400": {"description": "Проверьте данные и допустимость действия"}, "401": {"description": "Нужна авторизация"}, "403": {"description": "Нет полномочий"}, "404": {"description": "Материал недоступен"}, "409": {"description": "Ревизия изменилась; обновите карточку"}}
+    post:
+      operationId: "createWorkflowInvitation"
+      summary: "Создать одноразовое служебное приглашение"
+      parameters: [{"name": "house", "in": "path", "required": true, "schema": {"type": "string", "minLength": 1}}]
+      requestBody: {"required": true, "content": {"application/json": {"schema": {"$ref": "#/components/schemas/WorkflowInvitationWrite"}}}}
+      responses: {"201": {"description": "Операция выполнена", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/WorkflowCreatedInvitation"}}}}, "400": {"description": "Проверьте данные и допустимость действия"}, "401": {"description": "Нужна авторизация"}, "403": {"description": "Нет полномочий"}, "404": {"description": "Материал недоступен"}, "409": {"description": "Ревизия изменилась; обновите карточку"}}
+  /v1/workflow/invitations/{id}/revoke:
+    post:
+      operationId: "revokeWorkflowInvitation"
+      summary: "Отозвать служебное приглашение"
+      parameters: [{"name": "id", "in": "path", "required": true, "schema": {"type": "string", "minLength": 1}}]
+      responses: {"204": {"description": "Операция выполнена"}, "400": {"description": "Проверьте данные и допустимость действия"}, "401": {"description": "Нужна авторизация"}, "403": {"description": "Нет полномочий"}, "404": {"description": "Материал недоступен"}, "409": {"description": "Ревизия изменилась; обновите карточку"}}
+  /v1/workflow/invitations/accept:
+    post:
+      operationId: "acceptWorkflowInvitation"
+      summary: "Принять служебное приглашение без роли жителя"
+      requestBody: {"required": true, "content": {"application/json": {"schema": {"$ref": "#/components/schemas/WorkflowInvitationAccept"}}}}
+      responses: {"200": {"description": "Операция выполнена", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/WorkflowHouse"}}}}, "400": {"description": "Проверьте данные и допустимость действия"}, "401": {"description": "Нужна авторизация"}, "403": {"description": "Нет полномочий"}, "404": {"description": "Материал недоступен"}, "409": {"description": "Ревизия изменилась; обновите карточку"}}
+  /v1/houses/{house}/warranties:
+    get:
+      operationId: "houseWarranties"
+      summary: "Служебный реестр гарантийных сведений"
+      parameters: [{"name": "house", "in": "path", "required": true, "schema": {"type": "string", "minLength": 1}}]
+      responses: {"200": {"description": "Операция выполнена", "content": {"application/json": {"schema": {"type": "array", "items": {"$ref": "#/components/schemas/HouseWarranty"}}}}}, "400": {"description": "Проверьте данные и допустимость действия"}, "401": {"description": "Нужна авторизация"}, "403": {"description": "Нет полномочий"}, "404": {"description": "Материал недоступен"}, "409": {"description": "Ревизия изменилась; обновите карточку"}}
+    post:
+      operationId: "createHouseWarranty"
+      summary: "Добавить условия гарантии без автоматического расчёта сроков"
+      parameters: [{"name": "house", "in": "path", "required": true, "schema": {"type": "string", "minLength": 1}}]
+      requestBody: {"required": true, "content": {"application/json": {"schema": {"$ref": "#/components/schemas/WarrantyWrite"}}}}
+      responses: {"201": {"description": "Операция выполнена", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/HouseWarranty"}}}}, "400": {"description": "Проверьте данные и допустимость действия"}, "401": {"description": "Нужна авторизация"}, "403": {"description": "Нет полномочий"}, "404": {"description": "Материал недоступен"}, "409": {"description": "Ревизия изменилась; обновите карточку"}}
+  /v1/houses/{house}/warranties/{id}:
+    put:
+      operationId: "updateHouseWarranty"
+      summary: "Изменить сведения с сохранением истории"
+      parameters: [{"name": "house", "in": "path", "required": true, "schema": {"type": "string", "minLength": 1}}, {"name": "id", "in": "path", "required": true, "schema": {"type": "string", "minLength": 1}}]
+      requestBody: {"required": true, "content": {"application/json": {"schema": {"$ref": "#/components/schemas/WarrantyWrite"}}}}
+      responses: {"200": {"description": "Операция выполнена", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/HouseWarranty"}}}}, "400": {"description": "Проверьте данные и допустимость действия"}, "401": {"description": "Нужна авторизация"}, "403": {"description": "Нет полномочий"}, "404": {"description": "Материал недоступен"}, "409": {"description": "Ревизия изменилась; обновите карточку"}}
+  /v1/warranties/{id}/documents:
+    post:
+      operationId: "uploadWarrantyDocument"
+      summary: "Приложить исходный документ PDF JPEG PNG до 10 МБ"
+      parameters: [{"name": "id", "in": "path", "required": true, "schema": {"type": "string", "minLength": 1}}, {"name": "title", "in": "query", "required": true, "schema": {"type": "string", "maxLength": 160}}, {"name": "revision", "in": "query", "required": true, "schema": {"type": "integer", "minimum": 0}}]
+      responses: {"200": {"description": "Операция выполнена", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/HouseWarranty"}}}}, "400": {"description": "Проверьте данные и допустимость действия"}, "401": {"description": "Нужна авторизация"}, "403": {"description": "Нет полномочий"}, "404": {"description": "Материал недоступен"}, "409": {"description": "Ревизия изменилась; обновите карточку"}}
+      requestBody: {"required": true, "content": {"multipart/form-data": {"schema": {"type": "object", "properties": {"file": {"type": "string", "format": "binary"}}, "required": ["file"]}}}}
+  /v1/warranty-documents/{id}:
+    get:
+      operationId: "downloadWarrantyDocument"
+      summary: "Скачать исходный документ с проверкой служебного доступа"
+      parameters: [{"name": "id", "in": "path", "required": true, "schema": {"type": "string", "minLength": 1}}]
+      responses: {"200": {"description": "Операция выполнена", "content": {"application/octet-stream": {"schema": {"type": "string", "format": "binary"}}}}, "400": {"description": "Проверьте данные и допустимость действия"}, "401": {"description": "Нужна авторизация"}, "403": {"description": "Нет полномочий"}, "404": {"description": "Материал недоступен"}, "409": {"description": "Ревизия изменилась; обновите карточку"}}
+  /v1/cases/{id}/workflow:
+    get:
+      operationId: "caseWorkflow"
+      summary: "Осмотры, акты, гарантийное рассмотрение и задания одного дела"
+      parameters: [{"name": "id", "in": "path", "required": true, "schema": {"type": "string", "minLength": 1}}]
+      responses: {"200": {"description": "Операция выполнена", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/CaseWorkflow"}}}}, "400": {"description": "Проверьте данные и допустимость действия"}, "401": {"description": "Нужна авторизация"}, "403": {"description": "Нет полномочий"}, "404": {"description": "Материал недоступен"}, "409": {"description": "Ревизия изменилась; обновите карточку"}}
+  /v1/cases/{id}/warranty-reviews:
+    post:
+      operationId: "recordWarrantyReview"
+      summary: "Зафиксировать позицию с основаниями без автоматического отказа"
+      parameters: [{"name": "id", "in": "path", "required": true, "schema": {"type": "string", "minLength": 1}}]
+      requestBody: {"required": true, "content": {"application/json": {"schema": {"$ref": "#/components/schemas/WarrantyReviewWrite"}}}}
+      responses: {"200": {"description": "Операция выполнена", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/CaseWorkflow"}}}}, "400": {"description": "Проверьте данные и допустимость действия"}, "401": {"description": "Нужна авторизация"}, "403": {"description": "Нет полномочий"}, "404": {"description": "Материал недоступен"}, "409": {"description": "Ревизия изменилась; обновите карточку"}}
+  /v1/cases/{id}/handoffs:
+    post:
+      operationId: "prepareCaseHandoff"
+      summary: "Подготовить передачу материалов без имитации отправки"
+      parameters: [{"name": "id", "in": "path", "required": true, "schema": {"type": "string", "minLength": 1}}]
+      requestBody: {"required": true, "content": {"application/json": {"schema": {"$ref": "#/components/schemas/CaseHandoffWrite"}}}}
+      responses: {"200": {"description": "Операция выполнена", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/CaseWorkflow"}}}}, "400": {"description": "Проверьте данные и допустимость действия"}, "401": {"description": "Нужна авторизация"}, "403": {"description": "Нет полномочий"}, "404": {"description": "Материал недоступен"}, "409": {"description": "Ревизия изменилась; обновите карточку"}}
+  /v1/handoffs/{id}:
+    patch:
+      operationId: "recordHandoffEvidence"
+      summary: "Зафиксировать подтверждение отправки получения или ответа"
+      parameters: [{"name": "id", "in": "path", "required": true, "schema": {"type": "string", "minLength": 1}}]
+      requestBody: {"required": true, "content": {"application/json": {"schema": {"$ref": "#/components/schemas/CaseHandoffUpdate"}}}}
+      responses: {"200": {"description": "Операция выполнена", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/CaseWorkflow"}}}}, "400": {"description": "Проверьте данные и допустимость действия"}, "401": {"description": "Нужна авторизация"}, "403": {"description": "Нет полномочий"}, "404": {"description": "Материал недоступен"}, "409": {"description": "Ревизия изменилась; обновите карточку"}}
+  /v1/handoffs/{id}/print:
+    get:
+      operationId: "printCaseHandoff"
+      summary: "Скачать подготовленные материалы для печати без электронной подписи"
+      parameters: [{"name": "id", "in": "path", "required": true, "schema": {"type": "string", "minLength": 1}}]
+      responses: {"200": {"description": "Операция выполнена", "content": {"text/html": {"schema": {"type": "string", "format": "binary"}}}}, "400": {"description": "Проверьте данные и допустимость действия"}, "401": {"description": "Нужна авторизация"}, "403": {"description": "Нет полномочий"}, "404": {"description": "Материал недоступен"}, "409": {"description": "Ревизия изменилась; обновите карточку"}}
+  /v1/cases/{id}/inspections:
+    post:
+      operationId: "planCaseInspection"
+      summary: "Предложить интервал осмотра"
+      parameters: [{"name": "id", "in": "path", "required": true, "schema": {"type": "string", "minLength": 1}}]
+      requestBody: {"required": true, "content": {"application/json": {"schema": {"$ref": "#/components/schemas/InspectionWrite"}}}}
+      responses: {"200": {"description": "Операция выполнена", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/CaseWorkflow"}}}}, "400": {"description": "Проверьте данные и допустимость действия"}, "401": {"description": "Нужна авторизация"}, "403": {"description": "Нет полномочий"}, "404": {"description": "Материал недоступен"}, "409": {"description": "Ревизия изменилась; обновите карточку"}}
+  /v1/cases/{caseId}/inspections/{id}:
+    put:
+      operationId: "rescheduleCaseInspection"
+      summary: "Перенести осмотр с причиной и повторным согласованием"
+      parameters: [{"name": "caseId", "in": "path", "required": true, "schema": {"type": "string", "minLength": 1}}, {"name": "id", "in": "path", "required": true, "schema": {"type": "string", "minLength": 1}}]
+      requestBody: {"required": true, "content": {"application/json": {"schema": {"$ref": "#/components/schemas/InspectionWrite"}}}}
+      responses: {"200": {"description": "Операция выполнена", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/CaseWorkflow"}}}}, "400": {"description": "Проверьте данные и допустимость действия"}, "401": {"description": "Нужна авторизация"}, "403": {"description": "Нет полномочий"}, "404": {"description": "Материал недоступен"}, "409": {"description": "Ревизия изменилась; обновите карточку"}}
+  /v1/inspections/{id}:
+    patch:
+      operationId: "recordInspectionState"
+      summary: "Зафиксировать отсутствие доступа либо отмену без закрытия дела"
+      parameters: [{"name": "id", "in": "path", "required": true, "schema": {"type": "string", "minLength": 1}}]
+      requestBody: {"required": true, "content": {"application/json": {"schema": {"$ref": "#/components/schemas/InspectionUpdate"}}}}
+      responses: {"200": {"description": "Операция выполнена", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/CaseWorkflow"}}}}, "400": {"description": "Проверьте данные и допустимость действия"}, "401": {"description": "Нужна авторизация"}, "403": {"description": "Нет полномочий"}, "404": {"description": "Материал недоступен"}, "409": {"description": "Ревизия изменилась; обновите карточку"}}
+  /v1/inspections/{id}/response:
+    post:
+      operationId: "respondToInspection"
+      summary: "Житель подтверждает время просит другое или комментирует акт"
+      parameters: [{"name": "id", "in": "path", "required": true, "schema": {"type": "string", "minLength": 1}}]
+      requestBody: {"required": true, "content": {"application/json": {"schema": {"$ref": "#/components/schemas/InspectionResponseWrite"}}}}
+      responses: {"200": {"description": "Операция выполнена", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/CaseWorkflow"}}}}, "400": {"description": "Проверьте данные и допустимость действия"}, "401": {"description": "Нужна авторизация"}, "403": {"description": "Нет полномочий"}, "404": {"description": "Материал недоступен"}, "409": {"description": "Ревизия изменилась; обновите карточку"}}
+  /v1/inspections/{id}/acts:
+    post:
+      operationId: "draftInspectionAct"
+      summary: "Создать проект акта или исправленную версию"
+      parameters: [{"name": "id", "in": "path", "required": true, "schema": {"type": "string", "minLength": 1}}]
+      requestBody: {"required": true, "content": {"application/json": {"schema": {"$ref": "#/components/schemas/InspectionActWrite"}}}}
+      responses: {"200": {"description": "Операция выполнена", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/CaseWorkflow"}}}}, "400": {"description": "Проверьте данные и допустимость действия"}, "401": {"description": "Нужна авторизация"}, "403": {"description": "Нет полномочий"}, "404": {"description": "Материал недоступен"}, "409": {"description": "Ревизия изменилась; обновите карточку"}}
+  /v1/inspection-acts/{id}:
+    put:
+      operationId: "editInspectionActDraft"
+      summary: "Изменить только неопубликованный проект"
+      parameters: [{"name": "id", "in": "path", "required": true, "schema": {"type": "string", "minLength": 1}}]
+      requestBody: {"required": true, "content": {"application/json": {"schema": {"$ref": "#/components/schemas/InspectionActWrite"}}}}
+      responses: {"200": {"description": "Операция выполнена", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/CaseWorkflow"}}}}, "400": {"description": "Проверьте данные и допустимость действия"}, "401": {"description": "Нужна авторизация"}, "403": {"description": "Нет полномочий"}, "404": {"description": "Материал недоступен"}, "409": {"description": "Ревизия изменилась; обновите карточку"}}
+  /v1/inspection-acts/{id}/publish:
+    post:
+      operationId: "publishInspectionAct"
+      summary: "Опубликовать неизменяемую версию без подтверждения подписи"
+      parameters: [{"name": "id", "in": "path", "required": true, "schema": {"type": "string", "minLength": 1}}]
+      requestBody: {"required": true, "content": {"application/json": {"schema": {"$ref": "#/components/schemas/WorkflowRevision"}}}}
+      responses: {"200": {"description": "Операция выполнена", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/CaseWorkflow"}}}}, "400": {"description": "Проверьте данные и допустимость действия"}, "401": {"description": "Нужна авторизация"}, "403": {"description": "Нет полномочий"}, "404": {"description": "Материал недоступен"}, "409": {"description": "Ревизия изменилась; обновите карточку"}}
+  /v1/inspection-acts/{id}/print:
+    get:
+      operationId: "printInspectionAct"
+      summary: "Скачать опубликованную версию акта для ознакомления и печати"
+      parameters: [{"name": "id", "in": "path", "required": true, "schema": {"type": "string", "minLength": 1}}]
+      responses: {"200": {"description": "Операция выполнена", "content": {"text/html": {"schema": {"type": "string", "format": "binary"}}}}, "400": {"description": "Проверьте данные и допустимость действия"}, "401": {"description": "Нужна авторизация"}, "403": {"description": "Нет полномочий"}, "404": {"description": "Материал недоступен"}, "409": {"description": "Ревизия изменилась; обновите карточку"}}
+  /v1/cases/{id}/work-orders:
+    post:
+      operationId: "assignCaseWork"
+      summary: "Назначить работы участнику конкретного дела"
+      parameters: [{"name": "id", "in": "path", "required": true, "schema": {"type": "string", "minLength": 1}}]
+      requestBody: {"required": true, "content": {"application/json": {"schema": {"$ref": "#/components/schemas/WorkOrderWrite"}}}}
+      responses: {"200": {"description": "Операция выполнена", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/CaseWorkflow"}}}}, "400": {"description": "Проверьте данные и допустимость действия"}, "401": {"description": "Нужна авторизация"}, "403": {"description": "Нет полномочий"}, "404": {"description": "Материал недоступен"}, "409": {"description": "Ревизия изменилась; обновите карточку"}}
+  /v1/work-orders/{id}:
+    patch:
+      operationId: "updateCaseWork"
+      summary: "Ход работ отчёт проверка и доработка с отдельной приёмкой"
+      parameters: [{"name": "id", "in": "path", "required": true, "schema": {"type": "string", "minLength": 1}}]
+      requestBody: {"required": true, "content": {"application/json": {"schema": {"$ref": "#/components/schemas/WorkOrderUpdate"}}}}
+      responses: {"200": {"description": "Операция выполнена", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/CaseWorkflow"}}}}, "400": {"description": "Проверьте данные и допустимость действия"}, "401": {"description": "Нужна авторизация"}, "403": {"description": "Нет полномочий"}, "404": {"description": "Материал недоступен"}, "409": {"description": "Ревизия изменилась; обновите карточку"}}
 components:
   schemas:
+    WorkflowFunction: {"type": "string", "enum": ["COORDINATOR", "ENGINEER", "WARRANTY", "CONTRACTOR"]}
+    WarrantyObject: {"type": "string", "enum": ["CONSTRUCTION", "EQUIPMENT", "FINISHING", "OTHER"]}
+    WarrantyState: {"type": "string", "enum": ["DRAFT", "VERIFIED", "SUPERSEDED"]}
+    WarrantyReviewOutcome: {"type": "string", "enum": ["NEED_INFORMATION", "POSSIBLE_WARRANTY", "WARRANTY_CONFIRMED", "NON_WARRANTY", "DISPUTED"]}
+    WarrantyRefusalReason: {"type": "string", "enum": ["NORMAL_WEAR", "MISUSE", "THIRD_PARTY_WORK", "OUTSIDE_TERMS", "OTHER"]}
+    HandoffRecipient: {"type": "string", "enum": ["DEVELOPER", "GENERAL_CONTRACTOR", "EXPERT", "OTHER"]}
+    HandoffState: {"type": "string", "enum": ["PREPARED", "SENT", "RECEIVED", "RESPONDED", "CANCELLED"]}
+    InspectionState: {"type": "string", "enum": ["PROPOSED", "SCHEDULED", "COMPLETED", "NO_ACCESS", "CANCELLED"]}
+    InspectionResidentAction: {"type": "string", "enum": ["CONFIRM_TIME", "REQUEST_OTHER_TIME", "COMMENT_ACT"]}
+    InspectionAvailability: {"type": "string", "enum": ["PENDING", "CONFIRMED", "REQUEST_OTHER_TIME"]}
+    InspectionActState: {"type": "string", "enum": ["DRAFT", "PUBLISHED"]}
+    WorkOrderState: {"type": "string", "enum": ["ASSIGNED", "IN_PROGRESS", "BLOCKED", "REPORTED", "NEED_REWORK", "ACCEPTED", "CANCELLED"]}
+    WorkOrderBasis: {"type": "string", "enum": ["WARRANTY", "MAINTENANCE", "OTHER"]}
+    WorkflowHouse: {"type": "object", "properties": {"id": {"type": "string"}, "address": {"type": "string"}, "canManageRegistry": {"type": "boolean"}, "canReadRegistry": {"type": "boolean"}}}
+    WorkflowStaff: {"type": "object", "properties": {"userId": {"type": "string"}, "name": {"type": "string"}, "function": {"$ref": "#/components/schemas/WorkflowFunction"}, "organizationLabel": {"type": "string"}, "authority": {"type": "string"}, "active": {"type": "boolean"}}}
+    WorkflowInvitationWrite: {"type": "object", "properties": {"function": {"$ref": "#/components/schemas/WorkflowFunction"}, "organizationLabel": {"type": "string", "maxLength": 250}, "authority": {"type": "string", "maxLength": 1000}, "days": {"type": "integer", "minimum": 1, "maximum": 14}}, "required": ["function", "organizationLabel", "authority", "days"]}
+    WorkflowInvitationAccept: {"type": "object", "properties": {"token": {"type": "string", "maxLength": 120}}, "required": ["token"]}
+    WorkflowInvitation: {"type": "object", "properties": {"id": {"type": "string"}, "function": {"$ref": "#/components/schemas/WorkflowFunction"}, "organizationLabel": {"type": "string"}, "address": {"type": "string"}, "expiresAt": {"type": "string", "format": "date-time", "nullable": true}, "accepted": {"type": "boolean"}, "revoked": {"type": "boolean"}}}
+    WorkflowCreatedInvitation: {"type": "object", "properties": {"token": {"type": "string"}, "invitation": {"$ref": "#/components/schemas/WorkflowInvitation"}}}
+    WarrantyWrite: {"type": "object", "properties": {"title": {"type": "string", "maxLength": 160}, "objectType": {"$ref": "#/components/schemas/WarrantyObject"}, "state": {"$ref": "#/components/schemas/WarrantyState"}, "developer": {"type": "string", "maxLength": 250}, "contractor": {"type": "string", "maxLength": 250}, "contractReference": {"type": "string", "maxLength": 500}, "basis": {"type": "string", "maxLength": 3000}, "transferredOn": {"type": "string", "format": "date", "nullable": true}, "startsOn": {"type": "string", "format": "date", "nullable": true}, "endsOn": {"type": "string", "format": "date", "nullable": true}, "revision": {"type": "integer", "minimum": 0}, "reason": {"type": "string", "maxLength": 1000}}, "required": ["title", "objectType", "state", "basis", "revision", "reason"]}
+    WarrantyFile: {"type": "object", "properties": {"id": {"type": "string"}, "title": {"type": "string"}, "mime": {"type": "string"}, "size_bytes": {"type": "integer"}, "created_at": {"type": "string", "format": "date-time", "nullable": true}}}
+    WarrantyHistory: {"type": "object", "properties": {"title":{"type":"string"},"basis":{"type":"string"},"contract_reference":{"type":"string","nullable":true},"starts_on":{"type":"string","nullable":true},"ends_on":{"type":"string","nullable":true},"revision": {"type": "integer", "minimum": 0}, "reason": {"type": "string"}, "created_at": {"type": "string", "format": "date-time", "nullable": true}, "actor": {"type": "string"}}}
+    HouseWarranty: {"type": "object", "properties": {"title": {"type": "string", "maxLength": 160}, "objectType": {"$ref": "#/components/schemas/WarrantyObject"}, "state": {"$ref": "#/components/schemas/WarrantyState"}, "developer": {"type": "string", "maxLength": 250}, "contractor": {"type": "string", "maxLength": 250}, "contractReference": {"type": "string", "maxLength": 500}, "basis": {"type": "string", "maxLength": 3000}, "transferredOn": {"type": "string", "format": "date", "nullable": true}, "startsOn": {"type": "string", "format": "date", "nullable": true}, "endsOn": {"type": "string", "format": "date", "nullable": true}, "revision": {"type": "integer", "minimum": 0}, "id": {"type": "string"}, "houseId": {"type": "string"}, "checkedBy": {"type": "string", "nullable": true}, "checkedAt": {"type": "string", "format": "date-time", "nullable": true}, "files": {"type": "array", "items": {"$ref": "#/components/schemas/WarrantyFile"}}, "history": {"type": "array", "items": {"$ref": "#/components/schemas/WarrantyHistory"}}}}
+    WarrantyReviewWrite: {"type": "object", "properties": {"warrantyId": {"type": "string", "nullable": true, "maxLength": 80}, "outcome": {"$ref": "#/components/schemas/WarrantyReviewOutcome"}, "refusalReason": {"allOf": [{"$ref": "#/components/schemas/WarrantyRefusalReason"}], "nullable": true}, "basis": {"type": "string", "maxLength": 3000}, "explanation": {"type": "string", "maxLength": 2000}, "evidenceVersionId": {"type": "string", "nullable": true, "maxLength": 80}, "revision": {"type": "integer", "minimum": 0}}, "required": ["outcome", "basis", "explanation", "revision"]}
+    WarrantyReview: {"type": "object", "properties": {"warrantyId": {"type": "string", "nullable": true, "maxLength": 80}, "outcome": {"$ref": "#/components/schemas/WarrantyReviewOutcome"}, "refusalReason": {"allOf": [{"$ref": "#/components/schemas/WarrantyRefusalReason"}], "nullable": true}, "basis": {"type": "string", "maxLength": 3000}, "explanation": {"type": "string", "maxLength": 2000}, "evidenceVersionId": {"type": "string", "nullable": true, "maxLength": 80}, "id": {"type": "string"}, "reviewer": {"type": "string"}, "createdAt": {"type": "string", "format": "date-time", "nullable": true}}}
+    CaseHandoffWrite: {"type": "object", "properties": {"recipient": {"type": "string", "maxLength": 250}, "recipientType": {"$ref": "#/components/schemas/HandoffRecipient"}, "channel": {"type": "string", "maxLength": 500}, "basis": {"type": "string", "maxLength": 3000}, "authority": {"type": "string", "maxLength": 2000}, "statement": {"type": "string", "maxLength": 4000}, "dueAt": {"type": "string", "format": "date-time", "nullable": true}, "revision": {"type": "integer", "minimum": 0}}, "required": ["recipient", "recipientType", "channel", "basis", "authority", "statement", "revision"]}
+    CaseHandoffUpdate: {"type": "object", "properties": {"state": {"$ref": "#/components/schemas/HandoffState"}, "note": {"type": "string", "maxLength": 2000}, "evidenceVersionId": {"type": "string", "nullable": true, "maxLength": 80}, "revision": {"type": "integer", "minimum": 0}, "caseRevision": {"type": "integer", "minimum": 0}}, "required": ["state", "note", "revision", "caseRevision"]}
+    CaseHandoffEvent: {"type": "object", "properties": {"state": {"$ref": "#/components/schemas/HandoffState"}, "note": {"type": "string"}, "evidence_version_id": {"type": "string", "nullable": true}, "created_at": {"type": "string", "format": "date-time", "nullable": true}, "actor": {"type": "string"}}}
+    CaseHandoff: {"type": "object", "properties": {"recipient": {"type": "string", "maxLength": 250}, "recipientType": {"$ref": "#/components/schemas/HandoffRecipient"}, "channel": {"type": "string", "maxLength": 500}, "basis": {"type": "string", "maxLength": 3000}, "authority": {"type": "string", "maxLength": 2000}, "statement": {"type": "string", "maxLength": 4000}, "dueAt": {"type": "string", "format": "date-time", "nullable": true}, "revision": {"type": "integer", "minimum": 0}, "id": {"type": "string"}, "state": {"$ref": "#/components/schemas/HandoffState"}, "events": {"type": "array", "items": {"$ref": "#/components/schemas/CaseHandoffEvent"}}}}
+    InspectionWrite: {"type": "object", "properties": {"inspectorId": {"type": "string", "maxLength": 80}, "location": {"type": "string", "maxLength": 300}, "participants": {"type": "string", "maxLength": 1500}, "startsAt": {"type": "string", "format": "date-time"}, "endsAt": {"type": "string", "format": "date-time"}, "revision": {"type": "integer", "minimum": 0}, "caseRevision": {"type": "integer", "minimum": 0}, "reason": {"type": "string", "maxLength": 1000}}, "required": ["inspectorId", "location", "participants", "startsAt", "endsAt", "revision", "caseRevision"]}
+    InspectionUpdate: {"type": "object", "properties": {"state": {"$ref": "#/components/schemas/InspectionState"}, "reason": {"type": "string", "maxLength": 1500}, "revision": {"type": "integer", "minimum": 0}, "caseRevision": {"type": "integer", "minimum": 0}}, "required": ["state", "reason", "revision", "caseRevision"]}
+    InspectionResponseWrite: {"type": "object", "properties": {"action": {"$ref": "#/components/schemas/InspectionResidentAction"}, "actId": {"type": "string", "nullable": true, "maxLength": 80}, "comment": {"type": "string", "maxLength": 2000}, "revision": {"type": "integer", "minimum": 0}, "caseRevision": {"type": "integer", "minimum": 0}}, "required": ["action", "revision", "caseRevision"]}
+    InspectionResponse: {"type": "object", "properties": {"action": {"$ref": "#/components/schemas/InspectionResidentAction"}, "act_id": {"type": "string", "nullable": true}, "comment": {"type": "string"}, "actor": {"type": "string"}, "created_at": {"type": "string", "format": "date-time", "nullable": true}}}
+    InspectionActWrite: {"type": "object", "properties": {"inspectedAt": {"type": "string", "format": "date-time"}, "participants": {"type": "string", "maxLength": 2000}, "findings": {"type": "string", "maxLength": 4000}, "defects": {"type": "string", "maxLength": 4000}, "preliminaryCause": {"type": "string", "maxLength": 2000}, "evidenceVersionId": {"type": "string", "nullable": true, "maxLength": 80}, "correctionReason": {"type": "string", "maxLength": 1000}, "revision": {"type": "integer", "minimum": 0}, "caseRevision": {"type": "integer", "minimum": 0}}, "required": ["inspectedAt", "participants", "findings", "defects", "revision", "caseRevision"]}
+    WorkflowRevision: {"type": "object", "properties": {"revision": {"type": "integer", "minimum": 0}, "caseRevision": {"type": "integer", "minimum": 0}}, "required": ["revision", "caseRevision"]}
+    InspectionAct: {"type": "object", "properties": {"inspectedAt": {"type": "string", "format": "date-time"}, "participants": {"type": "string", "maxLength": 2000}, "findings": {"type": "string", "maxLength": 4000}, "defects": {"type": "string", "maxLength": 4000}, "preliminaryCause": {"type": "string", "maxLength": 2000}, "evidenceVersionId": {"type": "string", "nullable": true, "maxLength": 80}, "correctionReason": {"type": "string", "maxLength": 1000}, "id": {"type": "string"}, "version": {"type": "integer"}, "state": {"$ref": "#/components/schemas/InspectionActState"}, "author": {"type": "string"}, "publishedAt": {"type": "string", "format": "date-time", "nullable": true}}}
+    CaseInspection: {"type": "object", "properties": {"inspectorId": {"type": "string", "maxLength": 80}, "location": {"type": "string", "maxLength": 300}, "participants": {"type": "string", "maxLength": 1500}, "startsAt": {"type": "string", "format": "date-time"}, "endsAt": {"type": "string", "format": "date-time"}, "revision": {"type": "integer", "minimum": 0}, "id": {"type": "string"}, "inspector": {"type": "string"}, "state": {"$ref": "#/components/schemas/InspectionState"}, "residentAvailability": {"$ref": "#/components/schemas/InspectionAvailability"}, "acts": {"type": "array", "items": {"$ref": "#/components/schemas/InspectionAct"}}, "responses": {"type": "array", "items": {"$ref": "#/components/schemas/InspectionResponse"}}}}
+    WorkOrderWrite: {"type": "object", "properties": {"title": {"type": "string", "maxLength": 200}, "scope": {"type": "string", "maxLength": 4000}, "assigneeId": {"type": "string", "maxLength": 80}, "basisType": {"$ref": "#/components/schemas/WorkOrderBasis"}, "basis": {"type": "string", "maxLength": 3000}, "dueAt": {"type": "string", "format": "date-time", "nullable": true}, "dueBasis": {"type": "string", "maxLength": 1000}, "actId": {"type": "string", "nullable": true, "maxLength": 80}, "revision": {"type": "integer", "minimum": 0}}, "required": ["title", "scope", "assigneeId", "basisType", "basis", "dueBasis", "revision"]}
+    WorkOrderUpdate: {"type": "object", "properties": {"state": {"$ref": "#/components/schemas/WorkOrderState"}, "note": {"type": "string", "maxLength": 2000}, "assigneeId": {"type": "string", "maxLength": 80}, "dueAt": {"type": "string", "format": "date-time", "nullable": true}, "dueBasis": {"type": "string", "maxLength": 1000}, "evidenceVersionId": {"type": "string", "nullable": true, "maxLength": 80}, "revision": {"type": "integer", "minimum": 0}, "caseRevision": {"type": "integer", "minimum": 0}}, "required": ["state", "note", "revision", "caseRevision"]}
+    WorkOrderReport: {"type": "object", "properties": {"id": {"type": "string"}, "version": {"type": "integer"}, "report": {"type": "string"}, "evidence_version_id": {"type": "string", "nullable": true}, "created_at": {"type": "string", "format": "date-time", "nullable": true}, "author": {"type": "string"}}}
+    CaseWorkOrder: {"type": "object", "properties": {"title": {"type": "string", "maxLength": 200}, "scope": {"type": "string", "maxLength": 4000}, "assigneeId": {"type": "string", "maxLength": 80}, "basisType": {"$ref": "#/components/schemas/WorkOrderBasis"}, "basis": {"type": "string", "maxLength": 3000}, "dueAt": {"type": "string", "format": "date-time", "nullable": true}, "dueBasis": {"type": "string", "maxLength": 1000}, "actId": {"type": "string", "nullable": true, "maxLength": 80}, "revision": {"type": "integer", "minimum": 0}, "id": {"type": "string"}, "assignee": {"type": "string"}, "state": {"$ref": "#/components/schemas/WorkOrderState"}, "reports": {"type": "array", "items": {"$ref": "#/components/schemas/WorkOrderReport"}}}}
+    WorkflowHistory: {"type": "object", "properties": {"action": {"type": "string"}, "note": {"type": "string"}, "created_at": {"type": "string", "format": "date-time", "nullable": true}, "actor": {"type": "string"}}}
+    WorkflowCandidate: {"type": "object", "properties": {"id": {"type": "string"}, "name": {"type": "string"}, "billingAccess": {"type": "boolean"}, "billingAssignable": {"type":"boolean"}}}
+    CaseWorkflow: {"type": "object", "properties": {"revision": {"type": "integer", "minimum": 0}, "actorId": {"type": "string"}, "isAuthor": {"type": "boolean"}, "canCoordinate": {"type": "boolean"}, "canReviewWarranty": {"type": "boolean"}, "canInspect": {"type": "boolean"}, "staff": {"type": "array", "items": {"$ref": "#/components/schemas/WorkflowCandidate"}}, "reviews": {"type": "array", "items": {"$ref": "#/components/schemas/WarrantyReview"}}, "handoffs": {"type": "array", "items": {"$ref": "#/components/schemas/CaseHandoff"}}, "inspections": {"type": "array", "items": {"$ref": "#/components/schemas/CaseInspection"}}, "orders": {"type": "array", "items": {"$ref": "#/components/schemas/CaseWorkOrder"}}, "history": {"type": "array", "items": {"$ref": "#/components/schemas/WorkflowHistory"}}}}
     GuidedDemoView:
       type: object
       required: [enabled, active]
@@ -1558,3 +1783,4 @@ components:
               id: {type: string}
               name: {type: string}
               billingAccess: {type: boolean}
+              billingAssignable: {type: boolean}

@@ -15,12 +15,14 @@ public class ResidentCaseService {
     private final JdbcTemplate jdbc;
     private final AttachmentStore store;
     private final CaseBotNotifications botNotifications;
-    public ResidentCaseService(JdbcTemplate jdbc, AttachmentStore store, CaseBotNotifications botNotifications) { this.jdbc = jdbc; this.store = store; this.botNotifications = botNotifications; }
+    private final CaseWorkAccess access;
+    private final CaseCompletionGuard completion;
+    public ResidentCaseService(JdbcTemplate jdbc, AttachmentStore store, CaseBotNotifications botNotifications, CaseWorkAccess access, CaseCompletionGuard completion) { this.jdbc = jdbc; this.store = store; this.botNotifications = botNotifications; this.access=access; this.completion=completion; }
 
     public record Event(String id, String actor, CaseEventType type, String text, String createdAt) {}
     public record DocumentVersion(String id, int version, String mime, long size, String uploadedBy, String createdAt) {}
     public record Document(String id, String title, List<DocumentVersion> versions) {}
-    public record Staff(String id, String name, boolean billingAccess) {}
+    public record Staff(String id, String name, boolean billingAccess, boolean billingAssignable) {}
     public record Context(String actorId, boolean intakeAvailable, boolean canManagePermissions, boolean canReview, List<Staff> staff) {}
     public record CaseView(String id, long number, String houseId, String address, String author,
                            CaseKind kind, CaseStatus status, String description, String location,
@@ -65,7 +67,7 @@ public class ResidentCaseService {
         return member(house, user) && count("SELECT count(*) FROM case_billing_permissions WHERE house_id=? AND user_id=?", house, user);
     }
     private boolean collaborator(String id, String house, String user) {
-        return member(house, user) && count("SELECT count(*) FROM case_collaborators WHERE case_id=? AND user_id=?", id, user);
+        return access.assigned(id,house,user,CaseFunction.values());
     }
     private boolean work(Map<String,Object> row, String user) {
         String house = str(row,"house_id");
@@ -75,10 +77,7 @@ public class ResidentCaseService {
     private boolean manages(Map<String,Object> r,String user) {
         if(!work(r,user)) return false;
         if(CaseKind.PAYMENT.name().equals(str(r,"kind"))) return billing(str(r,"house_id"),user);
-        return dispatcher(str(r,"house_id"),user) || count("""
-            SELECT count(*) FROM case_collaborators WHERE case_id=? AND user_id=?
-              AND function IN ('COORDINATOR','WARRANTY','BILLING')
-            """,str(r,"id"),user);
+        return dispatcher(str(r,"house_id"),user) || access.assigned(str(r,"id"),str(r,"house_id"),user,CaseFunction.COORDINATOR,CaseFunction.WARRANTY,CaseFunction.BILLING);
     }
     private boolean owns(Map<String,Object> row, String user) {
         return user.equals(str(row,"author_id")) && resident(str(row,"house_id"),user);
@@ -102,13 +101,9 @@ public class ResidentCaseService {
             """, house);
     }
     public Context context(String house, String user) {
-        if (!member(house,user) && !manager(house,user)) throw missing();
-        boolean staff=dispatcher(house,user)||manager(house,user)||billing(house,user);
-        List<Staff> list=staff ? jdbc.query("""
-            SELECT DISTINCT u.id,u.display_name FROM users u JOIN house_memberships m ON m.user_id=u.id
-            WHERE m.house_id=? AND (m.role='DISPATCHER' OR ?=1) AND m.verification_status='VERIFIED'
-              AND m.access_status='ACTIVE' AND u.status='ACTIVE' ORDER BY u.display_name
-            """, (rs,n)->new Staff(rs.getString(1),rs.getString(2),billing(house,rs.getString(1))),house,manager(house,user)?1:0) : List.of();
+        if (!member(house,user) && !manager(house,user) && !access.staff(house,user)) throw missing();
+        boolean staff=dispatcher(house,user)||manager(house,user)||billing(house,user)||access.staffFunction(house,user,CaseFunction.COORDINATOR);
+        List<Staff> list=staff ? access.candidates(house) : List.of();
         return new Context(user,intake(house),manager(house,user),staff || count("SELECT count(*) FROM case_collaborators a JOIN resident_cases c ON c.id=a.case_id WHERE c.house_id=? AND a.user_id=?",house,user),list);
     }
     @Transactional
@@ -151,11 +146,11 @@ public class ResidentCaseService {
     }
     public List<CaseView> queue(String house,String user) {
         boolean intakeWorker=dispatcher(house,user)||manager(house,user);
-        if(!intakeWorker && !billing(house,user) && !count("""
+        if(!intakeWorker && !billing(house,user) && !access.staff(house,user) && !count("""
             SELECT count(*) FROM case_collaborators a JOIN resident_cases c ON c.id=a.case_id
             WHERE c.house_id=? AND a.user_id=?
             """,house,user)) throw denied();
-        if(!member(house,user) && !manager(house,user)) throw denied();
+        if(!member(house,user) && !manager(house,user) && !access.staff(house,user)) throw denied();
         return jdbc.query("SELECT id FROM resident_cases WHERE house_id=? ORDER BY number DESC",(rs,n)->rs.getString(1),house)
             .stream().filter(id->intakeWorker||work(row(id),user)).map(id->view(row(id),user)).toList();
     }
@@ -188,6 +183,7 @@ public class ResidentCaseService {
     public CaseView update(String id,CaseKind kind,CaseStatus status,String nextStep,Instant due,
                            String responsible,int revision,String reason,String user) {
         var r=row(id);requireWork(r,user);
+        if(status==CaseStatus.RESULT_PROPOSED)completion.requireComplete(id);
         if (status==CaseStatus.RECEIVED || status==CaseStatus.CLOSED || status==CaseStatus.REOPENED) throw invalid("Используйте рассмотрение или предложите результат жителю");
         if (CaseStatus.CLOSED.name().equals(str(r,"status"))) throw invalid("Сначала нужно повторное обращение жителя");
         if (kind==null || status==null) throw invalid("Укажите направление и состояние");
@@ -195,7 +191,7 @@ public class ResidentCaseService {
         String house=str(r,"house_id");
         if (kind==CaseKind.PAYMENT && !billing(house,user)) throw denied();
         responsible=optional(responsible,80);
-        if (responsible!=null && (!member(house,responsible) || (!dispatcher(house,responsible)&&!collaborator(id,house,responsible)&&!billing(house,responsible)) || (kind==CaseKind.PAYMENT&&!billing(house,responsible))))
+        if (responsible!=null && ((!member(house,responsible)&&!access.staff(house,responsible)) || (!dispatcher(house,responsible)&&!collaborator(id,house,responsible)&&!billing(house,responsible)) || (kind==CaseKind.PAYMENT&&!billing(house,responsible))))
             throw invalid("Сотрудник не имеет необходимого доступа к этому дому и направлению");
         boolean movedDue=r.get("due_at")!=null && !Objects.equals(Instant.parse(str(r,"due_at")),due);
         boolean reassigned=r.get("responsible_user_id")!=null && !Objects.equals(str(r,"responsible_user_id"),responsible);
@@ -218,15 +214,15 @@ public class ResidentCaseService {
     public CaseView assign(String id,String target,CaseFunction function,boolean enabled,int revision,String actor) {
         var r=row(id);
         String house=str(r,"house_id");
-        if (!manager(house,actor)) throw denied();
-        if (!member(house,target) || (CaseKind.PAYMENT.name().equals(str(r,"kind"))&&!billing(house,target)))
+        if (!manager(house,actor) && !(access.coordinator(id,house,actor)&&List.of(CaseFunction.ENGINEER,CaseFunction.CONTRACTOR).contains(function))) throw denied();
+        if (!access.eligible(house,target,function) || (CaseKind.PAYMENT.name().equals(str(r,"kind"))&&!billing(house,target)))
             throw invalid("Выберите сотрудника с необходимым доступом");
         if(jdbc.update("UPDATE resident_cases SET revision=revision+1,updated_at=? WHERE id=? AND revision=?",now(),id,revision)!=1)throw conflict();
         if(enabled)jdbc.update("""
-            INSERT INTO case_collaborators(case_id,user_id,function,assigned_by,created_at) VALUES (?,?,?,?,?)
-            ON CONFLICT(case_id,user_id) DO UPDATE SET function=excluded.function,assigned_by=excluded.assigned_by
-            """,id,target,function.name(),actor,now());
-        else jdbc.update("DELETE FROM case_collaborators WHERE case_id=? AND user_id=?",id,target);
+            INSERT INTO case_collaborators(case_id,user_id,function,assigned_by,created_at,source_organization_id) VALUES (?,?,?,?,?,(SELECT organization_id FROM organization_houses WHERE house_id=? AND status='ACTIVE' LIMIT 1))
+            ON CONFLICT(case_id,user_id,function) DO UPDATE SET function=excluded.function,assigned_by=excluded.assigned_by,source_organization_id=excluded.source_organization_id
+            """,id,target,function.name(),actor,now(),house);
+        else jdbc.update("DELETE FROM case_collaborators WHERE case_id=? AND user_id=? AND function=?",id,target,function.name());
         event(id,actor,CaseEventType.ASSIGNED,enabled?"Назначен участник работы по обращению":"Назначение участника отозвано",null);
         audit(actor,"CASE_ASSIGNMENT_CHANGED",id);
         return view(row(id),actor);
@@ -248,6 +244,7 @@ public class ResidentCaseService {
         var r=readable(id,user);
         if(!owns(r,user))throw denied();
         String current=str(r,"status");
+        if(confirmed)completion.requireComplete(id);
         if(confirmed && !CaseStatus.RESULT_PROPOSED.name().equals(current))throw invalid("Результат ещё не предложен");
         if(!confirmed && !List.of("RESULT_PROPOSED","CLOSED").contains(current))throw invalid("Повторная проверка пока не требуется");
         if(jdbc.update("""
@@ -270,7 +267,7 @@ public class ResidentCaseService {
     public CaseView upload(String id,String documentId,String title,byte[] bytes,String mime,int expectedVersion,String user) {
         var r=readable(id,user);
         if(CaseStatus.CLOSED.name().equals(str(r,"status")))throw invalid("Для добавления документов запросите повторное рассмотрение");
-        if(bytes==null||bytes.length==0||bytes.length>10*1024*1024||!valid(bytes,mime))throw invalid("Допустимы PDF, JPEG или PNG до 10 МБ");
+        if(bytes==null||bytes.length==0||bytes.length>10*1024*1024||!validDocument(bytes,mime))throw invalid("Допустимы PDF, JPEG или PNG до 10 МБ");
         String digest=hash(bytes);
         if(count("""
             SELECT count(*) FROM case_document_versions v JOIN case_documents d ON d.id=v.document_id
@@ -306,7 +303,7 @@ public class ResidentCaseService {
         var v=rows.get(0);readable(str(v,"case_id"),user);
         return new FileData(store.get(str(v,"storage_key")),str(v,"mime"));
     }
-    private static boolean valid(byte[] b,String mime) {
+    public static boolean validDocument(byte[] b,String mime) {
         if(mime==null)return false;
         return switch(mime) {
             case "application/pdf" -> b.length>=12 && new String(b,0,5,StandardCharsets.US_ASCII).equals("%PDF-")
@@ -315,6 +312,15 @@ public class ResidentCaseService {
             case "image/png" -> b.length>=8 && Arrays.equals(Arrays.copyOf(b,8),new byte[]{(byte)137,80,78,71,13,10,26,10});
             default -> false;
         };
+    }
+    @Transactional
+    public void workflowEvent(String id,String actor,int revision,String text,String nextStep) {
+        var c=get(id,actor);
+        if(c.status()==CaseStatus.CLOSED)throw invalid("Для продолжения работы житель должен запросить повторное рассмотрение");
+        if(jdbc.update("UPDATE resident_cases SET revision=revision+1,updated_at=?,next_step=coalesce(?,next_step),status=CASE WHEN ? IS NOT NULL THEN 'IN_PROGRESS' ELSE status END WHERE id=? AND revision=?",
+            now(),nextStep,nextStep,id,revision)!=1)throw conflict();
+        event(id,actor,CaseEventType.UPDATED,text,null);
+        audit(actor,"CASE_WORKFLOW_CHANGED",id);
     }
     private void event(String id,String actor,CaseEventType type,String text,String key) {
         jdbc.update("INSERT INTO case_events(id,case_id,actor_id,type,text,client_request_id,created_at) VALUES (?,?,?,?,?,?,?)",UUID.randomUUID().toString(),id,actor,type.name(),text,key,now());

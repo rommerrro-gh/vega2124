@@ -5,7 +5,9 @@ import { MaxUI, Panel, Button as MaxButton } from "@maxhub/max-ui";
 import "@maxhub/max-ui/dist/styles.css";
 import "./theme.css";
 import "./cases.css";
-import { ResidentCases, StaffCases } from "./resident-cases.jsx";
+import "./workflow.css";
+import {WorkPortal,WarrantyRegistry,WorkflowStaff} from "./warranty-workflow.jsx";
+import { CaseDetail, ResidentCases, StaffCases } from "./resident-cases.jsx";
 
 function Button({ mode = "primary", className = "", ...props }) {
   return <MaxButton mode={mode} className={`app-button-${mode} ${className}`.trim()} {...props} />;
@@ -114,7 +116,7 @@ function navigate(path) {
   const initData = window.WebApp?.initData;
   const launchData = window.location.hash || (initData ? `#WebAppData=${encodeURIComponent(initData)}` : "");
   const pathname = new URL(path, location.origin).pathname;
-  if (["/miniapp/index.html", "/dispatcher/index.html", "/admin/index.html", "/uk/index.html", "/system/index.html"].includes(pathname)) {
+  if (["/miniapp/index.html", "/dispatcher/index.html", "/admin/index.html", "/uk/index.html", "/system/index.html", "/work/index.html"].includes(pathname)) {
     localStorage.setItem("pulse-last-mode", pathname);
   }
   window.location.assign(`${path}${launchData}`);
@@ -156,11 +158,12 @@ function Brand({ role }) {
   const [access, setAccess] = useState([]);
   const [demo, setDemo] = useState(null);
   const [localDemo, setLocalDemo] = useState(false);
+  const [workAccess,setWorkAccess] = useState(false);
   const [notice, setNotice] = useState("");
   const [help, setHelp] = useState(false);
   useEffect(() => {
-    Promise.all([api("true", "/v1/access/me"), api("true", "/v1/guided-demo"), api("true", "/v1/access/config")])
-      .then(([roles, state, config]) => { setAccess(roles); setDemo(state); setLocalDemo(config.demoMode === true); }).catch(() => {});
+    Promise.all([api("true", "/v1/access/me"), api("true", "/v1/guided-demo"), api("true", "/v1/access/config"), api("true", "/v1/workflow/houses")])
+      .then(([roles, state, config, workHouses]) => { setAccess(roles); setDemo(state); setLocalDemo(config.demoMode === true); setWorkAccess(workHouses.length>0); }).catch(() => {});
   }, []);
   useEffect(() => {
     const closeOnEscape = event => { if (event.key === "Escape" && menu.current) menu.current.open = false; };
@@ -179,13 +182,14 @@ function Brand({ role }) {
   }
   return <><header className="topbar">
     <div className="brand"><span className="brand-icon-frame"><img className="brand-icon" src="/miniapp/app-icon.png?v=20260929-6" alt="" /></span><span>Пульс дома</span></div>
-    {available.length ? <details ref={menu} className="role-menu">
+    {(available.length||workAccess) ? <details ref={menu} className="role-menu">
       <summary aria-label="Выбрать роль"><span className="role-menu-label">{current?.[1] || role}</span><svg aria-hidden="true" viewBox="0 0 12 12"><path d="m3 4.5 3 3 3-3" /></svg></summary>
       <button className="role-menu-backdrop" type="button" aria-label="Закрыть меню ролей" onClick={() => { menu.current.open = false; }} />
       <nav aria-label="Доступные роли">
         {available.map(([name, label, path]) => <button key={name} type="button"
           aria-current={location.pathname === path ? "page" : undefined}
           onClick={() => navigate(path)}>{label}{location.pathname === path ? " ✓" : ""}</button>)}
+        {(workAccess||localDemo)&&<button type="button" onClick={()=>navigate("/work/index.html"+(localDemo?`?demoSession=${["/uk/index.html","/admin/index.html"].includes(location.pathname)?"admin":"dispatcher"}`:""))}>Осмотры и работы</button>}
         {demo?.active && <><hr /><span className="role-menu-caption">Демонстрационный режим · тестовые данные</span>
           <button type="button" onClick={() => { menu.current.open = false; setHelp(value => !value); }}>Инструкция по сценарию</button>
           <button type="button" onClick={() => demoAction("restart")}>Начать заново</button>
@@ -908,7 +912,7 @@ const accessRoleLabels = {
 function InvitationGate() {
   const [token, setToken] = useState(() => {
     const start = new URLSearchParams(location.search).get("invite") || window.WebApp?.initDataUnsafe?.start_param || "";
-    return start.startsWith("demo_") ? "" : start;
+    return start.startsWith("demo_") || start.startsWith("case_") || start.startsWith("wf_") ? "" : start;
   });
   const [dismissed, setDismissed] = useState(false);
   const [invitation, setInvitation] = useState(null);
@@ -930,7 +934,12 @@ function InvitationGate() {
   }, [token]);
   useEffect(() => {
     if (!token && !dismissed) {
+      if(new URLSearchParams(location.search).get("view")==="resident")return;
       const lastMode = localStorage.getItem("pulse-last-mode");
+      if(lastMode === "/work/index.html") {
+        api(role,"/v1/workflow/houses").then(houses=>{if(houses.length)navigate(lastMode);else localStorage.removeItem("pulse-last-mode");}).catch(()=>{});
+        return;
+      }
       if (lastMode && lastMode !== "/miniapp/index.html") {
         api(role, "/v1/access/me").then(roles => {
           const destination = rolePages.find(([name, , path]) => path === lastMode && roles.some(item => item.role === name));
@@ -1044,7 +1053,7 @@ function UkAdmin() {
     catch (error) { setNotice(error.message); } finally { setBusy(false); }
   }
   return <main className="shell"><Brand role="Администратору УК" /><section className="hero"><div className="hero-copy"><div className="hero-kicker"><span className="live-dot" /> Кабинет администратора УК</div><h1>Команда УК</h1><p>Приглашайте диспетчеров и администраторов назначенных домов.</p></div></section><Notice message={notice} />
-    {org?.houses?.length > 0 && <section className="case-panel"><label>Дом для рассмотрения обращений<select value={caseHouseId} onChange={e=>setCaseHouseId(e.target.value)}>{org.houses.map(h=><option key={h.id} value={h.id}>{h.address}</option>)}</select></label><StaffCases houseId={caseHouseId} role="admin" api={api} headers={authHeaders}/></section>}
+    {org?.houses?.length > 0 && caseHouseId && <section className="case-panel"><label>Дом для рассмотрения обращений<select value={caseHouseId} onChange={e=>setCaseHouseId(e.target.value)}>{org.houses.map(h=><option key={h.id} value={h.id}>{h.address}</option>)}</select></label><StaffCases houseId={caseHouseId} role="admin" api={api} headers={authHeaders}/><WorkflowStaff key={caseHouseId} houseId={caseHouseId} role="admin" api={api}/><WarrantyRegistry key={caseHouseId} houseId={caseHouseId} role="admin" api={api} headers={authHeaders} canManage/></section>}
     <div className="content-grid"><Card><SectionHeading title="Пригласить сотрудника" /><Field id="uk-org" label="Управляющая компания"><select id="uk-org" value={organizationId} onChange={event => { setOrganizationId(event.target.value); setSelected([]); }}><option value="">Выберите УК</option>{organizations.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}</select></Field>
       <form onSubmit={create}><Field id="staff-role" label="Роль"><select id="staff-role" value={role} onChange={event => { setRole(event.target.value); setSelected([]); }}><option value="DISPATCHER">Диспетчер</option><option value="HOUSE_ADMIN">Администратор дома</option></select></Field><HouseChecks houses={org?.houses || []} selected={selected} onChange={setSelected} /><Button mode="primary" type="submit" disabled={busy || !selected.length || (role === "HOUSE_ADMIN" && selected.length !== 1)}>Создать приглашение</Button></form><InvitationToken token={token} /><IssuedInvitations items={invitations.filter(item => item.organizationId === organizationId)} onRevoke={revokeInvitation} busy={busy} /></Card>
       <Card><SectionHeading title="Назначенные сотрудники" /><div className="item-list">{assignments.map(item => <div className="admin-row" key={`${item.userId}-${item.role}-${item.houseId}`}><div><strong>{item.displayName}</strong><small>{accessRoleLabels[item.role]} · {item.houseAddress} · {item.status}</small></div>{item.status === "ACTIVE" && <button type="button" disabled={busy} onClick={() => revoke(item)}>Отозвать</button>}</div>)}</div></Card>
@@ -1059,6 +1068,8 @@ function App() {
     return () => window.removeEventListener("pulse-access-changed", refresh);
   }, []);
   const path = location.pathname;
+  const startParam = new URLSearchParams(location.search).get("invite") || window.WebApp?.initDataUnsafe?.start_param || new URLSearchParams(location.search).get("WebAppStartParam") || "";
+  if(path === "/work/index.html" || startParam.startsWith("wf_")&&new URLSearchParams(location.search).get("view")!=="resident")return <MaxUI key={revision}><WorkPortal api={api} headers={authHeaders} brand={<Brand role="Специалисту"/>} inviteToken={startParam.startsWith("wf_")?startParam:""} renderCase={props=><CaseDetail {...props} api={api} headers={authHeaders}/>}/></MaxUI>;
   return <MaxUI key={revision}>{path === "/dispatcher/index.html" ? <Dispatcher /> : path === "/admin/index.html" ? <Admin /> : path === "/system/index.html" ? <SystemAdmin /> : path === "/uk/index.html" ? <UkAdmin /> : <InvitationGate />}</MaxUI>;
 }
 
