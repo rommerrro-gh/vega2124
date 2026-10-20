@@ -117,6 +117,11 @@ class MaxResidentBotFlowTest {
         assertEquals(1,jdbc.queryForObject("SELECT count(*) FROM max_bot_outbox WHERE case_id=? AND kind='CASE_EVENT'",Integer.class,c.id()));delivery().sendPending();verify(max).sendMessage(eq("123456"),argThat(body->body.get("text").toString().contains("Нужен ваш ответ")));
         cases.message(c.id(),"Ещё вопрос",UUID.randomUUID().toString(),"demo-dispatcher-1");jdbc.update("UPDATE house_memberships SET access_status='REVOKED' WHERE user_id=? AND role='RESIDENT'",USER);delivery().sendPending();verifyNoMoreInteractions(max);
     }
+    @Test void queuedCaseListIsCancelledIfAccessIsRevokedBeforeSending()throws Exception{
+        create();say("Мои обращения");jdbc.update("UPDATE house_memberships SET access_status='REVOKED' WHERE user_id=? AND role='RESIDENT'",USER);
+        delivery().sendPending();verifyNoInteractions(max);
+        assertEquals(1,jdbc.queryForObject("SELECT count(*) FROM max_bot_outbox WHERE cancelled_at IS NOT NULL",Integer.class));
+    }
     @Test void deliveryRetriesWithoutRepeatingIntake()throws Exception{
         say("Вопрос с проверкой доставки");say("Отправить обращение");int count=cases.mine(USER).size();when(max.sendMessage(anyString(),anyMap())).thenReturn(Mono.error(new RuntimeException("network")));
         delivery().sendPending();assertTrue(jdbc.queryForObject("SELECT sum(attempts) FROM max_bot_outbox",Integer.class)>0);assertEquals(count,cases.mine(USER).size());

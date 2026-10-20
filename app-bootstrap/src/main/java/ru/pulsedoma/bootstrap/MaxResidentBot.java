@@ -15,7 +15,6 @@ import java.util.*;
 @Service
 public class MaxResidentBot {
     enum State { IDLE, COMPOSE, REVIEW, REPLY, CONFIRM, REOPEN }
-    enum DeliveryKind { REPLY, CASE_EVENT }
     record Session(State state,String house,CaseKind kind,String draft,String text,String caseId,Integer revision) {}
     private final JdbcTemplate jdbc;
     private final ObjectMapper mapper;
@@ -93,13 +92,15 @@ public class MaxResidentBot {
         if(text.equals("Мои обращения")||text.equals("/cases")||text.matches("Ещё обращения [0-9]{1,9}")) {
             if(!hasDraft(s))idle(user);
             int page=text.startsWith("Ещё обращения ")?Integer.parseInt(text.substring(text.lastIndexOf(' ')+1)):0;
-            var all=cases.mine(user);int from=Math.min(all.size(),Math.min(page,10000)*6),to=Math.min(all.size(),from+6);
-            StringBuilder content=new StringBuilder("Ваши обращения");List<String> buttons=new ArrayList<>();
+            String house=activeHouse(user);
+            if(house==null){reply(key,user,null,null,messages.body("Выберите дом, чтобы посмотреть обращения.",List.of("Мой дом","Меню"),null));return;}
+            var all=cases.mine(user).stream().filter(c->c.houseId().equals(house)).toList();int from=Math.min(all.size(),Math.min(page,10000)*6),to=Math.min(all.size(),from+6);
+            StringBuilder content=new StringBuilder("Ваши обращения\nДом: "+address(house));List<String> buttons=new ArrayList<>();
             for(var c:all.subList(from,to)){content.append("\n\n№").append(c.number()).append(" · ").append(MaxBotMessages.status(c.status())).append("\n").append(c.address()).append("\n").append(MaxBotMessages.limit(c.description(),100));buttons.add("Открыть №"+c.number());}
             if(to<all.size())buttons.add("Ещё обращения "+(page+1));
             if(all.isEmpty())content.append("\nНовых обращений пока нет. Прежние заявки доступны в приложении.");
             else content.append("\n\nПрежние заявки также доступны в приложении.");
-            buttons.add("Меню");reply(key,user,null,null,messages.body(content.toString(),buttons,null));return;
+            buttons.add("Мой дом");buttons.add("Меню");reply(key,user,house,null,messages.body(content.toString(),buttons,null));return;
         }
         if(text.equals("Мой дом")||text.equals("/house")||text.equals("Сменить дом")||text.matches("Выбрать дом №[0-9]{1,9}")) {
             if(!hasDraft(s))idle(user);
