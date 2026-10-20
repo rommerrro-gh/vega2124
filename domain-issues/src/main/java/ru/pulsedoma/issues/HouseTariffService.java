@@ -38,12 +38,15 @@ public class HouseTariffService {
     private static BusinessException invalid(String text){return new BusinessException("INVALID_TARIFF",text);}
     private static BusinessException conflict(){return new BusinessException("CASE_CONFLICT","Сведения изменились. Обновите раздел тарифов");}
     private Map<String,Object> row(String id){var rows=jdbc.queryForList("SELECT * FROM house_tariffs WHERE id=?",id);if(rows.isEmpty())throw missing();return rows.get(0);}
+    private boolean eligibleStaff(String house,String user){
+        return access.manager(house,user)||access.staff(house,user)||access.exists("SELECT count(*) FROM house_memberships m JOIN users u ON u.id=m.user_id WHERE m.house_id=? AND m.user_id=? AND m.role IN ('DISPATCHER','HOUSE_ADMIN') AND m.verification_status='VERIFIED' AND m.access_status='ACTIVE' AND u.status='ACTIVE'",house,user);
+    }
     private boolean granted(String house,String user,Permission role){
         return access.exists("""
             SELECT count(*) FROM tariff_permissions p JOIN users u ON u.id=p.user_id
             JOIN organization_houses h ON h.organization_id=p.organization_id AND h.house_id=p.house_id
             WHERE p.house_id=? AND p.user_id=? AND p.role=? AND h.status='ACTIVE' AND u.status='ACTIVE'
-            """,house,user,role.name()) && (access.member(house,user)||access.staff(house,user)||access.manager(house,user));
+            """,house,user,role.name()) && eligibleStaff(house,user);
     }
     public Rights rights(String house,String user){
         if(!access.member(house,user)&&!access.manager(house,user)&&!granted(house,user,Permission.EDITOR)&&!granted(house,user,Permission.PUBLISHER))throw missing();
@@ -58,7 +61,7 @@ public class HouseTariffService {
             EXISTS(SELECT 1 FROM house_memberships m WHERE m.user_id=u.id AND m.house_id=? AND m.access_status='ACTIVE' AND m.verification_status='VERIFIED' AND m.role IN ('DISPATCHER','HOUSE_ADMIN'))
             OR EXISTS(SELECT 1 FROM uk_admin_houses a WHERE a.user_id=u.id AND a.house_id=? AND a.access_status='ACTIVE')
             OR EXISTS(SELECT 1 FROM workflow_staff s JOIN organization_houses h ON s.house_id=h.house_id AND s.organization_id=h.organization_id WHERE s.user_id=u.id AND s.house_id=? AND s.active=1 AND h.status='ACTIVE') OR EXISTS(SELECT 1 FROM tariff_permissions p WHERE p.house_id=? AND p.user_id=u.id)) ORDER BY u.display_name
-            """,(rs,n)->new Staff(rs.getString(1),rs.getString(2),access.member(house,rs.getString(1))||access.staff(house,rs.getString(1))||access.manager(house,rs.getString(1)),Arrays.stream(Permission.values()).filter(p->access.exists("SELECT count(*) FROM tariff_permissions WHERE house_id=? AND user_id=? AND role=?",house,rsString(rs,1),p.name())).toList()),house,house,house,house);
+            """,(rs,n)->new Staff(rs.getString(1),rs.getString(2),eligibleStaff(house,rs.getString(1)),Arrays.stream(Permission.values()).filter(p->access.exists("SELECT count(*) FROM tariff_permissions WHERE house_id=? AND user_id=? AND role=?",house,rsString(rs,1),p.name())).toList()),house,house,house,house);
     }
     private static String rsString(java.sql.ResultSet rs,int column){try{return rs.getString(column);}catch(Exception e){throw new IllegalStateException(e);}}
     @Transactional public void grant(String house,String target,TariffRequests.Grant r,String user){manager(house,user);

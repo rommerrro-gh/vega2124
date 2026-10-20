@@ -109,6 +109,14 @@ class HouseTariffFlowTest {
         jdbc.update("UPDATE users SET status='SUSPENDED' WHERE id=?",DISPATCHER);
         assertThrows(BusinessException.class,()->tariffs.withdraw(p.id(),new TariffRequests.Decision(p.revision(),"Попытка"),DISPATCHER));
     }
+    @Test void revokedEmployeeRoleCannotBeReplacedBySeparateResidentMembership(){
+        var p=publish(document(draft()));
+        jdbc.update("INSERT OR IGNORE INTO house_memberships(house_id,user_id,role,verification_status,access_status) VALUES (?,?,'RESIDENT','VERIFIED','ACTIVE')",HOUSE,DISPATCHER);
+        jdbc.update("UPDATE house_memberships SET access_status='REVOKED' WHERE house_id=? AND user_id=? AND role='DISPATCHER'",HOUSE,DISPATCHER);
+        assertFalse(tariffs.rights(HOUSE,DISPATCHER).canPublish());
+        assertThrows(BusinessException.class,()->tariffs.withdraw(p.id(),new TariffRequests.Decision(p.revision(),"Попытка"),DISPATCHER));
+        assertEquals(1,tariffs.catalogue(HOUSE,LocalDate.parse("2026-06-01"),DISPATCHER).rates().size());
+    }
     @Test void suspendedOrganizationDoesNotKeepTariffPermissionsViaResidentMembership(){
         var p=publish(document(draft()));jdbc.update("UPDATE organization_houses SET status='SUSPENDED' WHERE house_id=?",HOUSE);
         assertFalse(tariffs.rights(HOUSE,DISPATCHER).canPublish());assertThrows(BusinessException.class,()->tariffs.withdraw(p.id(),new TariffRequests.Decision(p.revision(),"Попытка"),DISPATCHER));
