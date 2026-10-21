@@ -1,3 +1,4 @@
+import {HouseOperations,OperationsManagement} from "./operations.jsx";
 import {ControlPanel,ExchangeRegistry} from "./case-exchange.jsx";
 import {HouseTariffs} from "./house-tariffs.jsx";
 import React, {useEffect,useState} from "react";
@@ -103,11 +104,11 @@ function ActForm({initial={},evidence,onSubmit,busy,correctionRequired=false}){r
 
 export function WorkPortal({api,headers,brand,renderCase,inviteToken=""}){
  const role=["admin","dispatcher"].includes(new URLSearchParams(location.search).get("demoSession"))?new URLSearchParams(location.search).get("demoSession"):"true";
- const [houses,setHouses]=useState([]),[houseId,setHouseId]=useState(""),[items,setItems]=useState([]),[context,setContext]=useState(null),[detail,setDetail]=useState(null),[notice,setNotice]=useState(""),[token,setToken]=useState(inviteToken),[busy,setBusy]=useState(false),[filter,setFilter]=useState("ALL");
+ const [houses,setHouses]=useState([]),[houseId,setHouseId]=useState(new URLSearchParams(location.search).get("houseId")||""),[items,setItems]=useState([]),[context,setContext]=useState(null),[detail,setDetail]=useState(null),[notice,setNotice]=useState(""),[token,setToken]=useState(inviteToken),[busy,setBusy]=useState(false),[filter,setFilter]=useState("ALL");
  async function loadHouses(){const h=await api(role,"/v1/workflow/houses");setHouses(h);setHouseId(old=>h.some(i=>i.id===old)?old:h[0]?.id||"");}
  async function load(){if(!houseId)return;const [list,ctx]=await Promise.all([api(role,`/v1/houses/${houseId}/case-queue`),api(role,`/v1/houses/${houseId}/case-context`)]);setItems(list);setContext(ctx);}
  useEffect(()=>{loadHouses().catch(e=>setNotice(e.message));},[role]);
- useEffect(()=>{let active=true;setDetail(null);setItems([]);setContext(null);setNotice("");if(houseId)Promise.all([api(role,`/v1/houses/${houseId}/case-queue`),api(role,`/v1/houses/${houseId}/case-context`)]).then(([list,ctx])=>{if(active){setItems(list);setContext(ctx);}}).catch(e=>{if(active)setNotice(e.message);});return()=>{active=false;};},[houseId,role]);
+ useEffect(()=>{let active=true;setDetail(null);setItems([]);setContext(null);setNotice("");if(houseId)Promise.all([api(role,`/v1/houses/${houseId}/case-queue`),api(role,`/v1/houses/${houseId}/case-context`)]).then(([list,ctx])=>{if(active){setItems(list);setContext(ctx);const linked=list.find(c=>c.id===new URLSearchParams(location.search).get("caseId"));if(linked)setDetail(linked);}}).catch(e=>{if(active)setNotice(e.message);});return()=>{active=false;};},[houseId,role]);
  async function accept(){setBusy(true);setNotice("");try{const h=await api(role,"/v1/workflow/invitations/accept",{method:"POST",body:JSON.stringify({token})});setToken("");localStorage.setItem("pulse-last-mode","/work/index.html");await loadHouses();setHouseId(h.id);}catch(e){setNotice(e.message);}finally{setBusy(false);}}
  const house=houses.find(h=>h.id===houseId);
  const visible=items.filter(i=>filter==="ALL"||filter==="OVERDUE"&&i.status!=="CLOSED"&&(i.overdueWorkCount>0||i.dueAt&&new Date(i.dueAt)<new Date())||filter==="WARRANTY"&&i.kind==="WARRANTY");
@@ -117,6 +118,7 @@ export function WorkPortal({api,headers,brand,renderCase,inviteToken=""}){
  {!houses.length&&!token&&<section className="case-panel"><h2>Рабочие назначения пока не подключены</h2><p>Откройте приглашение от администратора УК. Если вы уже сотрудник, попросите назначить вас на нужные обращения.</p></section>}
  {detail?renderCase({item:detail,context,role,onChange:c=>{setDetail(c);setItems(list=>list.map(i=>i.id===c.id?c:i));},onClose:()=>setDetail(null)}):houseId&&<section className="case-panel"><h2>Рабочая очередь</h2><label>Показать<select value={filter} onChange={e=>setFilter(e.target.value)}><option value="ALL">Все доступные</option><option value="WARRANTY">Строительные дефекты</option><option value="OVERDUE">Прошёл срок шага или задания</option></select></label><div className="case-list">{visible.map(c=><button key={c.id} type="button" className="case-list-item" disabled={!c.fullAccess&&!context?.canManagePermissions} onClick={()=>setDetail(c)}><small>Обращение №{c.number}</small><strong>{c.description}</strong><span>{c.nextStep}</span>{c.openWorkCount>0&&<small>Открытых заданий: {c.openWorkCount}</small>}{c.overdueWorkCount>0&&<strong className="workflow-overdue">Прошёл срок заданий: {c.overdueWorkCount}</strong>}<small>{date(c.dueAt)}</small></button>)}{!visible.length&&<p className="muted">В этой очереди обращений пока нет.</p>}</div></section>}
  {houseId&&<><ControlPanel key={`control:${houseId}`} houseId={houseId} role={role} api={api} renderCase={renderCase}/><ExchangeRegistry key={`channels:${houseId}`} houseId={houseId} role={role} api={api} canManage={house?.canManageRegistry}/></>}
+ {houseId&&<><HouseOperations key={`ops:${houseId}`} houseId={houseId} role={role} api={api} optional/><OperationsManagement key={`monitor:${houseId}`} houseId={houseId} role={role} api={api}/></>}
  {houseId&&<HouseTariffs key={`tariffs:${houseId}`} houseId={houseId} role={role} api={api} headers={headers} optional/>}
  {house?.canManageRegistry&&<WorkflowStaff key={houseId} houseId={houseId} role={role} api={api}/>}{house?.canReadRegistry&&<WarrantyRegistry key={houseId} houseId={houseId} role={role} api={api} headers={headers} canManage={house.canManageRegistry}/>}
  </div></main>;

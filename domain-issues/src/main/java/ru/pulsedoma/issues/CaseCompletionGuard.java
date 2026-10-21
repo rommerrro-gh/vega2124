@@ -9,6 +9,8 @@ public class CaseCompletionGuard {
     private final JdbcTemplate jdbc;
     public CaseCompletionGuard(JdbcTemplate jdbc){this.jdbc=jdbc;}
     public void requireComplete(String id){
+        if(jdbc.queryForObject("SELECT count(*) FROM case_visits WHERE case_id=? AND state NOT IN ('COMPLETED','CANCELLED')",Integer.class,id)>0)throw new BusinessException("INVALID_CASE","Сначала завершите или обоснованно отмените согласование визита.");
+        if(jdbc.queryForObject("SELECT count(*) FROM case_mass_links l JOIN house_mass_problems p ON p.id=l.problem_id WHERE l.case_id=? AND p.state IN ('DRAFT','ACTIVE')",Integer.class,id)>0)throw new BusinessException("INVALID_CASE","Общая работа ещё не завершена. Если личный вопрос уже решён независимо, снимите связь с общей проблемой с пояснением.");
         if(jdbc.queryForObject("SELECT count(*) FROM exchange_packets WHERE case_id=? AND state NOT IN ('REVIEWED','CANCELLED')",Integer.class,id)>0)throw new BusinessException("INVALID_CASE","Сначала завершите передачу материалов и рассмотрите ответ организации или обоснованно отмените передачу.");
         if(jdbc.queryForObject("SELECT count(*) FROM resident_cases WHERE id=? AND kind='PAYMENT'",Integer.class,id)>0){
             var reviews=jdbc.queryForList("SELECT id,outcome FROM billing_reviews WHERE case_id=? AND state='PUBLISHED' AND cycle=(SELECT count(*) FROM case_events WHERE case_id=? AND type='REOPENED') ORDER BY rowid DESC LIMIT 1",id,id);

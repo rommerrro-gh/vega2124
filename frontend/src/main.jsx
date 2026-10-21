@@ -1,3 +1,4 @@
+import {OperationsInbox} from "./operations.jsx";
 import {ExchangePortal} from "./case-exchange.jsx";
 import React, { useEffect, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
@@ -200,7 +201,7 @@ function Brand({ role }) {
           <button type="button" onClick={() => demoAction("exit")}>Выйти из демонстрации</button></>}
       </nav>
     </details> : <span className="max-chip"><span className="max-dot" /> {role} · MAX</span>}
-  </header>{demo?.active && <div className="guided-demo-badge">Демонстрационный режим · {demo.address}</div>}
+  </header><OperationsInbox api={api} role={location.pathname==="/uk/index.html"||location.pathname==="/admin/index.html"?"admin":location.pathname==="/dispatcher/index.html"?"dispatcher":new URLSearchParams(location.search).get("demoSession")||"true"} onOpen={n=>navigate(location.pathname==="/miniapp/index.html"?`/miniapp/index.html?view=resident&caseId=${encodeURIComponent(n.case_id)}`:`/work/index.html?houseId=${encodeURIComponent(n.house_id)}&caseId=${encodeURIComponent(n.case_id)}${localDemo?"&demoSession=dispatcher":""}`)}/>{demo?.active && <div className="guided-demo-badge">Демонстрационный режим · {demo.address}</div>}
     {help && <div className="guided-demo-help"><strong>Проверка сценария</strong><ol>
       <li>В роли жителя переключите два дома: у них одна УК, но разные паспорта и опросы. Вернитесь в первый дом и создайте обращение «Не работает свет в подъезде», место «Подъезд 1, этаж 2».</li>
       <li>Присоединитесь к похожей заявке или создайте новую.</li>
@@ -498,7 +499,7 @@ function Resident() {
         request("/v1/access/me"), request("/v1/me/active-house"),
       ]);
       setHouses(myHouses); setIssues(myIssues);
-      const launch = window.WebApp?.initDataUnsafe?.start_param || new URLSearchParams(location.search).get("WebAppStartParam") || "";
+      const launch = new URLSearchParams(location.search).get("caseId") ? `case_${new URLSearchParams(location.search).get("caseId")}` : window.WebApp?.initDataUnsafe?.start_param || new URLSearchParams(location.search).get("WebAppStartParam") || "";
       const match = typeof launch === "string" && /^case_([0-9a-f-]{36})$/.exec(launch);
       let linkedHouse = null;
       if (match) {
@@ -636,7 +637,7 @@ function Resident() {
     <GuidedDemoEntry />
     {selectedHouse && <div className="house-switcher"><span className="house-switcher-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M3.5 10.5 12 3.5l8.5 7v9a1 1 0 0 1-1 1h-15a1 1 0 0 1-1-1z"/><path d="M9.5 20.5v-6h5v6"/></svg></span><div className="house-switcher-copy"><span>Ваш дом</span>{houses.length > 1 ? <select aria-label="Выбранный дом" value={selectedHouseId} disabled={step !== "form" || !!reportId} onChange={event => { setSelectedHouseId(event.target.value); setPlaceFeatures(defaultPlace(reportCategory)); request("/v1/me/active-house", { method: "PUT", body: JSON.stringify({ houseId: event.target.value }) }).catch(fail); }}>{houses.map(house => <option key={house.id} value={house.id}>{house.address}</option>)}</select> : <strong>{selectedHouse.address}</strong>}</div></div>}
     {!!awaitingVerification.length && step === "form" && <div className="priority-notice"><div><strong>Подтвердите выполнение работ</strong><p>{countLabel(awaitingVerification.length, "заявка ждёт", "заявки ждут", "заявок ждут")} вашего ответа.</p></div><Button mode="secondary" type="button" onClick={() => showIssue(awaitingVerification[0])}>Открыть</Button></div>}
-    {selectedHouse && step === "form" && <HouseTariffs key={`tariffs:${demoSession}:${selectedHouseId}`} houseId={selectedHouseId} role={demoSession} api={api} headers={authHeaders} onQuestion={canReport?()=>document.getElementById("resident-payment-start")?.click():undefined}/>}
+    {selectedHouse && step === "form" && <HouseTariffs key={`tariffs:${demoSession}:${selectedHouseId}`} houseId={selectedHouseId} role={demoSession} api={api} headers={authHeaders} onQuestion={canReport?text=>{if(typeof text==="string")window.dispatchEvent(new CustomEvent("pulse-payment-question",{detail:{houseId:selectedHouseId,text}}));else document.getElementById("resident-payment-start")?.click();}:undefined}/>}
     {selectedHouse && step === "form" && <ResidentCases key={`${demoSession}:${selectedHouseId}`} house={selectedHouse} role={demoSession} api={api} headers={authHeaders} canSubmit={canReport} initialCaseId={initialCaseId} legacyIssues={houseIssues} legacyStatusLabels={statusLabels} onLegacyOpen={showIssue} />}
     {selectedHouse && canReport && step === "form" && !showReportForm && <div className="start-action"><div><strong>Хотите найти похожую проблему?</strong><p>Можно дополнительно указать категорию и место.</p></div><Button mode="secondary" type="button" onClick={() => setShowReportForm(true)}>Проверить похожие заявки</Button></div>}
     <div className="content-grid">

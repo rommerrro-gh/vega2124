@@ -81,3 +81,5 @@
 
 - [Этапы 11–12 и связанная часть 13](implementation-11-13.md)
 - [Пилот для всех участников](pilot-all-participants.md)
+
+- [Визиты, общие проблемы, работы, уведомления, сравнение ставок и аналитика](implementation-house-operations.md)

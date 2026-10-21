@@ -1,3 +1,4 @@
+import {PaymentComparison} from "./operations.jsx";
 import React,{useEffect,useState} from "react";
 import "./tariffs.css";
 const units={M3:"м³",KWH:"кВт·ч",GCAL:"Гкал",M2:"м²",PERSON:"чел.",MONTH:"месяц",OTHER:"другая единица"};
@@ -42,6 +43,7 @@ export function HouseTariffs({houseId,role,api,headers,onQuestion,optional=false
  const json=(path,method,body)=>run(path,{method,body:JSON.stringify(body)});
  if(unavailable)return null;
  return <details className="case-panel case-workspace tariff-section"><summary>Платежи и тарифы</summary><p>Проверенные ставки вашего дома, периоды действия и документы-основания. Это справочные сведения: личная сумма зависит от объёма и условий начисления.</p><p className="case-notice" role="status">{notice}</p>
+ <PaymentComparison key={houseId} houseId={houseId} role={role} api={api} onQuestion={onQuestion}/>
  <div className="tariff-toolbar"><Field label="Показать ставки на дату"><input type="date" required disabled={busy} value={selectedDate} onChange={e=>{if(e.target.value)setDate(e.target.value);}}/></Field><button type="button" className="case-secondary" disabled={busy} onClick={()=>{load().then(apply).catch(e=>setNotice(e.message));}}>Обновить</button></div>
  {!loaded&&<p>Загружаем сведения…</p>}{catalogue&&<>{selectedDate!==day()&&<p className="tariff-date-note">Вы смотрите сведения на {date(selectedDate)}.</p>}{!catalogue.rates.length&&<p className="tariff-empty">На выбранную дату проверенные ставки пока не опубликованы. Это не означает, что плата отсутствует. Можно задать вопрос сотруднику.</p>}<div className="tariff-grid">{catalogue.rates.map(r=><RateCard key={r.id} rate={r} role={role} headers={headers} onError={setNotice}/>)}</div>
  {!!catalogue.upcoming.length&&<details><summary>Предстоящие изменения · {catalogue.upcoming.length}</summary>{catalogue.upcoming.map((c,i)=><p key={`${c.seriesId}:${c.validFrom}:${i}`}><strong>{c.title} · с {date(c.validFrom)}</strong><br/>{c.previousAmount!=null?`${amount(c.previousAmount)} → `:""}{amount(c.amount)} ₽ / {c.unitLabel}<br/>{c.explanation}</p>)}</details>}

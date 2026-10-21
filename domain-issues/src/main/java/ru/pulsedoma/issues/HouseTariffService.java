@@ -17,8 +17,9 @@ public class HouseTariffService {
     private final CaseWorkAccess access;
     private final AttachmentStore store;
     private final ObjectMapper mapper;
-    public HouseTariffService(JdbcTemplate jdbc,CaseWorkAccess access,AttachmentStore store,ObjectMapper mapper) {
-        this.jdbc=jdbc;this.access=access;this.store=store;this.mapper=mapper;
+    private final OperationsNotifications notifications;
+    public HouseTariffService(JdbcTemplate jdbc,CaseWorkAccess access,AttachmentStore store,ObjectMapper mapper,OperationsNotifications notifications) {
+        this.jdbc=jdbc;this.access=access;this.store=store;this.mapper=mapper;this.notifications=notifications;
     }
     public record Rights(boolean canManage,boolean canEdit,boolean canPublish) {}
     public record Staff(String userId,String name,boolean active,List<Permission> permissions) {}
@@ -123,13 +124,14 @@ public class HouseTariffService {
         }else if(access.exists("SELECT count(*) FROM house_tariffs WHERE series_id=? AND valid_from=? AND published_at IS NOT NULL AND state IN ('PUBLISHED','WITHDRAWN')",old.get("series_id"),old.get("valid_from")))throw invalid("На эту дату уже есть публикация. Для исправления создайте её новую версию");
         if(replaced==null&&access.exists("SELECT count(*) FROM house_tariffs WHERE house_id=? AND series_id<>? AND state='PUBLISHED' AND title=? COLLATE NOCASE AND provider=? COLLATE NOCASE AND applicability=? COLLATE NOCASE AND unit=? AND unit_label=? COLLATE NOCASE",old.get("house_id"),old.get("series_id"),old.get("title"),old.get("provider"),old.get("applicability"),old.get("unit"),old.get("unit_label")))throw invalid("Эта услуга с такой применимостью уже опубликована. Создайте новый период из её карточки");
         if(jdbc.update("UPDATE house_tariffs SET state='PUBLISHED',published_by=?,published_at=?,revision=revision+1,updated_at=? WHERE id=? AND revision=? AND state='DRAFT'",user,now(),now(),target,r.revision())!=1)throw conflict();
-        history(target,Action.PUBLISHED,r.reason(),user);return view(target,true);
+        history(target,Action.PUBLISHED,r.reason(),user);announce(target,"Опубликована проверенная ставка. Посмотрите основание и сравнение в разделе платежей.",user);return view(target,true);
     }
     @Transactional public Rate withdraw(String target,TariffRequests.Decision r,String user){var old=row(target);require(str(old,"house_id"),user,Permission.PUBLISHER);
         if(!"PUBLISHED".equals(str(old,"state")))throw invalid("Отозвать можно опубликованную запись");if(revision(old)!=r.revision())throw conflict();
         if(jdbc.update("UPDATE house_tariffs SET state='WITHDRAWN',revision=revision+1,updated_at=? WHERE id=? AND revision=? AND state='PUBLISHED'",now(),target,r.revision())!=1)throw conflict();
-        history(target,Action.WITHDRAWN,r.reason(),user);return view(target,true);
+        history(target,Action.WITHDRAWN,r.reason(),user);announce(target,"Публикация ставки отозвана. Проверьте обновлённые сведения в разделе платежей.",user);return view(target,true);
     }
+    private void announce(String target,String text,String user){var r=row(target);String org=jdbc.queryForObject("SELECT organization_id FROM tariff_permissions WHERE house_id=? AND user_id=? AND role='PUBLISHER'",String.class,r.get("house_id"),user);notifications.broadcast(str(r,"house_id"),OperationsTypes.NotificationKind.PAYMENT,target,revision(r),text,org);}
     private String json(Object value){try{return mapper.writeValueAsString(value);}catch(Exception e){throw new IllegalStateException(e);}}
     private void history(String target,Action action,String reason,String user){try{var row=row(target);jdbc.update("INSERT INTO tariff_history(id,tariff_id,revision,actor_id,action,reason,snapshot_json,created_at) VALUES (?,?,?,?,?,?,?,?)",id(),target,revision(row),user,action.name(),reason,mapper.writeValueAsString(row),now());}catch(com.fasterxml.jackson.core.JsonProcessingException e){throw new IllegalStateException(e);}}
     private Rate view(String target,boolean internal){var r=row(target);

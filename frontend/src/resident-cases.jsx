@@ -1,3 +1,4 @@
+import {CaseVisits,CaseMassProblem,HouseOperations,OperationsManagement} from "./operations.jsx";
 import React, { useEffect, useState } from "react";
 import {BillingCase,BillingQueue} from "./billing-cases.jsx";
 import {CaseExchange,ControlPanel,ExchangeRegistry} from "./case-exchange.jsx";
@@ -60,6 +61,7 @@ export function CaseDetail({ item, api, role, headers, context, onChange, onClos
       <button type="button" className="case-secondary" disabled={busy} onClick={()=>act(`/v1/cases/${item.id}/response`,{confirmed:false,revision:item.revision,comment:message})}>Вопрос остался — прошу проверить</button>
     </div>}
     {item.fullAccess&&<>
+      <CaseVisits item={item} role={role} api={api} onChange={onChange}/><CaseMassProblem item={item} role={role} api={api} onChange={onChange}/>
       <CaseExchange item={item} role={role} api={api} headers={headers} onChange={onChange}/>
       {item.kind==="PAYMENT"&&<BillingCase item={item} role={role} api={api} headers={headers} onChange={onChange}/>}
       {item.fullAccess&&item.kind!=="PAYMENT"&&<CaseWorkflow item={item} role={role} api={api} headers={headers} onChange={onChange}/>}
@@ -107,6 +109,7 @@ export function ResidentCases({ house, role, api, headers, canSubmit, legacyIssu
       try{const saved=JSON.parse(sessionStorage.getItem(`pulse-case:${ctx.actorId}:${houseId}`));if(saved&&Date.now()-saved.savedAt<86400000)setDraft(saved);}catch{}
     }).catch(e=>{if(active)setNotice(e.message);});return()=>{active=false;};
   },[houseId,role]);
+  useEffect(()=>{function question(e){if(e.detail?.houseId!==houseId||!context)return;if(draft){setNotice("Сохранённый черновик не заменён. Завершите его или удалите перед новым вопросом.");setCompose(true);return;}save({kind:"PAYMENT",description:e.detail.text||"",location:"",clientRequestId:key()});setCompose(true);setReview(false);setDetail(null);}window.addEventListener("pulse-payment-question",question);return()=>window.removeEventListener("pulse-payment-question",question);},[houseId,context,draft]);
   function save(next){setDraft(next);try{sessionStorage.setItem(storageKey,JSON.stringify({...next,savedAt:Date.now()}));}catch{setNotice("Браузер не сохранил черновик. Не закрывайте страницу до отправки.");}}
   function begin(kind){if(!draft)save({kind,description:"",location:"",clientRequestId:key()});setCompose(true);setReview(false);setDetail(null);}
   function changed(next){setDetail(next);setItems(list=>[next,...list.filter(c=>c.id!==next.id)].sort((a,b)=>b.number-a.number));}
@@ -129,6 +132,7 @@ export function ResidentCases({ house, role, api, headers, canSubmit, legacyIssu
   const legacyVisible=legacyIssues.filter(i=>filter==="ALL" || (filter==="ACTIVE" ? !["CLOSED_CONFIRMED","CLOSED_UNCONFIRMED","WITHDRAWN","REJECTED"].includes(i.status) : filter==="WAITING" ? i.status==="VERIFICATION_72H" : filter==="PROBLEM"));
   return <section className="case-workspace" aria-label="Обращения по дому">
     <Notice>{notice}</Notice>
+    <HouseOperations houseId={houseId} role={role} api={api} canJoin={canSubmit} onJoined={changed}/>
     {context?.canReview&&<details className="case-panel"><summary>Рабочие обращения — доступ сотрудника</summary><StaffCases houseId={houseId} role={role} api={api} headers={headers}/></details>}
     {!!waiting.length&&!detail&&!compose&&<div className="case-next"><strong>Нужен ваш ответ · {waiting.length}</strong><p>{waiting[0].nextStep}</p><button type="button" onClick={()=>setDetail(waiting[0])}>Открыть обращение</button></div>}
     {!detail&&!compose&&canSubmit&&<div className="case-start">
@@ -166,6 +170,7 @@ export function StaffCases({houseId,role,api,headers}) {
   return <section className="case-workspace"><Notice>{notice}</Notice>
     <ControlPanel key={`control:${houseId}:${context?.staff.map(s=>s.billingAccess).join()}`} houseId={houseId} role={role} api={api} renderCase={props=><CaseDetail {...props} api={api} headers={headers}/>}/>
     <ExchangeRegistry key={`channels:${houseId}`} houseId={houseId} role={role} api={api} canManage={context?.canManagePermissions}/>
+    <HouseOperations houseId={houseId} role={role} api={api} optional/><OperationsManagement houseId={houseId} role={role} api={api}/>
     <BillingQueue houseId={houseId} role={role} api={api} refreshKey={context?.staff.find(s=>s.id===context.actorId)?.billingAccess} renderCase={props=><CaseDetail {...props} context={context} role={role} api={api} headers={headers}/>}/>
     {context?.canManagePermissions&&<details className="case-panel"><summary>Доступ к личным вопросам по начислениям</summary><p className="muted">Это отдельное полномочие. Выдавайте его только сотруднику, который рассматривает начисления. Оно не предоставляется вместе с ролью администратора.</p>{context.staff.filter(s=>s.billingAssignable!==false).map(s=><div className="case-permission" key={s.id}><span>{s.name}</span><button type="button" className="case-secondary" onClick={()=>permission(s)}>{s.billingAccess?"Отозвать доступ":"Разрешить рассмотрение"}</button></div>)}</details>}
     {detail?<CaseDetail item={detail} context={context} role={role} api={api} headers={headers} onChange={next=>{setDetail(next);setItems(list=>list.map(c=>c.id===next.id?next:c));}} onClose={()=>setDetail(null)}/>:
