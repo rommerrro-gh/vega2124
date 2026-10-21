@@ -220,6 +220,7 @@ public class ResidentCaseService {
         if (!access.eligible(house,target,function) || (CaseKind.PAYMENT.name().equals(str(r,"kind"))&&!billing(house,target)))
             throw invalid("Выберите сотрудника с необходимым доступом");
         if(jdbc.update("UPDATE resident_cases SET revision=revision+1,updated_at=? WHERE id=? AND revision=?",now(),id,revision)!=1)throw conflict();
+        if(function==CaseFunction.COORDINATOR)jdbc.update("DELETE FROM case_control_grants WHERE case_id=? AND user_id=?",id,target);
         if(enabled)jdbc.update("""
             INSERT INTO case_collaborators(case_id,user_id,function,assigned_by,created_at,source_organization_id) VALUES (?,?,?,?,?,(SELECT organization_id FROM organization_houses WHERE house_id=? AND status='ACTIVE' LIMIT 1))
             ON CONFLICT(case_id,user_id,function) DO UPDATE SET function=excluded.function,assigned_by=excluded.assigned_by,source_organization_id=excluded.source_organization_id

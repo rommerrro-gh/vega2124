@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from "react";
 import {BillingCase,BillingQueue} from "./billing-cases.jsx";
+import {CaseExchange,ControlPanel,ExchangeRegistry} from "./case-exchange.jsx";
 import {CaseWorkflow} from "./warranty-workflow.jsx";
 
 const statuses = { RECEIVED: "Принято к рассмотрению", IN_REVIEW: "Разбираемся", WAITING_RESIDENT: "Нужен ваш ответ", IN_PROGRESS: "В работе", RESULT_PROPOSED: "Посмотрите результат", CLOSED: "Результат подтверждён", REOPENED: "Проверяем повторно" };
@@ -59,6 +60,7 @@ export function CaseDetail({ item, api, role, headers, context, onChange, onClos
       <button type="button" className="case-secondary" disabled={busy} onClick={()=>act(`/v1/cases/${item.id}/response`,{confirmed:false,revision:item.revision,comment:message})}>Вопрос остался — прошу проверить</button>
     </div>}
     {item.fullAccess&&<>
+      <CaseExchange item={item} role={role} api={api} headers={headers} onChange={onChange}/>
       {item.kind==="PAYMENT"&&<BillingCase item={item} role={role} api={api} headers={headers} onChange={onChange}/>}
       {item.fullAccess&&item.kind!=="PAYMENT"&&<CaseWorkflow item={item} role={role} api={api} headers={headers} onChange={onChange}/>}
     <h3>История и ответы</h3><ol className="case-timeline">{item.events.map(event=><li key={event.id}><small>{date(event.createdAt)} · {event.actor}</small><p>{event.text}</p></li>)}</ol>
@@ -162,6 +164,8 @@ export function StaffCases({houseId,role,api,headers}) {
   async function permission(staff){try{await api(role,`/v1/houses/${houseId}/case-billing-permissions/${staff.id}`,{method:"PUT",body:JSON.stringify({enabled:!staff.billingAccess})});await refresh();}catch(e){setNotice(e.message);}}
   if(!houseId)return null;
   return <section className="case-workspace"><Notice>{notice}</Notice>
+    <ControlPanel key={`control:${houseId}:${context?.staff.map(s=>s.billingAccess).join()}`} houseId={houseId} role={role} api={api} renderCase={props=><CaseDetail {...props} api={api} headers={headers}/>}/>
+    <ExchangeRegistry key={`channels:${houseId}`} houseId={houseId} role={role} api={api} canManage={context?.canManagePermissions}/>
     <BillingQueue houseId={houseId} role={role} api={api} refreshKey={context?.staff.find(s=>s.id===context.actorId)?.billingAccess} renderCase={props=><CaseDetail {...props} context={context} role={role} api={api} headers={headers}/>}/>
     {context?.canManagePermissions&&<details className="case-panel"><summary>Доступ к личным вопросам по начислениям</summary><p className="muted">Это отдельное полномочие. Выдавайте его только сотруднику, который рассматривает начисления. Оно не предоставляется вместе с ролью администратора.</p>{context.staff.filter(s=>s.billingAssignable!==false).map(s=><div className="case-permission" key={s.id}><span>{s.name}</span><button type="button" className="case-secondary" onClick={()=>permission(s)}>{s.billingAccess?"Отозвать доступ":"Разрешить рассмотрение"}</button></div>)}</details>}
     {detail?<CaseDetail item={detail} context={context} role={role} api={api} headers={headers} onChange={next=>{setDetail(next);setItems(list=>list.map(c=>c.id===next.id?next:c));}} onClose={()=>setDetail(null)}/>:
