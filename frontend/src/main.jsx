@@ -191,7 +191,7 @@ function Brand({ role }) {
       <nav aria-label="Доступные роли">
         {available.map(([name, label, path]) => <button key={name} type="button"
           aria-current={location.pathname === path ? "page" : undefined}
-          onClick={() => navigate(path)}>{label}{location.pathname === path ? " ✓" : ""}</button>)}
+          onClick={() => navigate(path === "/miniapp/index.html" ? `${path}?view=resident` : path)}>{label}{location.pathname === path ? " ✓" : ""}</button>)}
         {(workAccess||localDemo)&&<button type="button" onClick={()=>navigate("/work/index.html"+(localDemo?`?demoSession=${["/uk/index.html","/admin/index.html"].includes(location.pathname)?"admin":"dispatcher"}`:""))}>Осмотры и работы</button>}
         {(exchangeAccess||localDemo)&&<button type="button" onClick={()=>navigate("/exchange/index.html")}>Полученные материалы организаций</button>}
         {demo?.active && <><hr /><span className="role-menu-caption">Демонстрационный режим · тестовые данные</span>
@@ -1078,7 +1078,7 @@ function App() {
   }, []);
   const path = location.pathname;
   const startParam = new URLSearchParams(location.search).get("invite") || window.WebApp?.initDataUnsafe?.start_param || new URLSearchParams(location.search).get("WebAppStartParam") || "";
-  if(path === "/exchange/index.html" || startParam.startsWith("xp_"))return <MaxUI key={revision}><ExchangePortal api={api} headers={authHeaders} brand={<Brand role="Получателю материалов"/>} inviteToken={startParam.startsWith("xp_")?startParam:""}/></MaxUI>;
+  if(path === "/exchange/index.html" || ["/","/miniapp/index.html"].includes(path)&&startParam.startsWith("xp_")&&new URLSearchParams(location.search).get("view")!=="resident")return <MaxUI key={revision}><ExchangePortal api={api} headers={authHeaders} brand={<Brand role="Получателю материалов"/>} inviteToken={startParam.startsWith("xp_")?startParam:""}/></MaxUI>;
   if(path === "/work/index.html" || startParam.startsWith("wf_")&&new URLSearchParams(location.search).get("view")!=="resident")return <MaxUI key={revision}><WorkPortal api={api} headers={authHeaders} brand={<Brand role="Специалисту"/>} inviteToken={startParam.startsWith("wf_")?startParam:""} renderCase={props=><CaseDetail {...props} api={api} headers={authHeaders}/>}/></MaxUI>;
   return <MaxUI key={revision}>{path === "/dispatcher/index.html" ? <Dispatcher /> : path === "/admin/index.html" ? <Admin /> : path === "/system/index.html" ? <SystemAdmin /> : path === "/uk/index.html" ? <UkAdmin /> : <InvitationGate />}</MaxUI>;
 }
