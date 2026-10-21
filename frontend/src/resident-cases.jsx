@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from "react";
+import {BillingCase,BillingQueue} from "./billing-cases.jsx";
 import {CaseWorkflow} from "./warranty-workflow.jsx";
 
 const statuses = { RECEIVED: "Принято к рассмотрению", IN_REVIEW: "Разбираемся", WAITING_RESIDENT: "Нужен ваш ответ", IN_PROGRESS: "В работе", RESULT_PROPOSED: "Посмотрите результат", CLOSED: "Результат подтверждён", REOPENED: "Проверяем повторно" };
@@ -58,6 +59,7 @@ export function CaseDetail({ item, api, role, headers, context, onChange, onClos
       <button type="button" className="case-secondary" disabled={busy} onClick={()=>act(`/v1/cases/${item.id}/response`,{confirmed:false,revision:item.revision,comment:message})}>Вопрос остался — прошу проверить</button>
     </div>}
     {item.fullAccess&&<>
+      {item.kind==="PAYMENT"&&<BillingCase item={item} role={role} api={api} headers={headers} onChange={onChange}/>}
       {item.fullAccess&&item.kind!=="PAYMENT"&&<CaseWorkflow item={item} role={role} api={api} headers={headers} onChange={onChange}/>}
     <h3>История и ответы</h3><ol className="case-timeline">{item.events.map(event=><li key={event.id}><small>{date(event.createdAt)} · {event.actor}</small><p>{event.text}</p></li>)}</ol>
       {item.status!=="CLOSED"&&<form onSubmit={async event=>{event.preventDefault();if(await act(`/v1/cases/${item.id}/messages`,{text:message,clientRequestId:messageKey})){setMessage("");setMessageKey(key());}}}>
@@ -160,6 +162,7 @@ export function StaffCases({houseId,role,api,headers}) {
   async function permission(staff){try{await api(role,`/v1/houses/${houseId}/case-billing-permissions/${staff.id}`,{method:"PUT",body:JSON.stringify({enabled:!staff.billingAccess})});await refresh();}catch(e){setNotice(e.message);}}
   if(!houseId)return null;
   return <section className="case-workspace"><Notice>{notice}</Notice>
+    <BillingQueue houseId={houseId} role={role} api={api} refreshKey={context?.staff.find(s=>s.id===context.actorId)?.billingAccess} renderCase={props=><CaseDetail {...props} context={context} role={role} api={api} headers={headers}/>}/>
     {context?.canManagePermissions&&<details className="case-panel"><summary>Доступ к личным вопросам по начислениям</summary><p className="muted">Это отдельное полномочие. Выдавайте его только сотруднику, который рассматривает начисления. Оно не предоставляется вместе с ролью администратора.</p>{context.staff.filter(s=>s.billingAssignable!==false).map(s=><div className="case-permission" key={s.id}><span>{s.name}</span><button type="button" className="case-secondary" onClick={()=>permission(s)}>{s.billingAccess?"Отозвать доступ":"Разрешить рассмотрение"}</button></div>)}</details>}
     {detail?<CaseDetail item={detail} context={context} role={role} api={api} headers={headers} onChange={next=>{setDetail(next);setItems(list=>list.map(c=>c.id===next.id?next:c));}} onClose={()=>setDetail(null)}/>:
     <section className="case-panel"><div className="case-heading"><div><small>ПЕРВИЧНОЕ РАССМОТРЕНИЕ</small><h2>Новые обращения жителей</h2></div><button type="button" className="case-link" onClick={refresh}>Обновить</button></div><div className="case-list">{items.map(item=><button type="button" className="case-list-item" key={item.id} disabled={!item.fullAccess&&!context?.canManagePermissions} onClick={()=>setDetail(item)}><small>№ {item.number} · {statuses[item.status]} · {kinds[item.kind]}</small><strong>{text(item)}</strong><span>{item.nextStep}</span>{item.overdueWorkCount>0&&<strong className="workflow-overdue">Прошёл срок заданий: {item.overdueWorkCount}</strong>}</button>)}{!items.length&&<p className="muted">Новых обращений пока нет.</p>}</div></section>}

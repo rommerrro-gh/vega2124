@@ -64,7 +64,7 @@ public class ResidentCaseService {
             """, house, user);
     }
     private boolean billing(String house, String user) {
-        return member(house, user) && count("SELECT count(*) FROM case_billing_permissions WHERE house_id=? AND user_id=?", house, user);
+        return access.billing(house,user);
     }
     private boolean collaborator(String id, String house, String user) {
         return access.assigned(id,house,user,CaseFunction.values());
@@ -109,11 +109,11 @@ public class ResidentCaseService {
     @Transactional
     public void permission(String house,String target,boolean enabled,String actor) {
         if (!manager(house,actor)) throw denied();
-        if (!member(house,target)) throw invalid("Выберите действующего сотрудника этого дома");
+        if (enabled && !access.billingEligible(house,target)) throw invalid("Выберите действующего сотрудника этого дома");
         if (enabled) jdbc.update("""
-            INSERT INTO case_billing_permissions(house_id,user_id,granted_by,created_at) VALUES (?,?,?,?)
-            ON CONFLICT(house_id,user_id) DO UPDATE SET granted_by=excluded.granted_by,created_at=excluded.created_at
-            """,house,target,actor,now());
+            INSERT INTO case_billing_permissions(house_id,user_id,granted_by,created_at,source_organization_id) VALUES (?,?,?,?,(SELECT organization_id FROM uk_admin_houses WHERE house_id=? AND user_id=? AND access_status='ACTIVE' LIMIT 1))
+            ON CONFLICT(house_id,user_id) DO UPDATE SET granted_by=excluded.granted_by,created_at=excluded.created_at,source_organization_id=excluded.source_organization_id
+            """,house,target,actor,now(),house,actor);
         else jdbc.update("DELETE FROM case_billing_permissions WHERE house_id=? AND user_id=?",house,target);
         audit(actor,"CASE_BILLING_PERMISSION",house);
     }
@@ -193,7 +193,7 @@ public class ResidentCaseService {
         String house=str(r,"house_id");
         if (kind==CaseKind.PAYMENT && !billing(house,user)) throw denied();
         responsible=optional(responsible,80);
-        if (responsible!=null && ((!member(house,responsible)&&!access.staff(house,responsible)) || (!dispatcher(house,responsible)&&!collaborator(id,house,responsible)&&!billing(house,responsible)) || (kind==CaseKind.PAYMENT&&!billing(house,responsible))))
+        if (responsible!=null && ((!member(house,responsible)&&!access.staff(house,responsible)&&!(kind==CaseKind.PAYMENT&&billing(house,responsible))) || (!dispatcher(house,responsible)&&!collaborator(id,house,responsible)&&!billing(house,responsible)) || (kind==CaseKind.PAYMENT&&!billing(house,responsible))))
             throw invalid("Сотрудник не имеет необходимого доступа к этому дому и направлению");
         boolean movedDue=r.get("due_at")!=null && !Objects.equals(Instant.parse(str(r,"due_at")),due);
         boolean reassigned=r.get("responsible_user_id")!=null && !Objects.equals(str(r,"responsible_user_id"),responsible);

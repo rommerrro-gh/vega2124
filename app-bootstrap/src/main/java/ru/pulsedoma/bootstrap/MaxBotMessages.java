@@ -59,6 +59,9 @@ public class MaxBotMessages {
             Узнать статус и ответить
             В «Моих обращениях» выберите нужное. Там видны следующий шаг, ответственный и срок. Нажмите «Ответить», чтобы передать сведения сотруднику. Если ответа не знаете, так и напишите. Прежние заявки доступны в приложении.
 
+            Ответить на финансовое уточнение
+            В карточке вопроса по квитанции нажмите «Уточнения». Выберите вопрос и ответьте своими словами. Кнопки «Не знаю» и «Документа нет» тоже передадут ответ сотруднику.
+
             Проверить результат
             Когда сотрудник предложит решение, проверьте его. Если всё решено — подтвердите. Если проблема осталась — нажмите «Проверить повторно». Молчание не считается подтверждением.
 
@@ -74,6 +77,7 @@ public class MaxBotMessages {
         if(c.status()==CaseStatus.RESULT_PROPOSED)buttons.add("Подтвердить №"+c.number());
         if(c.status()==CaseStatus.RESULT_PROPOSED||c.status()==CaseStatus.CLOSED)buttons.add("Проверить повторно №"+c.number());
         if(c.status()!=CaseStatus.CLOSED)buttons.add("Ответить №"+c.number());
+        if(c.kind()==CaseKind.PAYMENT&&c.status()!=CaseStatus.CLOSED)buttons.add("Уточнения №"+c.number());
         buttons.add("Мои обращения");buttons.add("Меню");
         String last=c.events().stream().filter(e->e.type()==CaseEventType.MESSAGE).reduce((a,b)->b).map(e->"\nПоследнее сообщение — "+e.actor()+": "+limit(e.text(),700)).orElse("");
         return body((notification?"Обновление по вашему обращению.\n":"")+"Обращение №"+c.number()+" · "+status(c.status())+"\nДом: "+c.address()+"\n"+limit(c.description(),500)

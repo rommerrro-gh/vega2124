@@ -16,19 +16,20 @@ import java.util.*;
 /** Private-dialog state machine. Domain changes, inbox deduplication and reply are one transaction. */
 @Service
 public class MaxResidentBot {
-    enum State { IDLE, COMPOSE, REVIEW, REPLY, CONFIRM, REOPEN }
+    enum State { IDLE, COMPOSE, REVIEW, REPLY, CONFIRM, REOPEN, BILLING_ANSWER }
     record Session(State state,String house,CaseKind kind,String draft,String text,String caseId,Integer revision) {}
     private final JdbcTemplate jdbc;
     private final ObjectMapper mapper;
     private final ResidentCaseService cases;
     private final MiniAppService app;
     private final HouseTariffService tariffs;
+    private final BillingCaseService billing;
     private final MaxBotMessages messages;
     private final MaxBotMedia media;
     private final TransactionTemplate tx;
     public MaxResidentBot(JdbcTemplate jdbc,ObjectMapper mapper,ResidentCaseService cases,MiniAppService app,
-                          MaxBotMessages messages,MaxBotMedia media,PlatformTransactionManager manager,HouseTariffService tariffs) {
-        this.tariffs=tariffs;this.jdbc=jdbc;this.mapper=mapper;this.cases=cases;this.app=app;this.messages=messages;this.media=media;this.tx=new TransactionTemplate(manager);
+                          MaxBotMessages messages,MaxBotMedia media,PlatformTransactionManager manager,HouseTariffService tariffs,BillingCaseService billing) {
+        this.billing=billing;this.tariffs=tariffs;this.jdbc=jdbc;this.mapper=mapper;this.cases=cases;this.app=app;this.messages=messages;this.media=media;this.tx=new TransactionTemplate(manager);
     }
     public void handle(JsonNode update) {
         String type=update.path("update_type").asText();
@@ -152,6 +153,19 @@ public class MaxResidentBot {
             jdbc.update("DELETE FROM max_bot_draft_files WHERE user_id=?",user);idle(user);
             reply(key,user,null,null,messages.body("Черновик удалён. Обращение не отправлено.",messages.menu(),null));return;
         }
+        if(text.matches("Уточнения №[0-9]{1,9}")){
+            var c=mine(Long.parseLong(text.substring(text.indexOf('№')+1)),user);var w=billing.workspace(c.id(),user);
+            var open=w.questions().stream().filter(q->"OPEN".equals(q.get("state"))).limit(4).toList();var buttons=new ArrayList<String>();StringBuilder content=new StringBuilder("Уточнения по обращению №"+c.number());
+            for(var q:open){content.append("\n\n").append(MaxBotMessages.limit(q.get("question").toString(),600)).append("\nЗачем: ").append(MaxBotMessages.limit(q.get("purpose").toString(),400));buttons.add("Ответ на уточнение "+q.get("id"));}
+            if(open.isEmpty())content.append("\nОткрытых уточнений нет. Можно добавить сведения обычным ответом.");else content.append("\n\nМожно ответить «Не знаю» или «Документа нет». Остальные уточнения, если есть, доступны в приложении.");
+            buttons.add("Открыть №"+c.number());buttons.add("Меню");reply(key,user,c.houseId(),c.id(),messages.body(content.toString(),buttons,c.id()));return;
+        }
+        if(text.matches("Ответ на уточнение [a-f0-9-]{36}")){
+            if(hasDraft(s))throw invalid("Сначала отправьте или удалите черновик нового обращения.");
+            var q=billing.question(text.substring("Ответ на уточнение ".length()),user);var c=own(q.caseId(),user);
+            save(user,new Session(State.BILLING_ANSWER,c.houseId(),CaseKind.PAYMENT,q.id(),"",c.id(),c.revision()));
+            reply(key,user,c.houseId(),c.id(),messages.body(q.question()+"\n\nЗачем: "+q.purpose()+"\n\nНапишите ответ или приложите документ. Можно сообщить, что сведений нет.",List.of("Не знаю","Документа нет","Меню"),c.id()));return;
+        }
         if(text.matches("(Открыть|Ответить|Подтвердить|Проверить повторно) №[0-9]{1,9}")) {
             long number=Long.parseLong(text.substring(text.indexOf('№')+1));
             var c=mine(number,user);
@@ -164,6 +178,13 @@ public class MaxResidentBot {
             save(user,new Session(state,c.houseId(),CaseKind.GENERAL,UUID.randomUUID().toString(),"",c.id(),c.revision()));
             String prompt=state==State.REPLY?"Напишите ответ сотруднику или пришлите фото/PDF. Если не знаете ответ, так и напишите.":state==State.CONFIRM?"Вы проверили результат и подтверждаете, что вопрос решён?": "Напишите, что осталось нерешённым. Можно продолжить без пояснения.";
             reply(key,user,c.houseId(),c.id(),messages.body("Обращение №"+c.number()+"\nДом: "+c.address()+"\n\n"+prompt,state==State.CONFIRM?List.of("Результат №"+c.number()+" подтверждаю","Меню"):state==State.REOPEN?List.of("Без пояснения","Меню"):List.of("Меню"),c.id()));return;
+        }
+        if(s.state()==State.BILLING_ANSWER){
+            var c=own(s.caseId(),user);billing.question(s.draft(),user);
+            if(attachments.isArray()&&!attachments.isEmpty())c=uploadToCase(c,attachments,user,loaded);
+            String response=text.isBlank()?"Документ приложен в материалах обращения":text;
+            if(text.isBlank()&&(!attachments.isArray()||attachments.isEmpty()))throw invalid("Напишите ответ или сообщите, что сведений нет.");
+            billing.answer(s.draft(),new BillingRequests.Answer(response,null,c.revision()),user);idle(user);reply(key,user,c.houseId(),c.id(),messages.card(cases.get(c.id(),user),false));return;
         }
         if(s.state()==State.CONFIRM&&text.matches("Результат №[0-9]{1,9} подтверждаю")) {
             var c=own(s.caseId(),user);if(!text.equals("Результат №"+c.number()+" подтверждаю"))throw invalid("Кнопка относится к другому обращению. Откройте нужное обращение заново.");var result=cases.respond(c.id(),true,"",s.revision(),user);idle(user);reply(key,user,c.houseId(),c.id(),messages.card(result,false));return;

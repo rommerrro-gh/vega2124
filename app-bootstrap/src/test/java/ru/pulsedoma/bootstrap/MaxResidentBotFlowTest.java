@@ -27,6 +27,7 @@ class MaxResidentBotFlowTest {
     @Autowired MaxResidentBot bot;
     @Autowired MaxBotMessages messages;
     @Autowired ResidentCaseService cases;
+    @Autowired BillingCaseService billing;
     @Autowired JdbcTemplate jdbc;
     @Autowired ObjectMapper mapper;
     @MockBean MaxBotMedia media;
@@ -50,6 +51,18 @@ class MaxResidentBotFlowTest {
     ResidentCaseService.CaseView create(){return cases.create(HOUSE,CaseKind.GENERAL,"Вопрос "+UUID.randomUUID(),null,UUID.randomUUID().toString(),USER);}
     void review(ResidentCaseService.CaseView c,CaseStatus status){cases.update(c.id(),c.kind(),status,"Уточните, когда заметили проблему",Instant.now().plusSeconds(3600),null,c.revision(),"Обновлён следующий шаг","demo-dispatcher-1");}
     MaxBotDelivery delivery(){return new MaxBotDelivery(jdbc,mapper,cases,messages,max,"test-token");}
+    @Test void financialQuestionCanBeAnsweredWithoutKnowledgeOrDocument()throws Exception{
+        cases.permission(HOUSE,"demo-dispatcher-1",true,"demo-admin-1");var c=cases.create(HOUSE,CaseKind.PAYMENT,"Сумма выросла",null,UUID.randomUUID().toString(),USER);
+        billing.ask(c.id(),new BillingRequests.Question("Есть предыдущая квитанция?","Чтобы сравнить объёмы. Можно ответить, что документа нет",c.revision()),"demo-dispatcher-1");
+        String q=billing.workspace(c.id(),USER).questions().get(0).get("id").toString();say("Уточнения №"+c.number());assertTrue(last().contains("Есть предыдущая квитанция"));
+        say("Ответ на уточнение "+q);assertTrue(last().contains("Документа нет"));say("Документа нет");assertEquals("ANSWERED",billing.workspace(c.id(),USER).questions().get(0).get("state"));assertEquals("Документа нет",billing.workspace(c.id(),USER).questions().get(0).get("response"));
+    }
+    @Test void financialReplyCannotOpenAnotherResidentsQuestionAndNavigationDoesNotAnswer()throws Exception{
+        cases.permission(HOUSE,"demo-dispatcher-1",true,"demo-admin-1");var c=cases.create(HOUSE,CaseKind.PAYMENT,"Проверка суммы",null,UUID.randomUUID().toString(),USER);
+        billing.ask(c.id(),new BillingRequests.Question("Уточните месяц","Для сравнения",c.revision()),"demo-dispatcher-1");String q=billing.workspace(c.id(),USER).questions().get(0).get("id").toString();
+        say("Ответ на уточнение "+q);say("Открыть №"+c.number());assertEquals("OPEN",billing.workspace(c.id(),USER).questions().get(0).get("state"));
+        var foreign=update("foreign-q","Ответ на уточнение "+q,null);((com.fasterxml.jackson.databind.node.ObjectNode)foreign.path("message").path("sender")).put("user_id",88889);bot.handle(foreign);assertFalse(last().contains("Уточните месяц"));
+    }
     @Test void tariffMenuPreservesDraftAndShowsNoInventedAmounts()throws Exception{
         say("Сообщить о проблеме");say("Протечка в подъезде");
         say("Тарифы");assertTrue(last().contains("пока не опубликованы"));assertTrue(last().contains("Это не означает"));
