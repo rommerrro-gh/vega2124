@@ -917,7 +917,7 @@ const accessRoleLabels = {
 function InvitationGate() {
   const [token, setToken] = useState(() => {
     const start = new URLSearchParams(location.search).get("invite") || window.WebApp?.initDataUnsafe?.start_param || "";
-    return start.startsWith("demo_") || start.startsWith("case_") || start.startsWith("wf_") ? "" : start;
+    return start.startsWith("demo_") || start.startsWith("case_") || start.startsWith("wf_") || start.startsWith("xp_") ? "" : start;
   });
   const [dismissed, setDismissed] = useState(false);
   const [invitation, setInvitation] = useState(null);
