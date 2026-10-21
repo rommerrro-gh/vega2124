@@ -118,7 +118,7 @@ function navigate(path) {
   const initData = window.WebApp?.initData;
   const launchData = window.location.hash || (initData ? `#WebAppData=${encodeURIComponent(initData)}` : "");
   const pathname = new URL(path, location.origin).pathname;
-  if (["/miniapp/index.html", "/dispatcher/index.html", "/admin/index.html", "/uk/index.html", "/system/index.html", "/work/index.html"].includes(pathname)) {
+  if (["/miniapp/index.html", "/dispatcher/index.html", "/admin/index.html", "/uk/index.html", "/system/index.html", "/work/index.html", "/exchange/index.html"].includes(pathname)) {
     localStorage.setItem("pulse-last-mode", pathname);
   }
   window.location.assign(`${path}${launchData}`);
@@ -161,11 +161,12 @@ function Brand({ role }) {
   const [demo, setDemo] = useState(null);
   const [localDemo, setLocalDemo] = useState(false);
   const [workAccess,setWorkAccess] = useState(false);
+  const [exchangeAccess,setExchangeAccess] = useState(false);
   const [notice, setNotice] = useState("");
   const [help, setHelp] = useState(false);
   useEffect(() => {
-    Promise.all([api("true", "/v1/access/me"), api("true", "/v1/guided-demo"), api("true", "/v1/access/config"), api("true", "/v1/workflow/houses")])
-      .then(([roles, state, config, workHouses]) => { setAccess(roles); setDemo(state); setLocalDemo(config.demoMode === true); setWorkAccess(workHouses.length>0); }).catch(() => {});
+    Promise.all([api("true", "/v1/access/me"), api("true", "/v1/guided-demo"), api("true", "/v1/access/config"), api("true", "/v1/workflow/houses"), api("true", "/v1/exchange/inbox")])
+      .then(([roles, state, config, workHouses, packets]) => { setAccess(roles); setDemo(state); setLocalDemo(config.demoMode === true); setWorkAccess(workHouses.length>0); setExchangeAccess(packets.length>0); }).catch(() => {});
   }, []);
   useEffect(() => {
     const closeOnEscape = event => { if (event.key === "Escape" && menu.current) menu.current.open = false; };
@@ -184,7 +185,7 @@ function Brand({ role }) {
   }
   return <><header className="topbar">
     <div className="brand"><span className="brand-icon-frame"><img className="brand-icon" src="/miniapp/app-icon.png?v=20260929-6" alt="" /></span><span>Пульс дома</span></div>
-    {(available.length||workAccess) ? <details ref={menu} className="role-menu">
+    {(available.length||workAccess||exchangeAccess) ? <details ref={menu} className="role-menu">
       <summary aria-label="Выбрать роль"><span className="role-menu-label">{current?.[1] || role}</span><svg aria-hidden="true" viewBox="0 0 12 12"><path d="m3 4.5 3 3 3-3" /></svg></summary>
       <button className="role-menu-backdrop" type="button" aria-label="Закрыть меню ролей" onClick={() => { menu.current.open = false; }} />
       <nav aria-label="Доступные роли">
@@ -192,6 +193,7 @@ function Brand({ role }) {
           aria-current={location.pathname === path ? "page" : undefined}
           onClick={() => navigate(path)}>{label}{location.pathname === path ? " ✓" : ""}</button>)}
         {(workAccess||localDemo)&&<button type="button" onClick={()=>navigate("/work/index.html"+(localDemo?`?demoSession=${["/uk/index.html","/admin/index.html"].includes(location.pathname)?"admin":"dispatcher"}`:""))}>Осмотры и работы</button>}
+        {(exchangeAccess||localDemo)&&<button type="button" onClick={()=>navigate("/exchange/index.html")}>Полученные материалы организаций</button>}
         {demo?.active && <><hr /><span className="role-menu-caption">Демонстрационный режим · тестовые данные</span>
           <button type="button" onClick={() => { menu.current.open = false; setHelp(value => !value); }}>Инструкция по сценарию</button>
           <button type="button" onClick={() => demoAction("restart")}>Начать заново</button>
@@ -939,6 +941,10 @@ function InvitationGate() {
     if (!token && !dismissed) {
       if(new URLSearchParams(location.search).get("view")==="resident")return;
       const lastMode = localStorage.getItem("pulse-last-mode");
+      if(lastMode === "/exchange/index.html") {
+        api(role,"/v1/exchange/inbox").then(packets=>{if(packets.length)navigate(lastMode);else localStorage.removeItem("pulse-last-mode");}).catch(()=>{});
+        return;
+      }
       if(lastMode === "/work/index.html") {
         api(role,"/v1/workflow/houses").then(houses=>{if(houses.length)navigate(lastMode);else localStorage.removeItem("pulse-last-mode");}).catch(()=>{});
         return;
