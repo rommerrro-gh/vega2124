@@ -11,6 +11,9 @@ importers:
       '@maxhub/max-ui':
         specifier: 0.5.0
         version: 0.5.0(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
+      '@phosphor-icons/react':
+        specifier: 2.1.10
+        version: 2.1.10(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
       react:
         specifier: 19.2.8
         version: 19.2.8
@@ -186,6 +189,13 @@ packages:
       react: 19.2.8
       react-dom: 19.2.8
 
+  '@phosphor-icons/react@2.1.10':
+    resolution: {integrity: sha512-vt8Tvq8GLjheAZZYa+YG/pW7HDbov8El/MANW8pOAz4eGxrwhnbfrQZq0Cp4q8zBEu8NIhHdnr+r8thnfRSNYA==}
+    engines: {node: '>=10'}
+    peerDependencies:
+      react: '>= 16.8'
+      react-dom: '>= 16.8'
+
   '@radix-ui/react-compose-refs@1.1.5':
     resolution: {integrity: sha512-+48PbAAbq3didjJxa+OaWY2ZwgAKsNiRGyeHKszblZMQ+kcpd9pAaT11cMkGEie0vsOi3QdeTE6d5Fe3Gn61kA==}
     peerDependencies:
@@ -308,6 +318,11 @@ snapshots:
       react-dom: 19.2.8(react@19.2.8)
     transitivePeerDependencies:
       - '@types/react'
+
+  '@phosphor-icons/react@2.1.10(react-dom@19.2.8(react@19.2.8))(react@19.2.8)':
+    dependencies:
+      react: 19.2.8
+      react-dom: 19.2.8(react@19.2.8)
 
   '@radix-ui/react-compose-refs@1.1.5(react@19.2.8)':
     dependencies:

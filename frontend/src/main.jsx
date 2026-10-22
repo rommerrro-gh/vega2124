@@ -1,3 +1,4 @@
+import {AppearancePicker,ResidentHeader,ResidentNavigation,useAppearance} from "./design.jsx";
 import {OperationsInbox} from "./operations.jsx";
 import {ExchangePortal} from "./case-exchange.jsx";
 import React, { useEffect, useRef, useState } from "react";
@@ -11,6 +12,7 @@ import "./workflow.css";
 import {WorkPortal,WarrantyRegistry,WorkflowStaff} from "./warranty-workflow.jsx";
 import {HouseTariffs} from "./house-tariffs.jsx";
 import { CaseDetail, ResidentCases, StaffCases } from "./resident-cases.jsx";
+import "./redesign.css";
 
 function Button({ mode = "primary", className = "", ...props }) {
   return <MaxButton mode={mode} className={`app-button-${mode} ${className}`.trim()} {...props} />;
@@ -185,7 +187,8 @@ function Brand({ role }) {
     } catch (error) { setNotice(error.message); }
   }
   return <><header className="topbar">
-    <div className="brand"><span className="brand-icon-frame"><img className="brand-icon" src="/miniapp/app-icon.png?v=20260929-6" alt="" /></span><span>Пульс дома</span></div>
+    <div className="brand"><span className="brand-icon-frame"><img className="brand-icon" src="/miniapp/app-icon.png?v=20261023-design-a" alt="" /></span><span>Пульс дома</span></div>
+    <OperationsInbox api={api} role={location.pathname==="/uk/index.html"||location.pathname==="/admin/index.html"?"admin":location.pathname==="/dispatcher/index.html"?"dispatcher":new URLSearchParams(location.search).get("demoSession")||"true"} onOpen={n=>navigate(location.pathname==="/miniapp/index.html"?`/miniapp/index.html?view=resident&caseId=${encodeURIComponent(n.case_id)}`:`/work/index.html?houseId=${encodeURIComponent(n.house_id)}&caseId=${encodeURIComponent(n.case_id)}${localDemo?"&demoSession=dispatcher":""}`)}/>
     {(available.length||workAccess||exchangeAccess) ? <details ref={menu} className="role-menu">
       <summary aria-label="Выбрать роль"><span className="role-menu-label">{current?.[1] || role}</span><svg aria-hidden="true" viewBox="0 0 12 12"><path d="m3 4.5 3 3 3-3" /></svg></summary>
       <button className="role-menu-backdrop" type="button" aria-label="Закрыть меню ролей" onClick={() => { menu.current.open = false; }} />
@@ -195,13 +198,14 @@ function Brand({ role }) {
           onClick={() => navigate(path === "/miniapp/index.html" ? `${path}?view=resident` : path)}>{label}{location.pathname === path ? " ✓" : ""}</button>)}
         {(workAccess||localDemo)&&<button type="button" onClick={()=>navigate("/work/index.html"+(localDemo?`?demoSession=${["/uk/index.html","/admin/index.html"].includes(location.pathname)?"admin":"dispatcher"}`:""))}>Осмотры и работы</button>}
         {(exchangeAccess||localDemo)&&<button type="button" onClick={()=>navigate("/exchange/index.html")}>Полученные материалы организаций</button>}
+        <hr /><AppearancePicker />
         {demo?.active && <><hr /><span className="role-menu-caption">Демонстрационный режим · тестовые данные</span>
           <button type="button" onClick={() => { menu.current.open = false; setHelp(value => !value); }}>Инструкция по сценарию</button>
           <button type="button" onClick={() => demoAction("restart")}>Начать заново</button>
           <button type="button" onClick={() => demoAction("exit")}>Выйти из демонстрации</button></>}
       </nav>
     </details> : <span className="max-chip"><span className="max-dot" /> {role} · MAX</span>}
-  </header><OperationsInbox api={api} role={location.pathname==="/uk/index.html"||location.pathname==="/admin/index.html"?"admin":location.pathname==="/dispatcher/index.html"?"dispatcher":new URLSearchParams(location.search).get("demoSession")||"true"} onOpen={n=>navigate(location.pathname==="/miniapp/index.html"?`/miniapp/index.html?view=resident&caseId=${encodeURIComponent(n.case_id)}`:`/work/index.html?houseId=${encodeURIComponent(n.house_id)}&caseId=${encodeURIComponent(n.case_id)}${localDemo?"&demoSession=dispatcher":""}`)}/>{demo?.active && <div className="guided-demo-badge">Демонстрационный режим · {demo.address}</div>}
+  </header>{demo?.active && <div className="guided-demo-badge">Демонстрационный режим · {demo.address}</div>}
     {help && <div className="guided-demo-help"><strong>Проверка сценария</strong><ol>
       <li>В роли жителя переключите два дома: у них одна УК, но разные паспорта и опросы. Вернитесь в первый дом и создайте обращение «Не работает свет в подъезде», место «Подъезд 1, этаж 2».</li>
       <li>Присоединитесь к похожей заявке или создайте новую.</li>
@@ -472,6 +476,8 @@ function Resident() {
   const [passportLoading, setPassportLoading] = useState(false);
   const [passportError, setPassportError] = useState("");
   const [polls, setPolls] = useState([]);
+  const [residentView,setResidentView]=useState(new URLSearchParams(location.search).has("caseId")?"cases":"home");
+  function changeResidentView(next){setResidentView(next);window.dispatchEvent(new CustomEvent("pulse-resident-navigation",{detail:next}));requestAnimationFrame(()=>{window.scrollTo({top:0,behavior:"auto"});if(next==="events")document.querySelector(".resident-events .disclosure-card details")?.setAttribute("open","");});}
   const [pollBusy, setPollBusy] = useState(false);
   const [issues, setIssues] = useState([]);
   const [notice, setNotice] = useState("");
@@ -631,16 +637,17 @@ function Resident() {
   const houseIssues = issues.filter(item => item.houseId === selectedHouseId);
   const awaitingVerification = houseIssues.filter(item => item.status === "VERIFICATION_72H");
   const openPolls = polls.filter(poll => !poll.closed && !poll.myOptionId);
-  if (initialLoading) return <main className="shell"><Brand role="Жителю" /><div className="resident-hero"><Hero /></div><Card className="loading-card"><p role="status">Загружаем данные вашего дома…</p></Card></main>;
-  return <main className="shell">
-    <Brand role="Жителю" /><div className="resident-hero"><Hero /></div><Notice message={notice} />
+  if (initialLoading) return <main className="shell resident-shell"><Brand role="Жителю" /><ResidentHeader loading /><Card className="loading-card"><p role="status">Загружаем данные вашего дома…</p></Card></main>;
+  return <main className={`shell resident-shell resident-view-${residentView}`}>
+    <Brand role="Жителю" /><Notice message={notice} />
     <GuidedDemoEntry />
-    {selectedHouse && <div className="house-switcher"><span className="house-switcher-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M3.5 10.5 12 3.5l8.5 7v9a1 1 0 0 1-1 1h-15a1 1 0 0 1-1-1z"/><path d="M9.5 20.5v-6h5v6"/></svg></span><div className="house-switcher-copy"><span>Ваш дом</span>{houses.length > 1 ? <select aria-label="Выбранный дом" value={selectedHouseId} disabled={step !== "form" || !!reportId} onChange={event => { setSelectedHouseId(event.target.value); setPlaceFeatures(defaultPlace(reportCategory)); request("/v1/me/active-house", { method: "PUT", body: JSON.stringify({ houseId: event.target.value }) }).catch(fail); }}>{houses.map(house => <option key={house.id} value={house.id}>{house.address}</option>)}</select> : <strong>{selectedHouse.address}</strong>}</div></div>}
+    <ResidentHeader house={selectedHouse} houses={houses} disabled={step !== "form" || !!reportId} onChange={id=>{setSelectedHouseId(id);setPlaceFeatures(defaultPlace(reportCategory));request("/v1/me/active-house",{method:"PUT",body:JSON.stringify({houseId:id})}).catch(fail);}} />
     {!!awaitingVerification.length && step === "form" && <div className="priority-notice"><div><strong>Подтвердите выполнение работ</strong><p>{countLabel(awaitingVerification.length, "заявка ждёт", "заявки ждут", "заявок ждут")} вашего ответа.</p></div><Button mode="secondary" type="button" onClick={() => showIssue(awaitingVerification[0])}>Открыть</Button></div>}
-    {selectedHouse && step === "form" && <HouseTariffs key={`tariffs:${demoSession}:${selectedHouseId}`} houseId={selectedHouseId} role={demoSession} api={api} headers={authHeaders} onQuestion={canReport?text=>{if(typeof text==="string")window.dispatchEvent(new CustomEvent("pulse-payment-question",{detail:{houseId:selectedHouseId,text}}));else document.getElementById("resident-payment-start")?.click();}:undefined}/>}
-    {selectedHouse && step === "form" && <ResidentCases key={`${demoSession}:${selectedHouseId}`} house={selectedHouse} role={demoSession} api={api} headers={authHeaders} canSubmit={canReport} initialCaseId={initialCaseId} legacyIssues={houseIssues} legacyStatusLabels={statusLabels} onLegacyOpen={showIssue} />}
-    {selectedHouse && canReport && step === "form" && !showReportForm && <div className="start-action"><div><strong>Хотите найти похожую проблему?</strong><p>Можно дополнительно указать категорию и место.</p></div><Button mode="secondary" type="button" onClick={() => setShowReportForm(true)}>Проверить похожие заявки</Button></div>}
-    <div className="content-grid">
+
+    {selectedHouse && step === "form" && <ResidentCases key={`${demoSession}:${selectedHouseId}`} house={selectedHouse} role={demoSession} api={api} headers={authHeaders} canSubmit={canReport} view={residentView} onShowCases={()=>changeResidentView("cases")} initialCaseId={initialCaseId} legacyIssues={houseIssues} legacyStatusLabels={statusLabels} onLegacyOpen={showIssue} />}
+    {selectedHouse && canReport && residentView==="home" && step === "form" && !showReportForm && <div className="start-action"><div><strong>Хотите найти похожую проблему?</strong><p>Можно дополнительно указать категорию и место.</p></div><Button mode="secondary" type="button" onClick={() => setShowReportForm(true)}>Проверить похожие заявки</Button></div>}
+    <div hidden={residentView!=="home"} className="resident-tariffs">{selectedHouse && step === "form" && <HouseTariffs key={`tariffs:${demoSession}:${selectedHouseId}`} houseId={selectedHouseId} role={demoSession} api={api} headers={authHeaders} onQuestion={canReport?text=>{if(typeof text==="string")window.dispatchEvent(new CustomEvent("pulse-payment-question",{detail:{houseId:selectedHouseId,text}}));else document.getElementById("resident-payment-start")?.click();}:undefined}/>}</div>
+    <div className="content-grid resident-events">
       {step === "form" && showReportForm && canReport && <Card className="form-card">
         <div className="form-title"><SectionHeading title="Сообщить о проблеме" subtitle={`Дом: ${selectedHouse?.address || "не выбран"}`} /><button className="form-close" type="button" disabled={busy} onClick={() => reportId ? withdrawReport(reportId, "Создание заявки отменено пользователем", "Создание заявки отменено.") : setShowReportForm(false)}>Отмена</button></div>
         <form ref={formRef} onSubmit={submitReport}>
@@ -654,8 +661,8 @@ function Resident() {
         </form>
       </Card>}
 
-      {step === "form" && canReport && <DisclosureCard title="Опросы дома" summary={openPolls.length ? `${countLabel(openPolls.length, "опрос ждёт", "опроса ждут", "опросов ждут")} вашего ответа` : polls.length ? countLabel(polls.length, "опрос", "опроса", "опросов") : "Опросов пока нет"}><div className="poll-list">{polls.map(poll => <PollCard key={poll.id} poll={poll} onVote={voteInPoll} busy={pollBusy} />)}{!polls.length && <p className="muted">В выбранном доме пока нет опросов.</p>}<Button mode="secondary" type="button" disabled={pollBusy} onClick={refreshPolls}>Обновить опросы</Button></div></DisclosureCard>}
-      {step === "form" && selectedHouse && <DisclosureCard title="Мой дом" summary="Паспорт и полезные контакты"><HousePassport passport={passport} loading={passportLoading} error={passportError} /></DisclosureCard>}
+      {step === "form" && canReport && <div hidden={residentView==="cases"}><DisclosureCard title="Опросы дома" summary={openPolls.length ? `${countLabel(openPolls.length, "опрос ждёт", "опроса ждут", "опросов ждут")} вашего ответа` : polls.length ? countLabel(polls.length, "опрос", "опроса", "опросов") : "Опросов пока нет"}><div className="poll-list">{polls.map(poll => <PollCard key={poll.id} poll={poll} onVote={voteInPoll} busy={pollBusy} />)}{!polls.length && <p className="muted">В выбранном доме пока нет опросов.</p>}<Button mode="secondary" type="button" disabled={pollBusy} onClick={refreshPolls}>Обновить опросы</Button></div></DisclosureCard></div>}
+      {step === "form" && selectedHouse && <div hidden={residentView!=="home"}><DisclosureCard title="Мой дом" summary="Паспорт и полезные контакты"><HousePassport passport={passport} loading={passportLoading} error={passportError} /></DisclosureCard></div>}
       {step === "decision" && <Card className="flow-card">
         <SectionHeading title="Похожие проблемы" subtitle="Выберите существующую заявку или создайте новую" />
         <div className="item-list">{candidates.length ? candidates.map(({ issue: item, score, reasons }) => <div className="candidate" key={item.id}><span className="score">Оценка сходства: {Math.round(score * 100)}%</span><strong>{item.description || item.category || "Проблема дома"}</strong><p>{item.address} · {item.participants} участников</p><ul className="candidate-reasons">{(reasons || []).map(candidateReason).filter(Boolean).map(reason => <li key={reason}>{reason}</li>)}</ul><button type="button" disabled={busy} onClick={() => decide(`/v1/issues/${encodeURIComponent(item.id)}/join`)}>Присоединиться</button></div>) : <p className="muted empty">Похожих активных заявок не найдено.</p>}</div>
@@ -673,6 +680,7 @@ function Resident() {
       </Card>}
     </div>
     <footer>Пульс дома <span>·</span> Сделаем дом лучше вместе</footer>
+    <ResidentNavigation value={residentView} onChange={changeResidentView} disabled={step!=="form"||!!reportId} />
   </main>;
 }
 
@@ -1072,6 +1080,7 @@ function UkAdmin() {
 
 function App() {
   const [revision, setRevision] = useState(0);
+  const appearance=useAppearance();
   useEffect(() => {
     const refresh = () => setRevision(value => value + 1);
     window.addEventListener("pulse-access-changed", refresh);
@@ -1079,9 +1088,9 @@ function App() {
   }, []);
   const path = location.pathname;
   const startParam = new URLSearchParams(location.search).get("invite") || window.WebApp?.initDataUnsafe?.start_param || new URLSearchParams(location.search).get("WebAppStartParam") || "";
-  if(path === "/exchange/index.html" || ["/","/miniapp/index.html"].includes(path)&&startParam.startsWith("xp_")&&new URLSearchParams(location.search).get("view")!=="resident")return <MaxUI key={revision}><ExchangePortal api={api} headers={authHeaders} brand={<Brand role="Получателю материалов"/>} inviteToken={startParam.startsWith("xp_")?startParam:""}/></MaxUI>;
-  if(path === "/work/index.html" || startParam.startsWith("wf_")&&new URLSearchParams(location.search).get("view")!=="resident")return <MaxUI key={revision}><WorkPortal api={api} headers={authHeaders} brand={<Brand role="Специалисту"/>} inviteToken={startParam.startsWith("wf_")?startParam:""} renderCase={props=><CaseDetail {...props} api={api} headers={authHeaders}/>}/></MaxUI>;
-  return <MaxUI key={revision}>{path === "/dispatcher/index.html" ? <Dispatcher /> : path === "/admin/index.html" ? <Admin /> : path === "/system/index.html" ? <SystemAdmin /> : path === "/uk/index.html" ? <UkAdmin /> : <InvitationGate />}</MaxUI>;
+  if(path === "/exchange/index.html" || ["/","/miniapp/index.html"].includes(path)&&startParam.startsWith("xp_")&&new URLSearchParams(location.search).get("view")!=="resident")return <MaxUI key={revision} colorScheme={appearance.resolved}><ExchangePortal api={api} headers={authHeaders} brand={<Brand role="Получателю материалов"/>} inviteToken={startParam.startsWith("xp_")?startParam:""}/></MaxUI>;
+  if(path === "/work/index.html" || startParam.startsWith("wf_")&&new URLSearchParams(location.search).get("view")!=="resident")return <MaxUI key={revision} colorScheme={appearance.resolved}><WorkPortal api={api} headers={authHeaders} brand={<Brand role="Специалисту"/>} inviteToken={startParam.startsWith("wf_")?startParam:""} renderCase={props=><CaseDetail {...props} api={api} headers={authHeaders}/>}/></MaxUI>;
+  return <MaxUI key={revision} colorScheme={appearance.resolved}>{path === "/dispatcher/index.html" ? <Dispatcher /> : path === "/admin/index.html" ? <Admin /> : path === "/system/index.html" ? <SystemAdmin /> : path === "/uk/index.html" ? <UkAdmin /> : <InvitationGate />}</MaxUI>;
 }
 
 createRoot(document.getElementById("app")).render(<App />);

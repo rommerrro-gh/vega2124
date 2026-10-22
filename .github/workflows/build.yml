@@ -15,5 +15,10 @@ jobs:
           distribution: temurin
           java-version: '21'
           cache: maven
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Check appearance and address selection
+        run: node --test frontend/test/*.test.mjs
       - name: Build all modules
         run: mvn -B clean verify

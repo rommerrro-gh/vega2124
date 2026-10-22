@@ -1,3 +1,4 @@
+import {NotePencil,Receipt,ArrowRight,Question,CheckCircle,Clock} from "./design.jsx";
 import {CaseVisits,CaseMassProblem,HouseOperations,OperationsManagement} from "./operations.jsx";
 import React, { useEffect, useState } from "react";
 import {BillingCase,BillingQueue} from "./billing-cases.jsx";
@@ -6,7 +7,7 @@ import {CaseWorkflow} from "./warranty-workflow.jsx";
 
 const statuses = { RECEIVED: "Принято к рассмотрению", IN_REVIEW: "Разбираемся", WAITING_RESIDENT: "Нужен ваш ответ", IN_PROGRESS: "В работе", RESULT_PROPOSED: "Посмотрите результат", CLOSED: "Результат подтверждён", REOPENED: "Проверяем повторно" };
 const kinds = { GENERAL: "Вопрос по дому", PROBLEM: "Проблема дома", PAYMENT: "Вопрос по квитанции", WARRANTY: "Возможный строительный дефект" };
-const date = value => value ? new Date(value).toLocaleString("ru-RU") : "Срок уточняется";
+const date = value => value ? new Date(value).toLocaleString("ru-RU",{day:"2-digit",month:"2-digit",year:"numeric",hour:"2-digit",minute:"2-digit"}) : "Срок уточняется";
 const key = () => crypto.randomUUID();
 const text = item => item.description.length > 110 ? `${item.description.slice(0,110)}…` : item.description;
 
@@ -95,10 +96,19 @@ export function CaseDetail({ item, api, role, headers, context, onChange, onClos
   </section>;
 }
 
-export function ResidentCases({ house, role, api, headers, canSubmit, legacyIssues = [], legacyStatusLabels = {}, onLegacyOpen, initialCaseId }) {
+function FeaturedCase({item,api,role,onOpen,onShowCases,total}) {
+  const [visit,setVisit]=useState(null);
+  useEffect(()=>{let active=true;setVisit(null);if(item.isAuthor&&item.fullAccess)api(role,`/v1/cases/${item.id}/visits`).then(data=>{if(active)setVisit(data.visits.find(v=>["OFFERED","CONFIRMED","CHANGE_REQUESTED"].includes(v.state))||null);}).catch(()=>{});return()=>{active=false;};},[item.id,item.revision,role]);
+  const offered=visit?.state==="OFFERED",confirmed=visit?.state==="CONFIRMED",finished=item.status==="CLOSED",result=item.status==="RESULT_PROPOSED";
+  const slot=confirmed?visit.slots.find(s=>s.id===visit.selected_slot_id):offered&&visit.slots.length===1?visit.slots[0]:null;
+  return <section className="case-panel case-featured"><div className="case-heading"><h2>Ваше обращение</h2>{total>1&&<button type="button" className="case-link" onClick={onShowCases}>Все обращения <ArrowRight size={18}/></button>}</div><h3>{text(item)}</h3><ol className="case-progress-summary"><li className="is-done"><CheckCircle size={24} weight="fill"/><div><strong>Принято</strong><small>Обращение № {item.number}</small></div></li><li className="is-current"><Clock size={24}/><div><strong>{offered?"Осмотр":confirmed?"Визит согласован":statuses[item.status]}</strong><p>{offered?"Выберите удобное время визита":confirmed?visit.purpose:item.nextStep}</p>{slot&&<p className="case-summary-date">{date(slot.starts_at)} — {new Date(slot.ends_at).toLocaleTimeString("ru-RU",{hour:"2-digit",minute:"2-digit"})}</p>}{!slot&&item.dueAt&&<p className="case-summary-date">{date(item.dueAt)}</p>}<button type="button" className="case-secondary" onClick={onOpen}>{offered?"Выбрать время":result?"Проверить результат":item.status==="WAITING_RESIDENT"?"Ответить на обращение":"Открыть обращение"} <ArrowRight size={18}/></button></div></li>{!finished&&!result&&<li className="is-future"><CheckCircle size={24}/><div><strong>Результат</strong><small>Сообщим о результате здесь. Вы сможете его проверить.</small></div></li>}</ol></section>;
+}
+
+export function ResidentCases({ house, role, api, headers, canSubmit, legacyIssues = [], legacyStatusLabels = {}, onLegacyOpen, initialCaseId, view="home", onShowCases }) {
   const [items,setItems]=useState([]),[context,setContext]=useState(null),[detail,setDetail]=useState(null);
   const [compose,setCompose]=useState(false),[draft,setDraft]=useState(null),[files,setFiles]=useState([]);
   const [filter,setFilter]=useState("ALL"),[notice,setNotice]=useState(""),[busy,setBusy]=useState(false),[review,setReview]=useState(false);
+  useEffect(()=>{const close=()=>{setDetail(null);setCompose(false);setReview(false);};window.addEventListener("pulse-resident-navigation",close);return()=>window.removeEventListener("pulse-resident-navigation",close);},[]);
   const houseId=house.id;
   const storageKey=context?`pulse-case:${context.actorId}:${houseId}`:null;
   useEffect(()=>{
@@ -129,19 +139,20 @@ export function ResidentCases({ house, role, api, headers, canSubmit, legacyIssu
   }
   const waiting=items.filter(i=>["WAITING_RESIDENT","RESULT_PROPOSED"].includes(i.status));
   const visible=items.filter(i=>filter==="ALL" || (filter==="ACTIVE" ? i.status!=="CLOSED" : filter==="WAITING" ? ["WAITING_RESIDENT","RESULT_PROPOSED"].includes(i.status) : i.kind===filter));
+  const featured=waiting[0]||items.find(i=>i.status!=="CLOSED")||items[0];
   const legacyVisible=legacyIssues.filter(i=>filter==="ALL" || (filter==="ACTIVE" ? !["CLOSED_CONFIRMED","CLOSED_UNCONFIRMED","WITHDRAWN","REJECTED"].includes(i.status) : filter==="WAITING" ? i.status==="VERIFICATION_72H" : filter==="PROBLEM"));
   return <section className="case-workspace" aria-label="Обращения по дому">
     <Notice>{notice}</Notice>
-    <HouseOperations houseId={houseId} role={role} api={api} canJoin={canSubmit} onJoined={changed}/>
+    <div hidden={view!=="events"}><HouseOperations houseId={houseId} role={role} api={api} canJoin={canSubmit} onJoined={changed}/></div>
     {context?.canReview&&<details className="case-panel"><summary>Рабочие обращения — доступ сотрудника</summary><StaffCases houseId={houseId} role={role} api={api} headers={headers}/></details>}
-    {!!waiting.length&&!detail&&!compose&&<div className="case-next"><strong>Нужен ваш ответ · {waiting.length}</strong><p>{waiting[0].nextStep}</p><button type="button" onClick={()=>setDetail(waiting[0])}>Открыть обращение</button></div>}
-    {!detail&&!compose&&canSubmit&&<div className="case-start">
-      <button type="button" disabled={!context} onClick={()=>begin("PROBLEM")}><span aria-hidden="true">＋</span><strong>Сообщить о проблеме</strong><small>Опишите, что случилось. Мы определим, кто поможет.</small></button>
-      <button id="resident-payment-start" type="button" disabled={!context} onClick={()=>begin("PAYMENT")}><span aria-hidden="true">₽</span><strong>Вопрос по квитанции</strong><small>Можно написать без квитанции и лицевого счёта.</small></button>
-      <button type="button" className="case-link" disabled={!context} onClick={()=>begin("GENERAL")}>Написать другой вопрос</button>
+    {view==="cases"&&!!waiting.length&&!detail&&!compose&&<div className="case-next"><strong>Нужен ваш ответ · {waiting.length}</strong><p>{waiting[0].nextStep}</p><button type="button" onClick={()=>setDetail(waiting[0])}>Открыть обращение</button></div>}
+    {!detail&&!compose&&canSubmit&&view!=="events"&&<div className="case-start">
+      <button type="button" disabled={!context} onClick={()=>begin("PROBLEM")}><NotePencil size={26} aria-hidden="true"/><strong>Сообщить о проблеме</strong><ArrowRight size={22} aria-hidden="true"/><small>Кто поможет — определим сами.</small></button>
+      <button id="resident-payment-start" type="button" disabled={!context} onClick={()=>begin("PAYMENT")}><Receipt size={26} aria-hidden="true"/><strong>Вопрос по квитанции</strong><ArrowRight size={20} aria-hidden="true"/></button>
+      {view==="cases"&&<button type="button" className="case-link case-other-question" disabled={!context} onClick={()=>begin("GENERAL")}><Question size={18} aria-hidden="true"/> Написать другой вопрос</button>}
       {draft&&<div className="case-draft"><strong>Есть сохранённый черновик</strong><button type="button" onClick={()=>{setCompose(true);setReview(!!draft.pending);}}>Продолжить</button>{!draft.pending&&<button type="button" className="case-link" onClick={()=>{setDraft(null);try{sessionStorage.removeItem(storageKey);}catch{}}}>Удалить черновик</button>}</div>}
     </div>}
-    {compose&&draft&&<section className="case-panel"><div className="case-heading"><h2>{review?"Проверьте сообщение":draft.kind==="PAYMENT"?"Что вас смущает в квитанции?":"Что случилось?"}</h2><button type="button" className="case-link" disabled={busy} onClick={()=>setCompose(false)}>Сохранить и закрыть</button></div>
+    {compose&&draft&&view!=="events"&&<section className="case-panel"><div className="case-heading"><h2>{review?"Проверьте сообщение":draft.kind==="PAYMENT"?"Что вас смущает в квитанции?":"Что случилось?"}</h2><button type="button" className="case-link" disabled={busy} onClick={()=>setCompose(false)}>Сохранить и закрыть</button></div>
       <p className="case-address">Ваш дом: {house.address}</p>
       {!context?.intakeAvailable&&<Notice>В этом доме пока не назначен сотрудник. Черновик можно сохранить, но приём обращений ещё не подключён.</Notice>}
       {review?<><p className="case-description">{draft.description}</p><p>Где заметили: {draft.location||"Пока не определено"}</p><p>Файлов: {files.length}. После перезагрузки файлы нужно выбрать заново.</p><p>Выбирать организацию и определять причину не нужно.</p><div className="case-actions"><button type="button" disabled={busy||!context?.intakeAvailable} onClick={submit}>{busy?"Отправляем…":draft.pending?"Повторить отправку":"Отправить обращение"}</button><button type="button" className="case-secondary" disabled={busy||draft.pending} onClick={()=>setReview(false)}>Изменить</button></div></>:
@@ -153,10 +164,12 @@ export function ResidentCases({ house, role, api, headers, canSubmit, legacyIssu
         <button disabled={busy||!draft.description.trim()}>Проверить перед отправкой</button>
       </form>}
     </section>}
-    {detail&&<CaseDetail key={detail.id} item={detail} context={context} role={role} api={api} headers={headers} onChange={changed} onClose={()=>setDetail(null)}/>}
-    {!detail&&!compose&&<section className="case-panel"><div className="case-heading"><h2>Мои обращения</h2><button type="button" className="case-link" disabled={busy} onClick={refresh}>Обновить</button></div>
-      <label className="case-filter">Показать<select value={filter} onChange={e=>setFilter(e.target.value)}><option value="ALL">Все</option><option value="ACTIVE">Активные</option><option value="WAITING">Нужен мой ответ</option><option value="PAYMENT">По квитанциям</option><option value="PROBLEM">Проблемы дома</option><option value="GENERAL">Другие вопросы</option><option value="WARRANTY">Строительные дефекты</option></select></label>
-      <div className="case-list">{visible.map(item=><button type="button" className="case-list-item" key={item.id} onClick={()=>setDetail(item)}><small>№ {item.number} · {statuses[item.status]}</small><strong>{text(item)}</strong><span>{item.nextStep}</span><small>{item.responsibleName} · {date(item.dueAt)}</small></button>)}{legacyVisible.map(item=><button type="button" className="case-list-item" key={`issue-${item.id}`} onClick={()=>onLegacyOpen(item)}><small>Работы по заявке · {legacyStatusLabels[item.status]||item.status}</small><strong>{item.description||"Проблема дома"}</strong><span>{item.plannedDate?`Плановая дата: ${item.plannedDate}`:"Срок уточняется"}</span><small>Открыть историю работ и результат</small></button>)}{!visible.length&&!legacyVisible.length&&<p className="muted">Здесь появятся ваши вопросы и ответы сотрудников.</p>}</div>
+    {detail&&view!=="events"&&<CaseDetail key={detail.id} item={detail} context={context} role={role} api={api} headers={headers} onChange={changed} onClose={()=>setDetail(null)}/>}
+    {!detail&&!compose&&view==="home"&&featured&&<FeaturedCase item={featured} api={api} role={role} total={items.length+legacyIssues.length} onShowCases={onShowCases} onOpen={()=>{setDetail(featured);requestAnimationFrame(()=>document.querySelector('.case-workspace')?.scrollIntoView({block:"start"}));}}/>}
+    {!detail&&!compose&&canSubmit&&view==="home"&&<button type="button" className="case-link case-other-question" disabled={!context} onClick={()=>begin("GENERAL")}><Question size={18} aria-hidden="true"/> Написать другой вопрос</button>}
+    {!detail&&!compose&&view!=="events"&&<section className={`case-panel case-all-list ${view==="home"&&featured?"case-list-on-home":""}`}><div className="case-heading"><h2>Мои обращения</h2><button type="button" className="case-link" disabled={busy} onClick={refresh}>Обновить</button></div>
+      <label className="case-filter" hidden={view==="home"}>Показать<select value={filter} onChange={e=>setFilter(e.target.value)}><option value="ALL">Все</option><option value="ACTIVE">Активные</option><option value="WAITING">Нужен мой ответ</option><option value="PAYMENT">По квитанциям</option><option value="PROBLEM">Проблемы дома</option><option value="GENERAL">Другие вопросы</option><option value="WARRANTY">Строительные дефекты</option></select></label>
+      <div className="case-list">{(view==="home"?visible.slice(0,3):visible).map(item=><button type="button" className="case-list-item" key={item.id} onClick={()=>setDetail(item)}><small>№ {item.number} · {statuses[item.status]}</small><strong>{text(item)}</strong><span>{item.nextStep}</span><small>{item.responsibleName} · {date(item.dueAt)}</small></button>)}{(view==="home"?legacyVisible.slice(0,2):legacyVisible).map(item=><button type="button" className="case-list-item" key={`issue-${item.id}`} onClick={()=>onLegacyOpen(item)}><small>Работы по заявке · {legacyStatusLabels[item.status]||item.status}</small><strong>{item.description||"Проблема дома"}</strong><span>{item.plannedDate?`Плановая дата: ${item.plannedDate}`:"Срок уточняется"}</span><small>Открыть историю работ и результат</small></button>)}{!visible.length&&!legacyVisible.length&&<p className="muted">Здесь появятся ваши вопросы и ответы сотрудников.</p>}</div>
     </section>}
   </section>;
 }
