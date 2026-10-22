@@ -46,7 +46,7 @@ class ProblemIntakeFlowTest {
         assertTrue(postJson("/v1/cases/similar-problems",input(),200).toString().contains("OWN_ISSUE"));
         join.put("problem",different);postJson("/v1/cases/join-problem",join,409);
     }
-    @Test void newCaseRemainsInSearchAndPrivateNeighbourAndPaymentCasesDoNotLeak()throws Exception {
+    @Test void newSharedCaseRemainsInSearchAndNeighbourMaterialsAndPaymentCasesDoNotLeak()throws Exception {
         var create=input();create.put("kind","PROBLEM");create.put("clientRequestId",UUID.randomUUID().toString());
         var first=postJson("/v1/cases",create,201);var second=postJson("/v1/cases",create,201);assertEquals(first.path("id"),second.path("id"));assertEquals("LIGHTING",first.path("category").asText());
         jdbc.update("UPDATE resident_cases SET created_at=datetime('now') WHERE id=?",first.path("id").asText());
@@ -56,7 +56,7 @@ class ProblemIntakeFlowTest {
         jdbc.update("INSERT OR IGNORE INTO house_memberships(house_id,user_id,role,verification_status,access_status) VALUES ('demo-house-1','intake-neighbour','RESIDENT','VERIFIED','ACTIVE')");
         var neighbour=cases.create("demo-house-1",CaseKind.PROBLEM,"Не горит свет в подъезде",null,UUID.randomUUID().toString(),"intake-neighbour");
         var payment=cases.create("demo-house-1",CaseKind.PAYMENT,"Не горит свет в подъезде",null,UUID.randomUUID().toString(),"demo-resident-1");
-        String found=postJson("/v1/cases/similar-problems",input(),200).toString();assertFalse(found.contains(neighbour.id()));assertFalse(found.contains(payment.id()));
+        String found=postJson("/v1/cases/similar-problems",input(),200).toString();assertTrue(found.contains(neighbour.sharedRequestId()));assertThrows(RuntimeException.class,()->cases.get(neighbour.id(),"demo-resident-1"));assertFalse(found.contains(payment.id()));
     }
     @Test void unknownFieldsAreOptionalAndBadOrForeignRequestsRejected()throws Exception {
         var unknown=new HashMap<String,Object>(Map.of("houseId","demo-house-1","description","Мокнет стена, не знаю почему"));

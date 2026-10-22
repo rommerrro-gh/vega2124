@@ -33,7 +33,7 @@ public class CaseWorkAccess {
         """,house,user);}
     public boolean eligible(String house,String user,CaseFunction function){return member(house,user)||staffFunction(house,user,function)||function==CaseFunction.COORDINATOR&&manager(house,user)||function==CaseFunction.BILLING&&billing(house,user);}
     public boolean assigned(String id,String house,String user,CaseFunction... functions){
-        for(var f:functions)if(eligible(house,user,f)&&exists("SELECT count(*) FROM case_collaborators c WHERE c.case_id=? AND c.user_id=? AND c.function=? AND (c.source_organization_id IS NULL OR EXISTS (SELECT 1 FROM organization_houses h WHERE h.organization_id=c.source_organization_id AND h.house_id=? AND h.status='ACTIVE'))",id,user,f.name(),house))return true;
+        for(var f:functions)if(eligible(house,user,f)&&exists("SELECT count(*) FROM case_collaborators c WHERE (c.case_id=? OR c.case_id=(SELECT s.root_case_id FROM shared_request_members m JOIN shared_requests s ON s.id=m.request_id WHERE m.case_id=?)) AND c.user_id=? AND c.function=? AND (c.source_organization_id IS NULL OR EXISTS (SELECT 1 FROM organization_houses h WHERE h.organization_id=c.source_organization_id AND h.house_id=? AND h.status='ACTIVE'))",id,id,user,f.name(),house))return true;
         return false;
     }
     public boolean dispatcher(String house,String user){return member(house,user)&&exists("SELECT count(*) FROM house_memberships WHERE house_id=? AND user_id=? AND role='DISPATCHER' AND verification_status='VERIFIED' AND access_status='ACTIVE'",house,user);}

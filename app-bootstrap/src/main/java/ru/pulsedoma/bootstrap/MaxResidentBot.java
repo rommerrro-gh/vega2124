@@ -21,6 +21,7 @@ public class MaxResidentBot {
     private final JdbcTemplate jdbc;
     private final ObjectMapper mapper;
     private final ResidentCaseService cases;
+    private final ProblemIntakeService intake;
     private final MiniAppService app;
     private final HouseTariffService tariffs;
     private final BillingCaseService billing;
@@ -28,8 +29,8 @@ public class MaxResidentBot {
     private final MaxBotMedia media;
     private final TransactionTemplate tx;
     public MaxResidentBot(JdbcTemplate jdbc,ObjectMapper mapper,ResidentCaseService cases,MiniAppService app,
-                          MaxBotMessages messages,MaxBotMedia media,PlatformTransactionManager manager,HouseTariffService tariffs,BillingCaseService billing) {
-        this.billing=billing;this.tariffs=tariffs;this.jdbc=jdbc;this.mapper=mapper;this.cases=cases;this.app=app;this.messages=messages;this.media=media;this.tx=new TransactionTemplate(manager);
+                          MaxBotMessages messages,MaxBotMedia media,PlatformTransactionManager manager,HouseTariffService tariffs,BillingCaseService billing,ProblemIntakeService intake) {
+        this.intake=intake;this.billing=billing;this.tariffs=tariffs;this.jdbc=jdbc;this.mapper=mapper;this.cases=cases;this.app=app;this.messages=messages;this.media=media;this.tx=new TransactionTemplate(manager);
     }
     public void handle(JsonNode update) {
         String type=update.path("update_type").asText();
@@ -104,8 +105,8 @@ public class MaxResidentBot {
             StringBuilder content=new StringBuilder("Ваши обращения\nДом: "+address(house));List<String> buttons=new ArrayList<>();
             for(var c:all.subList(from,to)){content.append("\n\n№").append(c.number()).append(" · ").append(MaxBotMessages.status(c.status())).append("\n").append(c.address()).append("\n").append(MaxBotMessages.limit(c.description(),100));buttons.add("Открыть №"+c.number());}
             if(to<all.size())buttons.add("Ещё обращения "+(page+1));
-            if(all.isEmpty())content.append("\nНовых обращений пока нет. Прежние заявки доступны в приложении.");
-            else content.append("\n\nПрежние заявки также доступны в приложении.");
+            if(all.isEmpty())content.append("\nНовых обращений пока нет. Все заявки доступны в приложении.");
+            else content.append("\n\nПодробности и документы также доступны в приложении.");
             buttons.add("Мой дом");buttons.add("Меню");reply(key,user,house,null,messages.body(content.toString(),buttons,null));return;
         }
         if(text.equals("Тарифы")||text.equals("/tariffs")||text.matches("Ещё тарифы [0-9]{1,9}")) {
@@ -142,6 +143,18 @@ public class MaxResidentBot {
             } else content.append("\nПодключите дом в приложении по приглашению. Адрес сам по себе не даёт доступ к дому.");
             buttons.add("Меню");reply(key,user,house,null,messages.body(content.toString(),buttons,null));return;
         }
+        if(hasDraft(s)&&s.kind()==CaseKind.PROBLEM&&categories().containsKey(text)){
+            jdbc.update("INSERT INTO max_bot_problem_categories(user_id,draft_id,category) VALUES (?,?,?) ON CONFLICT(user_id) DO UPDATE SET draft_id=excluded.draft_id,category=excluded.category",user,s.draft(),categories().get(text).name());
+            if(s.text().isBlank())reply(key,user,s.house(),null,messages.body("Опишите проблему своими словами. Описание проблемы будет видно жителям дома. Личные сведения можно добавить после регистрации в закрытой переписке.",List.of("Удалить черновик","Меню"),null));else preview(key,user,s);return;
+        }
+        if(hasDraft(s)&&s.state()==State.REVIEW&&text.matches("Та же проблема [1-3]")){
+            int position=Integer.parseInt(text.substring(text.lastIndexOf(' ')+1));
+            var match=jdbc.queryForList("SELECT request_id FROM max_bot_problem_matches WHERE user_id=? AND draft_id=? AND position=?",user,s.draft(),position);
+            if(match.isEmpty())throw invalid("Повторите проверку черновика: список совпадений изменился");
+            var c=intake.joinShared((String)match.getFirst().get("request_id"),problem(user,s),"max:"+s.draft(),user);
+            for(var f:jdbc.queryForList("SELECT * FROM max_bot_draft_files WHERE user_id=? AND draft_id=? ORDER BY created_at,id",user,s.draft()))c=cases.upload(c.id(),null,f.get("title").toString(),(byte[])f.get("content"),f.get("mime").toString(),0,user);
+            jdbc.update("DELETE FROM max_bot_draft_files WHERE user_id=?",user);idle(user);reply(key,user,c.houseId(),c.id(),messages.card(c,false));return;
+        }
         if(Set.of("Сообщить о проблеме","Вопрос по квитанции","/new","/payment").contains(text)) {
             if(hasDraft(s)){reply(key,user,s.house(),null,messages.body("У вас уже есть черновик. Можно продолжить или удалить его, чтобы начать новый.",List.of("Продолжить","Удалить черновик","Меню"),null));return;}
             String house=activeHouse(user);if(house==null){reply(key,user,null,null,messages.body("Сначала выберите или подключите дом. Вам не нужно определять организацию, которая будет решать вопрос.",List.of("Мой дом","Меню"),null));return;}
@@ -175,7 +188,7 @@ public class MaxResidentBot {
             if(state==State.REPLY&&c.status()==CaseStatus.CLOSED)throw invalid("Обращение закрыто. Нажмите «Проверить повторно».");
             if(state==State.CONFIRM&&c.status()!=CaseStatus.RESULT_PROPOSED)throw invalid("Результат пока не предложен или обращение изменилось. Откройте его заново.");
             if(state==State.REOPEN&&!List.of(CaseStatus.RESULT_PROPOSED,CaseStatus.CLOSED).contains(c.status()))throw invalid("Повторное рассмотрение уже идёт или результат ещё не предложен.");
-            save(user,new Session(state,c.houseId(),CaseKind.GENERAL,UUID.randomUUID().toString(),"",c.id(),c.revision()));
+            save(user,new Session(state,c.houseId(),CaseKind.PROBLEM,UUID.randomUUID().toString(),"",c.id(),c.revision()));
             String prompt=state==State.REPLY?"Напишите ответ сотруднику или пришлите фото/PDF. Если не знаете ответ, так и напишите.":state==State.CONFIRM?"Вы проверили результат и подтверждаете, что вопрос решён?": "Напишите, что осталось нерешённым. Можно продолжить без пояснения.";
             reply(key,user,c.houseId(),c.id(),messages.body("Обращение №"+c.number()+"\nДом: "+c.address()+"\n\n"+prompt,state==State.CONFIRM?List.of("Результат №"+c.number()+" подтверждаю","Меню"):state==State.REOPEN?List.of("Без пояснения","Меню"):List.of("Меню"),c.id()));return;
         }
@@ -209,7 +222,8 @@ public class MaxResidentBot {
         }
         if(text.equals("Отправить обращение")) {
             if(s.state()!=State.REVIEW)throw invalid("Сначала проверьте черновик перед отправкой.");
-            var c=cases.create(s.house(),s.kind(),s.text(),null,"max:"+s.draft(),user);
+            if(s.kind()==CaseKind.PROBLEM&&category(user,s)==null){preview(key,user,s);return;}
+            var c=s.kind()==CaseKind.PAYMENT?cases.create(s.house(),s.kind(),s.text(),null,"max:"+s.draft(),user):intake.create(problem(user,s),CaseKind.PROBLEM,"max:"+s.draft(),user);
             for(var f:jdbc.queryForList("SELECT * FROM max_bot_draft_files WHERE user_id=? AND draft_id=? ORDER BY created_at,id",user,s.draft()))
                 c=cases.upload(c.id(),null,f.get("title").toString(),(byte[])f.get("content"),f.get("mime").toString(),0,user);
             jdbc.update("DELETE FROM max_bot_draft_files WHERE user_id=?",user);idle(user);
@@ -230,15 +244,21 @@ public class MaxResidentBot {
         if(text.isBlank()){reply(key,user,null,null,messages.body("Сначала напишите, о чём хотите сообщить. Затем можно приложить файл.",messages.menu(),null));return;}
         if(text.startsWith("/")||text.length()>4000){reply(key,user,null,null,messages.body("Выберите действие в меню. Описание обращения — до 4000 символов.",messages.menu(),null));return;}
         if(!cases.context(house,user).intakeAvailable())throw invalid("Приём в этом доме пока не подключён. Контакты доступны в разделе «Мой дом».");
-        s=new Session(State.COMPOSE,house,CaseKind.GENERAL,UUID.randomUUID().toString(),text,null,null);save(user,s);
+        s=new Session(State.COMPOSE,house,CaseKind.PROBLEM,UUID.randomUUID().toString(),text,null,null);save(user,s);
         if(attachments.isArray())for(JsonNode file:attachments)saveFile(user,s,file,loaded);
         preview(key,user,s);
     }
+    private Map<String,ReportCategory> categories(){var result=new LinkedHashMap<String,ReportCategory>();String[] labels={"Освещение","Вода","Отопление","Лифт","Уборка подъезда","Уборка двора","Вывоз мусора","Детская площадка","Другое"};var values=ReportCategory.values();for(int i=0;i<values.length;i++)result.put(labels[i],values[i]);return result;}
+    private ReportCategory category(String user,Session s){var rows=jdbc.query("SELECT category FROM max_bot_problem_categories WHERE user_id=? AND draft_id=?",(r,n)->ReportCategory.valueOf(r.getString(1)),user,s.draft());return rows.isEmpty()?null:rows.getFirst();}
+    private ProblemIntakeService.Input problem(String user,Session s){return new ProblemIntakeService.Input(s.house(),s.text(),category(user,s),null,null);}
     private void preview(String key,String user,Session s) {
         int files=jdbc.queryForObject("SELECT count(*) FROM max_bot_draft_files WHERE user_id=? AND draft_id=?",Integer.class,user,s.draft());
-        // Adding text/files always returns to review; submit button is valid only for this stored draft.
+        if(s.kind()==CaseKind.PROBLEM&&category(user,s)==null){save(user,new Session(State.COMPOSE,s.house(),s.kind(),s.draft(),s.text(),null,null));var buttons=new ArrayList<>(categories().keySet());buttons.add("Удалить черновик");buttons.add("Меню");reply(key,user,s.house(),null,messages.body("Проверьте перед отправкой\n\n"+MaxBotMessages.limit(s.text(),2300)+"\nФайлов: "+files+"\n\nВыберите категорию проблемы. Если не уверены — «Другое».",buttons,null));return;}
         save(user,new Session(State.REVIEW,s.house(),s.kind(),s.draft(),s.text(),null,null));
-        reply(key,user,s.house(),null,messages.body("Проверьте перед отправкой\nДом: "+address(s.house())+"\n\n"+MaxBotMessages.limit(s.text(),2800)+"\n\nФайлов: "+files+"\nМожно дописать подробности или прислать фото/PDF. Получателя определит сотрудник. Пока обращение не отправлено.",List.of("Отправить обращение","Удалить черновик","Меню"),null));
+        StringBuilder content=new StringBuilder("Проверьте перед отправкой\nДом: "+address(s.house())+"\n\n"+MaxBotMessages.limit(s.text(),2100)+"\n\nФайлов: "+files+"\nЛичные документы доступны вам и сотрудникам. Получателя определит сотрудник.");
+        List<String> buttons=new ArrayList<>();jdbc.update("DELETE FROM max_bot_problem_matches WHERE user_id=?",user);
+        if(s.kind()==CaseKind.PROBLEM){try{var found=intake.search(problem(user,s),user);int index=0;for(var m:found){if(m.source()!=ProblemIntakeService.Source.SHARED&&m.source()!=ProblemIntakeService.Source.OWN_SHARED)continue;if(++index>3)break;content.append("\n\nПохожая проблема ").append(index).append(": ").append(MaxBotMessages.limit(m.description(),150)).append(" · ").append(m.participants()).append(" участников");if(m.source()==ProblemIntakeService.Source.OWN_SHARED){var own=cases.get(m.caseId(),user);buttons.add("Открыть №"+own.number());}else{jdbc.update("INSERT INTO max_bot_problem_matches(user_id,draft_id,position,request_id) VALUES (?,?,?,?)",user,s.draft(),index,m.id());buttons.add("Та же проблема "+index);}}if(index==0)content.append("\n\nПохожих активных общих заявок не найдено.");}catch(ru.pulsedoma.common.BusinessException e){content.append("\n\nПоиск пока недоступен. Можно отправить отдельное обращение.");}}
+        content.append("\n\nНажмите «Отправить обращение», если это отдельная проблема. Пока обращение не отправлено.");buttons.add("Отправить обращение");buttons.add("Удалить черновик");buttons.add("Меню");reply(key,user,s.house(),null,messages.body(content.toString(),buttons,null));
     }
     private void saveFile(String user,Session s,JsonNode attachment,Map<String,MaxBotMedia.File> loaded) {
         var f=loaded.get(attachment.path("payload").path("url").asText());
@@ -267,7 +287,7 @@ public class MaxResidentBot {
     private String address(String id){return jdbc.queryForObject("SELECT address FROM houses WHERE id=?",String.class,id);}
     private boolean hasDraft(Session s){return s.state()==State.COMPOSE||s.state()==State.REVIEW;}
     private Session session(String user){var list=jdbc.query("SELECT * FROM max_bot_sessions WHERE user_id=?",(rs,n)->new Session(State.valueOf(rs.getString("state")),rs.getString("house_id"),CaseKind.valueOf(rs.getString("kind")),rs.getString("draft_id"),rs.getString("description"),rs.getString("case_id"),(Integer)rs.getObject("revision")),user);return list.isEmpty()?empty():list.get(0);}
-    private Session empty(){return new Session(State.IDLE,null,CaseKind.GENERAL,UUID.randomUUID().toString(),"",null,null);}
+    private Session empty(){return new Session(State.IDLE,null,CaseKind.PROBLEM,UUID.randomUUID().toString(),"",null,null);}
     private void idle(String user){save(user,empty());}
     private void save(String user,Session s){jdbc.update("""
         INSERT INTO max_bot_sessions(user_id,state,house_id,kind,draft_id,description,case_id,revision,updated_at) VALUES (?,?,?,?,?,?,?,?,?)

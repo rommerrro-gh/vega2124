@@ -62,7 +62,7 @@ class ResidentCasesFlowTest {
         var second=json(mvc.perform(post("/v1/cases").header("X-Demo-Session","true").contentType("application/json").content(body))
             .andExpect(status().isCreated()).andReturn().getResponse().getContentAsByteArray());
         assertEquals(first.path("id"),second.path("id"));
-        assertEquals("GENERAL",first.path("kind").asText());
+        assertEquals("PROBLEM",first.path("kind").asText());
         assertTrue(first.path("location").isNull());
         assertEquals(1,first.path("events").size());
         mvc.perform(post("/v1/cases").header("X-Demo-Session","true").contentType("application/json")

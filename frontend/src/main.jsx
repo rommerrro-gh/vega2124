@@ -1,3 +1,4 @@
+import {Users,ArrowRight} from "@phosphor-icons/react";
 import {PlaceFields,defaultPlace} from "./problem-fields.jsx";
 import {AppearancePicker,ResidentHeader,ResidentNavigation,useAppearance} from "./design.jsx";
 import {OperationsInbox} from "./operations.jsx";
@@ -445,6 +446,8 @@ function Resident() {
   const [polls, setPolls] = useState([]);
   const [residentView,setResidentView]=useState(new URLSearchParams(location.search).has("caseId")?"cases":"home");
   function changeResidentView(next){setResidentView(next);window.dispatchEvent(new CustomEvent("pulse-resident-navigation",{detail:next}));requestAnimationFrame(()=>{window.scrollTo({top:0,behavior:"auto"});if(next==="events")document.querySelector(".resident-events .disclosure-card details")?.setAttribute("open","");});}
+  const [homePollOpen,setHomePollOpen]=useState(false);
+  const [homeUtilitiesOpen,setHomeUtilitiesOpen]=useState(false);
   const [pollBusy, setPollBusy] = useState(false);
   const [issues, setIssues] = useState([]);
   const [notice, setNotice] = useState("");
@@ -613,7 +616,7 @@ function Resident() {
 
     {selectedHouse && step === "form" && <ResidentCases key={`${demoSession}:${selectedHouseId}`} house={selectedHouse} role={demoSession} api={api} headers={authHeaders} canSubmit={canReport} view={residentView} onShowCases={()=>changeResidentView("cases")} initialCaseId={initialCaseId} legacyIssues={houseIssues} legacyStatusLabels={statusLabels} onLegacyOpen={(next,message)=>{showIssue(next,message);refreshIssues().catch(fail);}} passport={passport} candidateReason={candidateReason} />}
 
-    <div hidden={residentView!=="home"} className="resident-tariffs">{selectedHouse && step === "form" && <HouseTariffs key={`tariffs:${demoSession}:${selectedHouseId}`} houseId={selectedHouseId} role={demoSession} api={api} headers={authHeaders} onQuestion={canReport?text=>{if(typeof text==="string")window.dispatchEvent(new CustomEvent("pulse-payment-question",{detail:{houseId:selectedHouseId,text}}));else document.getElementById("resident-payment-start")?.click();}:undefined}/>}</div>
+    <div hidden={residentView!=="home"||!homeUtilitiesOpen} className="resident-tariffs">{selectedHouse && step === "form" && <HouseTariffs key={`tariffs:${demoSession}:${selectedHouseId}`} houseId={selectedHouseId} role={demoSession} api={api} headers={authHeaders} onQuestion={canReport?text=>{if(typeof text==="string")window.dispatchEvent(new CustomEvent("pulse-payment-question",{detail:{houseId:selectedHouseId,text}}));else document.getElementById("resident-payment-start")?.click();}:undefined}/>}</div>
     <div className="content-grid resident-events">
       {step === "form" && showReportForm && canReport && <Card className="form-card">
         <div className="form-title"><SectionHeading title="Сообщить о проблеме" subtitle={`Дом: ${selectedHouse?.address || "не выбран"}`} /><button className="form-close" type="button" disabled={busy} onClick={() => reportId ? withdrawReport(reportId, "Создание заявки отменено пользователем", "Создание заявки отменено.") : setShowReportForm(false)}>Отмена</button></div>
@@ -628,8 +631,10 @@ function Resident() {
         </form>
       </Card>}
 
-      {step === "form" && canReport && <div hidden={residentView==="cases"}><DisclosureCard title="Опросы дома" summary={openPolls.length ? `${countLabel(openPolls.length, "опрос ждёт", "опроса ждут", "опросов ждут")} вашего ответа` : polls.length ? countLabel(polls.length, "опрос", "опроса", "опросов") : "Опросов пока нет"}><div className="poll-list">{polls.map(poll => <PollCard key={poll.id} poll={poll} onVote={voteInPoll} busy={pollBusy} />)}{!polls.length && <p className="muted">В выбранном доме пока нет опросов.</p>}<Button mode="secondary" type="button" disabled={pollBusy} onClick={refreshPolls}>Обновить опросы</Button></div></DisclosureCard></div>}
-      {step === "form" && selectedHouse && <div hidden={residentView!=="home"}><DisclosureCard title="Мой дом" summary="Паспорт и полезные контакты"><HousePassport passport={passport} loading={passportLoading} error={passportError} /></DisclosureCard></div>}
+      {step==="form"&&canReport&&residentView==="home"&&<section className="home-poll"><button type="button" className="home-poll-row" aria-expanded={homePollOpen} onClick={()=>setHomePollOpen(v=>!v)}><Users size={30}/><span><strong>Опрос жителей</strong><small>{(openPolls[0]||polls[0])?.question||"Пока нет активных опросов"}</small></span><ArrowRight size={21}/></button>{homePollOpen&&<div className="poll-list">{(openPolls[0]||polls[0])?<PollCard poll={openPolls[0]||polls[0]} onVote={voteInPoll} busy={pollBusy}/>:<p className="muted">Когда появится опрос, он будет здесь.</p>}</div>}</section>}
+      {step === "form" && canReport && <div hidden={residentView!=="events"}><DisclosureCard title="Опросы дома" summary={openPolls.length ? `${countLabel(openPolls.length, "опрос ждёт", "опроса ждут", "опросов ждут")} вашего ответа` : polls.length ? countLabel(polls.length, "опрос", "опроса", "опросов") : "Опросов пока нет"}><div className="poll-list">{polls.map(poll => <PollCard key={poll.id} poll={poll} onVote={voteInPoll} busy={pollBusy} />)}{!polls.length && <p className="muted">В выбранном доме пока нет опросов.</p>}<Button mode="secondary" type="button" disabled={pollBusy} onClick={refreshPolls}>Обновить опросы</Button></div></DisclosureCard></div>}
+      {step=== "form"&&selectedHouse&&residentView==="home"&&<button type="button" className="home-information-toggle" aria-expanded={homeUtilitiesOpen} onClick={()=>setHomeUtilitiesOpen(v=>!v)}>Платежи, тарифы и информация о доме</button>}
+      {step === "form" && selectedHouse && <div hidden={residentView!=="home"||!homeUtilitiesOpen}><DisclosureCard title="Мой дом" summary="Паспорт и полезные контакты"><HousePassport passport={passport} loading={passportLoading} error={passportError} /></DisclosureCard></div>}
       {step === "decision" && <Card className="flow-card">
         <SectionHeading title="Похожие проблемы" subtitle="Выберите существующую заявку или создайте новую" />
         <div className="item-list">{candidates.length ? candidates.map(({ issue: item, score, reasons }) => <div className="candidate" key={item.id}><span className="score">Оценка сходства: {Math.round(score * 100)}%</span><strong>{item.description || item.category || "Проблема дома"}</strong><p>{item.address} · {item.participants} участников</p><ul className="candidate-reasons">{(reasons || []).map(candidateReason).filter(Boolean).map(reason => <li key={reason}>{reason}</li>)}</ul><button type="button" disabled={busy} onClick={() => decide(`/v1/issues/${encodeURIComponent(item.id)}/join`)}>Присоединиться</button></div>) : <p className="muted empty">Похожих активных заявок не найдено.</p>}</div>
@@ -865,10 +870,10 @@ function Dispatcher() {
 
   return <main className="shell">
     <Brand role="Диспетчеру" /><Hero dispatcher /><Notice message={notice} />
+    <Field id="house" label="Дом"><select id="house" value={houseId} onChange={event => setHouseId(event.target.value)}><option value="">Выберите дом</option>{houses.map(h => <option value={h.id} key={h.id}>{h.address}</option>)}</select></Field>
     {houseId && <><HouseTariffs key={houseId} houseId={houseId} role="dispatcher" api={api} headers={authHeaders}/><StaffCases houseId={houseId} role="dispatcher" api={api} headers={authHeaders} /></>}
-    <div className="content-grid">
+    {queue.length>0&&<div className="content-grid">
       <Card className="queue-card"><SectionHeading number="01" title="Очередь заявок" subtitle="Обращения жителей по вашему дому" />
-        <Field id="house" label="Дом"><select id="house" value={houseId} onChange={event => setHouseId(event.target.value)}><option value="">Выберите дом</option>{houses.map(h => <option value={h.id} key={h.id}>{h.address}</option>)}</select></Field>
         <div className="item-list">{queue.length ? queue.map(item => <IssueCard key={item.id} issue={item} onClick={() => showIssue(item.id)} />) : <p className="muted empty">Новых заявок пока нет.</p>}</div>
         <Button mode="secondary" className="refresh-action" type="button" stretched disabled={!houseId} onClick={() => refreshQueue(houseId).catch(fail)}>↻ Обновить очередь</Button>
       </Card>
@@ -880,7 +885,7 @@ function Dispatcher() {
         {editableIssueStatuses.includes(issue.status) && <div className="secondary-operation"><h3>Обращения в заявке</h3>{issue.reports?.length > 1 && <Field id="split-reason" label="Причина разделения"><textarea id="split-reason" maxLength="1000" value={splitReason} onChange={event => setSplitReason(event.target.value)} placeholder="Например, другая проблема или место" /></Field>}{issue.reports?.map(report => <div className="linked-report" key={report.id}><small>{report.author}</small><p>{report.description}</p>{issue.reports.length > 1 && <Button mode="tertiary" type="button" disabled={busy || !splitReason.trim()} onClick={() => splitIssue(report.id)}>Выделить в новую заявку</Button>}</div>)}</div>}
         {!!mergeTargets.length && <div className="secondary-operation"><h3>Объединить заявки</h3><p className="hint">Обращения из этой заявки перейдут в выбранную. Выберите заявку на той же или более поздней стадии работы.</p><Field id="merge-target" label="Основная заявка"><select id="merge-target" value={mergeTargetId} onChange={event => setMergeTargetId(event.target.value)}><option value="">Выберите заявку</option>{mergeTargets.map(item => <option key={item.id} value={item.id}>{item.location || item.address} · {statusLabels[item.status] || item.status} · {item.id.slice(0, 8)}</option>)}</select></Field><Button mode="secondary" type="button" stretched disabled={busy || !mergeTargetId} onClick={mergeIssues}>Объединить с выбранной заявкой</Button></div>}
       </Card>}
-    </div>
+    </div>}
     <footer>Пульс дома <span>·</span> Кабинет диспетчера</footer>
   </main>;
 }

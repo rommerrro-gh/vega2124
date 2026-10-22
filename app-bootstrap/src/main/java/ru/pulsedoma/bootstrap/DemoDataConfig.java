@@ -10,6 +10,7 @@ import org.springframework.jdbc.core.JdbcTemplate;
 @Profile("demo")
 public class DemoDataConfig {
     @Bean
+    @org.springframework.core.annotation.Order(0)
     ApplicationRunner demoData(JdbcTemplate jdbc) {
         return args -> {
             jdbc.update("INSERT OR IGNORE INTO users(id, display_name, status) VALUES ('demo-resident-1', 'Демо-житель', 'ACTIVE')");

@@ -27,6 +27,7 @@ class MaxResidentBotFlowTest {
     @Autowired MaxResidentBot bot;
     @Autowired MaxBotMessages messages;
     @Autowired ResidentCaseService cases;
+    @Autowired ProblemIntakeService intake;
     @Autowired BillingCaseService billing;
     @Autowired JdbcTemplate jdbc;
     @Autowired ObjectMapper mapper;
@@ -80,8 +81,8 @@ class MaxResidentBotFlowTest {
     @Test void freeTextRequiresConfirmationAndDuplicateMessagesNeverCreateAnotherCase()throws Exception{
         int before=cases.mine(USER).size();var text=update("draft-mid","Мокнет стена, не знаю почему",null);bot.handle(text);bot.handle(text);
         assertEquals(before,cases.mine(USER).size());assertTrue(last().contains("Проверьте перед отправкой"));
-        var submit=update("submit-mid","Отправить обращение",null);bot.handle(submit);bot.handle(submit);say("Отправить обращение");
-        assertEquals(before+1,cases.mine(USER).size());var c=cases.mine(USER).get(0);assertEquals(CaseKind.GENERAL,c.kind());assertNull(c.location());
+        say("Другое");var submit=update("submit-mid","Отправить обращение",null);bot.handle(submit);bot.handle(submit);say("Отправить обращение");
+        assertEquals(before+1,cases.mine(USER).size());var c=cases.mine(USER).get(0);assertEquals(CaseKind.PROBLEM,c.kind());assertNull(c.location());
         assertEquals(1,jdbc.queryForObject("SELECT count(*) FROM max_bot_outbox WHERE id='message:submit-mid'",Integer.class));
     }
     @Test void paymentNeedsNoRecipientAndIsHiddenFromOrdinaryDispatcher()throws Exception{
@@ -93,7 +94,7 @@ class MaxResidentBotFlowTest {
         byte[] bytes="%PDF-1.4 test\n%%EOF".getBytes();when(media.download("https://fu.oneme.ru/test")).thenReturn(new MaxBotMedia.File(bytes,"application/pdf"));
         say("Сообщить о проблеме");say("Течёт потолок");
         var files=mapper.readTree("[{\"type\":\"file\",\"filename\":\"Фото.pdf\",\"payload\":{\"url\":\"https://fu.oneme.ru/test\"}}]");
-        var u=update("file-mid","",files);bot.handle(u);bot.handle(u);assertTrue(last().contains("Файлов: 1"));say("Отправить обращение");
+        var u=update("file-mid","",files);bot.handle(u);bot.handle(u);assertTrue(last().contains("Файлов: 1"));say("Другое");say("Отправить обращение");
         var c=cases.mine(USER).get(0);assertEquals(1,c.documents().size());assertArrayEquals(bytes,cases.download(c.documents().get(0).versions().get(0).id(),USER).bytes());
         assertEquals(0,jdbc.queryForObject("SELECT count(*) FROM max_bot_draft_files WHERE user_id=?",Integer.class,USER));
     }
@@ -154,5 +155,10 @@ class MaxResidentBotFlowTest {
     }
     @Test void mediaUrlsAreRestricted(){
         for(String url:List.of("http://fu.oneme.ru/test","https://localhost/x","https://127.0.0.1/x","https://fu.oneme.ru.evil.test/x","https://fu.oneme.ru:8443/x","https://user:pass@fu.oneme.ru/x"))assertFalse(MaxBotMedia.allowed(java.net.URI.create(url)),url);assertTrue(MaxBotMedia.allowed(java.net.URI.create("https://fu.oneme.ru/test")));
+    }
+    @Test void botCategorySearchJoinsNeighboursCommonRequestIdempotently()throws Exception{
+        jdbc.update("INSERT OR IGNORE INTO users(id,display_name,status) VALUES ('bot-shared-neighbour','Сосед','ACTIVE')");jdbc.update("INSERT OR IGNORE INTO house_memberships(house_id,user_id,role,verification_status,access_status) VALUES (?,'bot-shared-neighbour','RESIDENT','VERIFIED','ACTIVE')",HOUSE);
+        String text="Не работает пассажирский лифт "+UUID.randomUUID();var common=intake.create(new ProblemIntakeService.Input(HOUSE,text,ReportCategory.ELEVATOR,null,null),CaseKind.PROBLEM,UUID.randomUUID().toString(),"bot-shared-neighbour");
+        int before=cases.mine(USER).size();say("Сообщить о проблеме");say(text);say("Лифт");assertTrue(last().contains("Та же проблема 1"));var join=update("join-common-bot","Та же проблема 1",null);bot.handle(join);bot.handle(join);assertEquals(before+1,cases.mine(USER).size());assertEquals(common.sharedRequestId(),cases.mine(USER).getFirst().sharedRequestId());assertEquals(2,cases.mine(USER).getFirst().participants());
     }
 }

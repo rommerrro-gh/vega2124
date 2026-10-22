@@ -106,7 +106,7 @@ paths:
   /v1/cases/similar-problems:
     post:
       operationId: findSimilarProblems
-      summary: Поиск общих заявок и собственных активных проблем без регистрации обращения; чужие личные дела исключены
+      summary: Поиск общих проблем без регистрации обращения; Другое ищет по всем категориям, личные материалы не выдаются
       requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/ProblemSearch'}}}}
       responses:
         '200': {description: До десяти совпадений с оценкой от 0.65; пустой список означает отсутствие совпадений, content: {application/json: {schema: {type: array, items: {$ref: '#/components/schemas/ProblemMatch'}}}}}
@@ -143,6 +143,101 @@ paths:
         '401': {description: Требуется вход}
         '403': {description: Нет доступа жителя к дому}
         '409': {description: Тот же ключ использован с другим содержимым или заявка более не подходит для присоединения}
+  /v1/shared-requests/{id}:
+    parameters:
+      - {name: id, in: path, required: true, schema: {type: string}}
+    get:
+      operationId: sharedRequest
+      summary: Общая проблема дома; личные документы и сообщения не входят в ответ
+      responses:
+        '200': {description: Общее состояние и разрешённая история, content: {application/json: {schema: {$ref: '#/components/schemas/SharedRequest'}}}}
+        '404': {description: Нет доступа к дому или заявка недоступна}
+    patch:
+      operationId: classifySharedRequest
+      summary: Сотрудник уточняет публичное описание, категорию и место
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [title, category, revision, reason]
+              properties:
+                title: {type: string, minLength: 1, maxLength: 160}
+                category: {$ref: '#/components/schemas/ProblemCategory'}
+                location: {type: [string, 'null'], maxLength: 160}
+                revision: {type: integer, minimum: 0}
+                reason: {type: string, minLength: 1, maxLength: 1000}
+      responses:
+        '200': {description: Уточнено, content: {application/json: {schema: {$ref: '#/components/schemas/SharedRequest'}}}}
+        '404': {description: Нет полномочия сотрудника}
+        '409': {description: Устаревшая версия}
+  /v1/houses/{house}/shared-requests:
+    parameters:
+      - {name: house, in: path, required: true, schema: {type: string}}
+    get:
+      operationId: sharedRequestQueue
+      summary: Рабочая очередь общих заявок с разрешёнными сведениями об участниках
+      responses:
+        '200': {description: Очередь, content: {application/json: {schema: {type: array, items: {$ref: '#/components/schemas/SharedRequest'}}}}}
+        '404': {description: Нет полномочия сотрудника}
+  /v1/shared-requests/{id}/join:
+    parameters:
+      - {name: id, in: path, required: true, schema: {type: string}}
+    post:
+      operationId: joinSharedRequest
+      summary: Присоединиться к общей заявке, сохранив отдельные личные материалы; идемпотентный ключ
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [problem, clientRequestId]
+              properties:
+                problem: {$ref: '#/components/schemas/ProblemSearch'}
+                clientRequestId: {type: string, minLength: 1, maxLength: 80}
+      responses:
+        '200': {description: Личное обращение участника общей заявки; поддерживает PDF и фотографии обычным маршрутом документов, content: {application/json: {schema: {$ref: '#/components/schemas/ResidentCase'}}}}
+        '400': {description: Неверные данные или заявка закрыта}
+        '404': {description: Нет доступа к дому}
+        '409': {description: Ключ с другим содержимым или совпадение изменилось}
+  /v1/shared-requests/{id}/merge:
+    parameters:
+      - {name: id, in: path, required: true, schema: {type: string}}
+    post:
+      operationId: mergeSharedRequests
+      summary: Объединить общие заявки одного дома с сохранением обращений, истории и личных материалов
+      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/SharedRequestMerge'}}}}
+      responses:
+        '200': {description: Объединено, content: {application/json: {schema: {$ref: '#/components/schemas/SharedRequest'}}}}
+        '400': {description: Разные дома, несовместимые категории или завершённые заявки}
+        '404': {description: Нет полномочий}
+        '409': {description: Устаревшая версия одной из заявок}
+  /v1/shared-requests/{id}/split:
+    parameters:
+      - {name: id, in: path, required: true, schema: {type: string}}
+    post:
+      operationId: splitSharedRequest
+      summary: Выделить присоединённое обращение в отдельную заявку; основное сохраняет общие работы
+      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/SharedRequestSplit'}}}}
+      responses:
+        '200': {description: Выделено, content: {application/json: {schema: {$ref: '#/components/schemas/SharedRequest'}}}}
+        '400': {description: Нельзя выделить основное или последнее обращение}
+        '404': {description: Нет полномочий}
+        '409': {description: Устаревшая версия}
+  /v1/cases/{id}/withdraw:
+    parameters:
+      - {name: id, in: path, required: true, schema: {type: string}}
+    post:
+      operationId: withdrawSharedMembership
+      summary: Отозвать своё обращение, сохранив общую работу, историю и обращения соседей
+      requestBody: {required: true, content: {application/json: {schema: {type: object, required: [revision, reason], properties: {revision: {type: integer, minimum: 0}, reason: {type: string, minLength: 1, maxLength: 1000}}}}}}
+      responses:
+        '200': {description: Отозвано, content: {application/json: {schema: {$ref: '#/components/schemas/ResidentCase'}}}}
+        '400': {description: Уже отозвано или финансовый вопрос}
+        '404': {description: Нет доступа к своему обращению}
+        '409': {description: Устаревшая версия}
   /v1/cases/{id}:
     parameters:
       - {name: id, in: path, required: true, schema: {type: string}}
@@ -1892,12 +1987,67 @@ components:
       required: [houseId, description, clientRequestId]
       properties:
         houseId: {type: string, minLength: 1}
-        kind: {type: string, enum: [GENERAL, PROBLEM, PAYMENT], default: GENERAL}
+        kind: {type: string, enum: [GENERAL, PROBLEM, PAYMENT], default: PROBLEM, description: "GENERAL принимается для совместимости и преобразуется в PROBLEM"}
         description: {type: string, minLength: 1, maxLength: 4000}
         location: {type: [string, 'null'], maxLength: 160}
         category: {type: [string, 'null'], enum: [LIGHTING, WATER, HEATING, ELEVATOR, ENTRANCE_CLEANING, YARD_CLEANING, WASTE_REMOVAL, PLAYGROUND, OTHER, null]}
         locationFeatures: {$ref: '#/components/schemas/LocationFeatures'}
         clientRequestId: {type: string, minLength: 1, maxLength: 80}
+    ProblemCategory:
+      type: string
+      enum: [LIGHTING, WATER, HEATING, ELEVATOR, ENTRANCE_CLEANING, YARD_CLEANING, WASTE_REMOVAL, PLAYGROUND, OTHER]
+    SharedRequestMerge:
+      type: object
+      required: [targetId, revision, targetRevision, reason]
+      properties:
+        targetId: {type: string, minLength: 1}
+        revision: {type: integer, minimum: 0}
+        targetRevision: {type: integer, minimum: 0}
+        reason: {type: string, minLength: 1, maxLength: 1000}
+    SharedRequestSplit:
+      type: object
+      required: [caseId, revision, reason]
+      properties:
+        caseId: {type: string, minLength: 1}
+        revision: {type: integer, minimum: 0}
+        reason: {type: string, minLength: 1, maxLength: 1000}
+    SharedRequest:
+      type: object
+      required: [id, title, category, status, nextStep, participants, confirmedCount, revision, canManage, members, history]
+      properties:
+        id: {type: string}
+        title: {type: string}
+        category: {$ref: '#/components/schemas/ProblemCategory'}
+        location: {type: [string, 'null']}
+        status: {type: string, enum: [RECEIVED, IN_REVIEW, WAITING_RESIDENT, IN_PROGRESS, RESULT_PROPOSED, CLOSED, REOPENED]}
+        nextStep: {type: string}
+        dueAt: {type: [string, 'null']}
+        responsibleName: {type: string}
+        participants: {type: integer, minimum: 0}
+        confirmedCount: {type: integer, minimum: 0}
+        revision: {type: integer, minimum: 0}
+        myCaseId: {type: [string, 'null']}
+        canManage: {type: boolean}
+        members:
+          type: array
+          description: Только уполномоченные сотрудники; соседям не выдаются имена, личные сообщения или документы
+          items:
+            type: object
+            properties:
+              caseId: {type: string}
+              number: {type: integer}
+              name: {type: string}
+              status: {type: string}
+              withdrawn: {type: boolean}
+              confirmed: {type: boolean}
+        history:
+          type: array
+          items:
+            type: object
+            properties:
+              action: {type: string, enum: [CREATED, JOINED, UPDATED, CONFIRMED, REOPENED, WITHDRAWN, MERGED, SPLIT, CLASSIFIED]}
+              note: {type: string}
+              createdAt: {type: string}
     ProblemSearch:
       type: object
       required: [houseId, description]
@@ -1911,11 +2061,13 @@ components:
       type: object
       required: [source, id, description, score, reasons]
       properties:
-        source: {type: string, enum: [ISSUE, OWN_ISSUE, OWN_CASE]}
+        source: {type: string, enum: [ISSUE, OWN_ISSUE, OWN_CASE, SHARED, OWN_SHARED]}
         id: {type: string}
         description: {type: string}
         location: {type: [string, 'null']}
         score: {type: number, minimum: 0, maximum: 1}
+        caseId: {type: [string, 'null'], description: Собственное обращение при OWN_SHARED}
+        participants: {type: integer, minimum: 0}
         reasons: {type: array, items: {type: string}}
     UpdateResidentCase:
       type: object
@@ -1936,6 +2088,11 @@ components:
         number: {type: integer}
         houseId: {type: string}
         address: {type: string}
+        sharedRequestId: {type: [string, 'null']}
+        participants: {type: integer, minimum: 0}
+        withdrawn: {type: boolean}
+        workflowCaseId: {type: string, description: Основное обращение, на котором ведутся общие работы}
+        visitOffered: {type: boolean}
         author: {type: [string, 'null']}
         category: {type: [string, 'null'], enum: [LIGHTING, WATER, HEATING, ELEVATOR, ENTRANCE_CLEANING, YARD_CLEANING, WASTE_REMOVAL, PLAYGROUND, OTHER, null]}
         kind: {type: string, enum: [GENERAL, PROBLEM, PAYMENT, WARRANTY]}

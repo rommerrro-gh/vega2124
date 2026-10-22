@@ -44,6 +44,7 @@ class GuidedDemoFlowTest {
     @Autowired GuidedDemoService demos;
     @Autowired AccessActivationService access;
     @Autowired ReportService reports;
+    @Autowired ru.pulsedoma.issues.ProblemIntakeService intake;
     @Autowired JdbcTemplate jdbc;
     @Autowired ru.pulsedoma.issues.MiniAppService miniApp;
 
@@ -76,12 +77,12 @@ class GuidedDemoFlowTest {
         access.createOrganization("Вторая тестовая УК", "judge-a");
         assertEquals(2, access.organizations("judge-a").size());
         assertEquals(1, access.organizations("judge-b").size());
-        assertEquals(1, jdbc.queryForObject("SELECT count(*) FROM issue_participants p JOIN issues i ON i.id = p.issue_id WHERE i.house_id = ? AND p.user_id <> 'judge-a'", Integer.class, first.houseId()));
+        assertEquals(5,jdbc.queryForObject("SELECT count(*) FROM shared_requests WHERE house_id=?",Integer.class,first.houseId()));
         assertEquals(1, jdbc.queryForObject("SELECT count(*) FROM polls WHERE house_id = ?", Integer.class, first.houseId()));
         assertEquals(10, jdbc.queryForObject("SELECT count(*) FROM house_fields WHERE house_id = ?", Integer.class, first.houseId()));
         assertEquals("312", jdbc.queryForObject("SELECT value_json FROM house_fields WHERE house_id = ? AND key = 'registered_residents_count'", String.class, first.houseId()));
-        var report = reports.createReport(new CreateReportCommand(first.houseId(), "judge-a", "Не работает свет в подъезде", "LIGHTING", "Подъезд 1, этаж 2", null));
-        assertFalse(report.candidates.isEmpty());
+        var found=intake.search(new ru.pulsedoma.issues.ProblemIntakeService.Input(first.houseId(),"Не горит свет в подъезде",ru.pulsedoma.issues.ReportCategory.LIGHTING,"Подъезд 1, этаж 2",null),"judge-a");
+        assertFalse(found.isEmpty());
         var restarted = demos.restart("judge-a");
         assertNotEquals(first.houseId(), restarted.houseId());
         assertEquals("REVOKED", jdbc.queryForObject("SELECT access_status FROM house_memberships WHERE house_id = ? AND user_id = 'judge-a' AND role = 'RESIDENT'", String.class, first.houseId()));

@@ -17,10 +17,11 @@ import ru.pulsedoma.common.BusinessException;
 public class GuidedDemoService {
     private final JdbcTemplate jdbc;
     private final String codeHash;
+    private final ru.pulsedoma.issues.DemoScenarioService scenarios;
 
     public GuidedDemoService(JdbcTemplate jdbc,
-                             @Value("${guided-demo.code-sha256:}") String codeHash) {
-        this.jdbc = jdbc;
+                             @Value("${guided-demo.code-sha256:}") String codeHash,ru.pulsedoma.issues.DemoScenarioService scenarios) {
+        this.jdbc = jdbc;this.scenarios=scenarios;
         this.codeHash = codeHash.trim().toLowerCase();
     }
 
@@ -204,6 +205,7 @@ public class GuidedDemoService {
                 UUID.randomUUID().toString(), issue, userId, now);
         jdbc.update("INSERT INTO audit_events(id, actor_id, action, entity, entity_id, created_at) VALUES (?, ?, 'GUIDED_DEMO_STARTED', 'guided_demo_session', ?, ?)",
                 UUID.randomUUID().toString(), userId, session, now);
+        scenarios.refresh(house,userId,userId,org);
         return new DemoView(true, true, house, address);
     }
 
