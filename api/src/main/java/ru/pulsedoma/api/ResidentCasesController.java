@@ -17,7 +17,8 @@ import java.util.List;
 @RestController
 public class ResidentCasesController {
     private final ResidentCaseService service;
-    public ResidentCasesController(ResidentCaseService service) { this.service=service; }
+    private final ProblemIntakeService intake;
+    public ResidentCasesController(ResidentCaseService service,ProblemIntakeService intake) { this.service=service;this.intake=intake; }
 
     @GetMapping("/v1/cases")
     public List<ResidentCaseService.CaseView> mine(Principal user) { return service.mine(user.getName()); }
@@ -25,8 +26,12 @@ public class ResidentCasesController {
     @PostMapping("/v1/cases")
     @ResponseStatus(HttpStatus.CREATED)
     public ResidentCaseService.CaseView create(@Valid @RequestBody Create request,Principal user) {
-        return service.create(request.houseId(),request.kind(),request.description(),request.location(),request.clientRequestId(),user.getName());
+        return intake.create(request.input(),request.kind(),request.clientRequestId(),user.getName());
     }
+    @PostMapping("/v1/cases/similar-problems")
+    public List<ProblemIntakeService.Match> similar(@Valid @RequestBody Search request,Principal user) { return intake.search(request.input(),user.getName()); }
+    @PostMapping("/v1/cases/join-problem")
+    public ProblemIntakeService.Joined join(@Valid @RequestBody Join request,Principal user) { return intake.join(request.problem().input(),request.issueId(),request.clientRequestId(),user.getName()); }
     @GetMapping("/v1/cases/{id}")
     public ResidentCaseService.CaseView get(@PathVariable @NotBlank String id,Principal user) { return service.get(id,user.getName()); }
 
@@ -76,7 +81,15 @@ public class ResidentCasesController {
             .body(file.bytes());
     }
     public record Create(@NotBlank String houseId,CaseKind kind,@NotBlank @Size(max=4000) String description,
-                         @Size(max=160) String location,@NotBlank @Size(max=80) String clientRequestId) {}
+                         @Size(max=160) String location,@NotBlank @Size(max=80) String clientRequestId,
+                         ReportCategory category,@Valid ReportsController.LocationRequest locationFeatures) {
+        ProblemIntakeService.Input input(){return new ProblemIntakeService.Input(houseId,description,category,location,locationFeatures==null?null:locationFeatures.features());}
+    }
+    public record Search(@NotBlank String houseId,@NotBlank @Size(max=4000) String description,ReportCategory category,
+                         @Size(max=160) String location,@Valid ReportsController.LocationRequest locationFeatures) {
+        ProblemIntakeService.Input input(){return new ProblemIntakeService.Input(houseId,description,category,location,locationFeatures==null?null:locationFeatures.features());}
+    }
+    public record Join(@NotNull @Valid Search problem,@NotBlank String issueId,@NotBlank @Size(max=80) String clientRequestId) {}
     public record Update(@NotNull CaseKind kind,@NotNull CaseStatus status,@NotBlank @Size(max=600) String nextStep,
                          Instant dueAt,@Size(max=80) String responsibleUserId,@NotNull @Min(0) Integer revision,@Size(max=1000) String reason) {}
     public record Message(@NotBlank @Size(max=4000) String text,@NotBlank @Size(max=80) String clientRequestId) {}

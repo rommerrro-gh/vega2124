@@ -28,7 +28,7 @@ public class ResidentCaseService {
                            CaseKind kind, CaseStatus status, String description, String location,
                            String responsibleUserId, String responsibleName, String nextStep, String dueAt,
                            int revision, String createdAt, String updatedAt, boolean fullAccess,
-                           boolean canManage, boolean isAuthor, List<Event> events, List<Document> documents, int openWorkCount, int overdueWorkCount) {}
+                           boolean canManage, boolean isAuthor, List<Event> events, List<Document> documents, int openWorkCount, int overdueWorkCount, ReportCategory category) {}
     public record FileData(byte[] bytes, String mime) {}
 
     private boolean count(String sql, Object... args) {
@@ -174,7 +174,8 @@ public class ResidentCaseService {
                 """,(rs,n)->new Event(rs.getString("id"),rs.getString("display_name"),CaseEventType.valueOf(rs.getString("type")),rs.getString("text"),rs.getString("created_at")),id):List.of(),
             full?documents(id):List.of(),
             full?jdbc.queryForObject("SELECT count(*) FROM case_work_orders WHERE case_id=? AND state NOT IN ('ACCEPTED','CANCELLED')",Integer.class,id):0,
-            full?jdbc.queryForObject("SELECT count(*) FROM case_work_orders WHERE case_id=? AND state NOT IN ('ACCEPTED','CANCELLED') AND due_at IS NOT NULL AND datetime(due_at)<datetime('now')",Integer.class,id):0);
+            full?jdbc.queryForObject("SELECT count(*) FROM case_work_orders WHERE case_id=? AND state NOT IN ('ACCEPTED','CANCELLED') AND due_at IS NOT NULL AND datetime(due_at)<datetime('now')",Integer.class,id):0,
+            full?jdbc.query("SELECT category FROM case_problem_details WHERE case_id=?",(rs,n)->rs.getString(1)==null?null:ReportCategory.valueOf(rs.getString(1)),id).stream().filter(Objects::nonNull).findFirst().orElse(null):null);
     }
     @Transactional
     public CaseView update(String id,CaseKind kind,CaseStatus status,String nextStep,Instant due,

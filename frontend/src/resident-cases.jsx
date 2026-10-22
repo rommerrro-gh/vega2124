@@ -1,3 +1,4 @@
+import {PlaceFields,defaultPlace,problemCategories,placeDescription} from "./problem-fields.jsx";
 import {NotePencil,Receipt,ArrowRight,Question,CheckCircle,Clock} from "./design.jsx";
 import {CaseVisits,CaseMassProblem,HouseOperations,OperationsManagement} from "./operations.jsx";
 import React, { useEffect, useState } from "react";
@@ -54,7 +55,7 @@ export function CaseDetail({ item, api, role, headers, context, onChange, onClos
   }
   return <section className="case-panel" aria-label={`Обращение ${item.number}`}>
     <div className="case-heading"><div><small>ОБРАЩЕНИЕ № {item.number} · {kinds[item.kind]}</small><h2>{statuses[item.status]}</h2></div><button type="button" className="case-link" onClick={onClose}>К списку</button></div>
-    <p className="muted">{item.address}</p><p className="case-description">{item.description}</p>{item.location&&<p>Где заметили: {item.location}</p>}
+    <p className="muted">{item.address}</p><p className="case-description">{item.description}</p>{item.category&&<p>Тема: {problemCategories[item.category]}</p>}{item.location&&<p>Где заметили: {item.location}</p>}
     <div className="case-next"><strong>{item.nextStep}</strong><p>Кто ведёт: {item.responsibleName}</p><p>{item.dueAt?`Срок: ${date(item.dueAt)}`:"Срок уточняется"}</p>{item.status!=="WAITING_RESIDENT"&&item.status!=="RESULT_PROPOSED"&&item.status!=="CLOSED"&&<small>Следующий шаг указан выше. При необходимости можно добавить сведения.</small>}</div>
     <Notice>{notice}</Notice>
     {item.isAuthor&&["RESULT_PROPOSED","CLOSED"].includes(item.status)&&<div className="case-actions">
@@ -104,11 +105,12 @@ function FeaturedCase({item,api,role,onOpen,onShowCases,total}) {
   return <section className="case-panel case-featured"><div className="case-heading"><h2>Ваше обращение</h2>{total>1&&<button type="button" className="case-link" onClick={onShowCases}>Все обращения <ArrowRight size={18}/></button>}</div><h3>{text(item)}</h3><ol className="case-progress-summary"><li className="is-done"><CheckCircle size={24} weight="fill"/><div><strong>Принято</strong><small>Обращение № {item.number}</small></div></li><li className="is-current"><Clock size={24}/><div><strong>{offered?"Осмотр":confirmed?"Визит согласован":statuses[item.status]}</strong><p>{offered?"Выберите удобное время визита":confirmed?visit.purpose:item.nextStep}</p>{slot&&<p className="case-summary-date">{date(slot.starts_at)} — {new Date(slot.ends_at).toLocaleTimeString("ru-RU",{hour:"2-digit",minute:"2-digit"})}</p>}{!slot&&item.dueAt&&<p className="case-summary-date">{date(item.dueAt)}</p>}<button type="button" className="case-secondary" onClick={onOpen}>{offered?"Выбрать время":result?"Проверить результат":item.status==="WAITING_RESIDENT"?"Ответить на обращение":"Открыть обращение"} <ArrowRight size={18}/></button></div></li>{!finished&&!result&&<li className="is-future"><CheckCircle size={24}/><div><strong>Результат</strong><small>Сообщим о результате здесь. Вы сможете его проверить.</small></div></li>}</ol></section>;
 }
 
-export function ResidentCases({ house, role, api, headers, canSubmit, legacyIssues = [], legacyStatusLabels = {}, onLegacyOpen, initialCaseId, view="home", onShowCases }) {
+export function ResidentCases({ house, role, api, headers, canSubmit, legacyIssues = [], legacyStatusLabels = {}, onLegacyOpen, initialCaseId, view="home", onShowCases, passport, candidateReason }) {
   const [items,setItems]=useState([]),[context,setContext]=useState(null),[detail,setDetail]=useState(null);
   const [compose,setCompose]=useState(false),[draft,setDraft]=useState(null),[files,setFiles]=useState([]);
   const [filter,setFilter]=useState("ALL"),[notice,setNotice]=useState(""),[busy,setBusy]=useState(false),[review,setReview]=useState(false);
   useEffect(()=>{const close=()=>{setDetail(null);setCompose(false);setReview(false);};window.addEventListener("pulse-resident-navigation",close);return()=>window.removeEventListener("pulse-resident-navigation",close);},[]);
+  const [matches,setMatches]=useState(null),[searchFailed,setSearchFailed]=useState(false);
   const houseId=house.id;
   const storageKey=context?`pulse-case:${context.actorId}:${houseId}`:null;
   useEffect(()=>{
@@ -120,15 +122,36 @@ export function ResidentCases({ house, role, api, headers, canSubmit, legacyIssu
     }).catch(e=>{if(active)setNotice(e.message);});return()=>{active=false;};
   },[houseId,role]);
   useEffect(()=>{function question(e){if(e.detail?.houseId!==houseId||!context)return;if(draft){setNotice("Сохранённый черновик не заменён. Завершите его или удалите перед новым вопросом.");setCompose(true);return;}save({kind:"PAYMENT",description:e.detail.text||"",location:"",clientRequestId:key()});setCompose(true);setReview(false);setDetail(null);}window.addEventListener("pulse-payment-question",question);return()=>window.removeEventListener("pulse-payment-question",question);},[houseId,context,draft]);
-  function save(next){setDraft(next);try{sessionStorage.setItem(storageKey,JSON.stringify({...next,savedAt:Date.now()}));}catch{setNotice("Браузер не сохранил черновик. Не закрывайте страницу до отправки.");}}
-  function begin(kind){if(!draft)save({kind,description:"",location:"",clientRequestId:key()});setCompose(true);setReview(false);setDetail(null);}
+  function save(next){setMatches(null);setSearchFailed(false);setDraft(next);try{sessionStorage.setItem(storageKey,JSON.stringify({...next,savedAt:Date.now()}));}catch{setNotice("Браузер не сохранил черновик. Не закрывайте страницу до отправки.");}}
+  function begin(kind){if(!draft)save({kind,description:"",location:"",clientRequestId:key()});setCompose(true);setReview(!!draft?.pending);setDetail(null);}
   function changed(next){setDetail(next);setItems(list=>[next,...list.filter(c=>c.id!==next.id)].sort((a,b)=>b.number-a.number));}
   async function refresh(){setBusy(true);try{setItems((await api(role,"/v1/cases")).filter(c=>c.houseId===houseId));setNotice("");}catch(e){setNotice(e.message);}finally{setBusy(false);}}
+  function problemInput(){return {houseId,description:draft.description,category:draft.category||null,location:draft.location||null,locationFeatures:draft.precise?draft.locationFeatures:null};}
+  async function checkSimilar(){
+    setNotice("");setSearchFailed(false);
+    if(draft.kind!=="PROBLEM"){setReview(true);return;}
+    setBusy(true);
+    try{setMatches(await api(role,"/v1/cases/similar-problems",{method:"POST",body:JSON.stringify(problemInput())}));setReview(true);}
+    catch(e){setNotice(`Не удалось проверить похожие проблемы: ${e.message}. Можно повторить поиск или отправить отдельное обращение без проверки.`);setSearchFailed(true);}
+    finally{setBusy(false);}
+  }
+  async function openOwnIssue(id){setBusy(true);try{onLegacyOpen(await api(role,`/v1/issues/${id}`));}catch(e){setNotice(e.message);}finally{setBusy(false);}}
+  async function joinProblem(id){
+    setBusy(true);setNotice("");save({...draft,pending:true,joining:id});
+    try{
+      const result=await api(role,"/v1/cases/join-problem",{method:"POST",body:JSON.stringify({problem:problemInput(),issueId:id,clientRequestId:draft.clientRequestId})});
+      let warning="";
+      for(const file of files){try{const body=new FormData();body.append("file",file);await api(role,`/v1/reports/${result.reportId}/attachments`,{method:"POST",body});}catch(e){warning=`Вы присоединились к заявке. Не удалось приложить «${file.name}»: ${e.message}`;break;}}
+      setDraft(null);setFiles([]);setCompose(false);setReview(false);try{sessionStorage.removeItem(storageKey);}catch{}
+      onLegacyOpen(result.issue,warning||"Вы присоединились к существующей заявке");
+    }catch(e){setNotice(e.message+(e.status?"":" Результат пока неизвестен. Повторите присоединение — копия не создастся."));if(e.status&&e.status<500)save({...draft,pending:false,joining:null});}
+    finally{setBusy(false);}
+  }
   async function submit(){
     setBusy(true);setNotice("");
     const sending={...draft,pending:true};save(sending);
     try{
-      let created=await api(role,"/v1/cases",{method:"POST",body:JSON.stringify({houseId,kind:sending.kind,description:sending.description,location:sending.location||null,clientRequestId:sending.clientRequestId})});
+      let created=await api(role,"/v1/cases",{method:"POST",body:JSON.stringify({houseId,kind:sending.kind,description:sending.description,location:sending.location||null,clientRequestId:sending.clientRequestId,category:sending.kind==="PROBLEM"?sending.category||null:null,locationFeatures:sending.kind==="PROBLEM"&&sending.precise?sending.locationFeatures:null})});
       changed(created);setCompose(false);setReview(false);setDraft(null);try{sessionStorage.removeItem(storageKey);}catch{}
       for(const file of files){
         try{const body=new FormData();body.append("file",file);created=await api(role,`/v1/cases/${created.id}/documents?${new URLSearchParams({title:file.name})}`,{method:"POST",body});changed(created);}
@@ -155,13 +178,14 @@ export function ResidentCases({ house, role, api, headers, canSubmit, legacyIssu
     {compose&&draft&&view!=="events"&&<section className="case-panel"><div className="case-heading"><h2>{review?"Проверьте сообщение":draft.kind==="PAYMENT"?"Что вас смущает в квитанции?":"Что случилось?"}</h2><button type="button" className="case-link" disabled={busy} onClick={()=>setCompose(false)}>Сохранить и закрыть</button></div>
       <p className="case-address">Ваш дом: {house.address}</p>
       {!context?.intakeAvailable&&<Notice>В этом доме пока не назначен сотрудник. Черновик можно сохранить, но приём обращений ещё не подключён.</Notice>}
-      {review?<><p className="case-description">{draft.description}</p><p>Где заметили: {draft.location||"Пока не определено"}</p><p>Файлов: {files.length}. После перезагрузки файлы нужно выбрать заново.</p><p>Выбирать организацию и определять причину не нужно.</p><div className="case-actions"><button type="button" disabled={busy||!context?.intakeAvailable} onClick={submit}>{busy?"Отправляем…":draft.pending?"Повторить отправку":"Отправить обращение"}</button><button type="button" className="case-secondary" disabled={busy||draft.pending} onClick={()=>setReview(false)}>Изменить</button></div></>:
-      <form onSubmit={event=>{event.preventDefault();setReview(true);}}>
-        <label>Опишите своими словами<textarea autoFocus required maxLength={4000} value={draft.description} disabled={draft.pending} onChange={e=>save({...draft,description:e.target.value})} placeholder={draft.kind==="PAYMENT"?"Например: сумма стала больше, не понимаю почему":"Например: после дождя мокнет стена. Не знаю, откуда течёт."}/></label>
-        {draft.kind!=="PAYMENT"&&<label>Где заметили? Если знаете<input maxLength={160} value={draft.location} disabled={draft.pending} onChange={e=>save({...draft,location:e.target.value})} placeholder="Можно оставить пустым"/></label>}
-        <label>{draft.kind==="PAYMENT"?"Квитанция — по желанию":"Фотографии или документ — по желанию"}<input type="file" accept="application/pdf,image/jpeg,image/png" multiple onChange={e=>{const selected=[...e.target.files];if(selected.length>5||selected.some(f=>f.size>10*1024*1024)){setNotice("Выберите до пяти файлов по 10 МБ.");e.target.value="";setFiles([]);}else{setFiles(selected);setNotice("");}}}/></label>
+      {review?<><p className="case-description">{draft.description}</p>{draft.category&&<p>Тема: {problemCategories[draft.category]}</p>}{draft.kind==="PROBLEM"&&matches!==null&&!draft.joining&&<section aria-label="Похожие проблемы"><h3>Похожие проблемы</h3><p className="muted">Показываем общие заявки дома и ваши обращения. Чужие личные обращения закрыты.</p>{matches.length?matches.map(item=><article className="case-next" key={`${item.source}:${item.id}`}><strong>{item.description}</strong>{item.location&&<p>{item.location}</p>}<p className="muted">Оценка сходства: {Math.round(item.score*100)}%</p><ul>{item.reasons.filter(r=>!["structured_location","same_house","same_category"].includes(r)).slice(0,4).map(r=>r==="own_case"?"Ваше обращение":candidateReason?.(r)).filter(Boolean).map((r,i)=><li key={i}>{r}</li>)}</ul>{item.source==="OWN_CASE"?<button type="button" disabled={busy} onClick={()=>{const target=items.find(c=>c.id===item.id);if(target){setDetail(target);setCompose(false);}}}>Открыть своё обращение</button>:item.source==="OWN_ISSUE"?<button type="button" disabled={busy} onClick={()=>openOwnIssue(item.id)}>Вы уже участвуете — открыть заявку</button>:<><p className="muted">При присоединении ваше описание и фотографии станут частью общей заявки дома.</p><button type="button" disabled={busy||files.some(f=>f.type==="application/pdf")} onClick={()=>joinProblem(item.id)}>Это та же проблема — присоединиться</button>{files.some(f=>f.type==="application/pdf")&&<p>К общей заявке можно приложить фотографии JPEG и PNG. Чтобы сохранить PDF, отправьте отдельное обращение или вернитесь и уберите PDF.</p>}</>}</article>):<p>Похожих активных проблем не найдено. Можно отправить новое обращение.</p>}<p>Если это другая проблема, отправьте отдельное обращение ниже.</p></section>}<p>Где заметили: {draft.precise?placeDescription(draft.locationFeatures):draft.location||"Пока не определено"}</p><p>Файлов: {files.length}. После перезагрузки файлы нужно выбрать заново.</p><p>Выбирать организацию и определять причину не нужно.</p><div className="case-actions"><button type="button" disabled={busy||!context?.intakeAvailable} onClick={()=>draft.joining?joinProblem(draft.joining):submit()}>{busy?"Отправляем…":draft.joining?"Повторить присоединение":draft.pending?"Повторить отправку":"Отправить обращение"}</button><button type="button" className="case-secondary" disabled={busy||draft.pending} onClick={()=>setReview(false)}>Изменить</button></div></>:
+      <form onSubmit={event=>{event.preventDefault();checkSimilar();}}>
+        <label>Опишите своими словами<textarea autoFocus required maxLength={4000} value={draft.description} disabled={draft.pending||busy} onChange={e=>save({...draft,description:e.target.value})} placeholder={draft.kind==="PAYMENT"?"Например: сумма стала больше, не понимаю почему":"Например: после дождя мокнет стена. Не знаю, откуда течёт."}/></label>
+        {draft.kind==="PROBLEM"&&<><label>С чем связана проблема?<select disabled={draft.pending||busy} value={draft.category||""} onChange={e=>save({...draft,category:e.target.value,precise:false,locationFeatures:defaultPlace(e.target.value)})}><option value="">Не знаю / сложно выбрать</option>{Object.entries(problemCategories).map(([value,label])=><option key={value} value={value}>{label}</option>)}</select></label>{draft.category&&<label className="problem-precision"><input type="checkbox" disabled={draft.pending||busy} checked={!!draft.precise} onChange={e=>save({...draft,precise:e.target.checked,locationFeatures:draft.locationFeatures||defaultPlace(draft.category)})}/> Могу уточнить место для поиска похожих проблем</label>}{draft.precise&&<><PlaceFields category={draft.category} value={draft.locationFeatures} onChange={change=>save({...draft,locationFeatures:typeof change==="function"?change(draft.locationFeatures):change})} passport={passport} disabled={draft.pending||busy}/><p className="muted">Если не знаете номер подъезда, этаж или другие сведения, снимите отметку — можно описать место своими словами.</p></>}</>}
+        {draft.kind!=="PAYMENT"&&!draft.precise&&<label>Где заметили? Если знаете<input maxLength={160} value={draft.location} disabled={draft.pending||busy} onChange={e=>save({...draft,location:e.target.value})} placeholder="Можно оставить пустым"/></label>}
+        <label>{draft.kind==="PAYMENT"?"Квитанция — по желанию":"Фотографии или документ — по желанию"}<input type="file" disabled={busy||draft.pending} accept="application/pdf,image/jpeg,image/png" multiple onChange={e=>{const selected=[...e.target.files];if(selected.length>5||selected.some(f=>f.size>10*1024*1024)){setNotice("Выберите до пяти файлов по 10 МБ.");e.target.value="";setFiles([]);}else{setFiles(selected);setNotice("");}}}/></label>
         <p className="muted">Можно продолжить без файла. Если понадобятся сведения, объясним, какие и зачем.</p>
-        <button disabled={busy||!draft.description.trim()}>Проверить перед отправкой</button>
+        <button disabled={busy||!draft.description.trim()}>{busy?"Проверяем…":draft.kind==="PROBLEM"?"Найти похожие проблемы":"Проверить перед отправкой"}</button>{searchFailed&&<button type="button" className="case-secondary" disabled={busy} onClick={()=>{setMatches(null);setReview(true);}}>Продолжить без проверки</button>}
       </form>}
     </section>}
     {detail&&view!=="events"&&<CaseDetail key={detail.id} item={detail} context={context} role={role} api={api} headers={headers} onChange={changed} onClose={()=>setDetail(null)}/>}

@@ -13,3 +13,5 @@
 
 :root[data-theme] .case-workspace .case-list-item{background:var(--surface);color:var(--text);border:1px solid var(--border);border-radius:10px;padding:18px;text-align:left}
 :root[data-theme] .case-workspace .case-list-item:hover{background:var(--surface-soft)}
+
+:root[data-theme] .problem-precision{display:flex;align-items:center;gap:10px;font-weight:500}:root[data-theme] .problem-precision input{width:22px;height:22px;flex:none}:root[data-theme] [aria-label="Похожие проблемы"] .case-next{margin:14px 0}

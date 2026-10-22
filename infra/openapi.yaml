@@ -103,6 +103,46 @@ paths:
         '400': {description: Неверные данные; WARRANTY при создании жителем запрещён}
         '403': {description: Нет активного подтверждённого доступа жителя}
         '409': {description: Ключ повторён с другим содержимым или приём в доме не подключён}
+  /v1/cases/similar-problems:
+    post:
+      operationId: findSimilarProblems
+      summary: Поиск общих заявок и собственных активных проблем без регистрации обращения; чужие личные дела исключены
+      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/ProblemSearch'}}}}
+      responses:
+        '200': {description: До десяти совпадений с оценкой от 0.65; пустой список означает отсутствие совпадений, content: {application/json: {schema: {type: array, items: {$ref: '#/components/schemas/ProblemMatch'}}}}}
+        '400': {description: Некорректная тема или признаки места}
+        '401': {description: Требуется вход}
+        '403': {description: Нет доступа жителя к дому}
+  /v1/cases/join-problem:
+    post:
+      operationId: joinSimilarProblem
+      summary: По явному решению жителя присоединить его сообщение к общей заявке; повтор ключа идемпотентен
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [problem, issueId, clientRequestId]
+              properties:
+                problem: {$ref: '#/components/schemas/ProblemSearch'}
+                issueId: {type: string, minLength: 1}
+                clientRequestId: {type: string, minLength: 1, maxLength: 80}
+      responses:
+        '200':
+          description: Присоединено; файлы JPEG/PNG можно добавить существующим маршрутом вложений reportId
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [reportId, issue]
+                properties:
+                  reportId: {type: string}
+                  issue: {$ref: '#/components/schemas/IssueView'}
+        '400': {description: Неверные данные}
+        '401': {description: Требуется вход}
+        '403': {description: Нет доступа жителя к дому}
+        '409': {description: Тот же ключ использован с другим содержимым или заявка более не подходит для присоединения}
   /v1/cases/{id}:
     parameters:
       - {name: id, in: path, required: true, schema: {type: string}}
@@ -1855,7 +1895,28 @@ components:
         kind: {type: string, enum: [GENERAL, PROBLEM, PAYMENT], default: GENERAL}
         description: {type: string, minLength: 1, maxLength: 4000}
         location: {type: [string, 'null'], maxLength: 160}
+        category: {type: [string, 'null'], enum: [LIGHTING, WATER, HEATING, ELEVATOR, ENTRANCE_CLEANING, YARD_CLEANING, WASTE_REMOVAL, PLAYGROUND, OTHER, null]}
+        locationFeatures: {$ref: '#/components/schemas/LocationFeatures'}
         clientRequestId: {type: string, minLength: 1, maxLength: 80}
+    ProblemSearch:
+      type: object
+      required: [houseId, description]
+      properties:
+        houseId: {type: string, minLength: 1}
+        description: {type: string, minLength: 1, maxLength: 4000}
+        category: {type: [string, 'null'], enum: [LIGHTING, WATER, HEATING, ELEVATOR, ENTRANCE_CLEANING, YARD_CLEANING, WASTE_REMOVAL, PLAYGROUND, OTHER, null]}
+        location: {type: [string, 'null'], maxLength: 160}
+        locationFeatures: {$ref: '#/components/schemas/LocationFeatures'}
+    ProblemMatch:
+      type: object
+      required: [source, id, description, score, reasons]
+      properties:
+        source: {type: string, enum: [ISSUE, OWN_ISSUE, OWN_CASE]}
+        id: {type: string}
+        description: {type: string}
+        location: {type: [string, 'null']}
+        score: {type: number, minimum: 0, maximum: 1}
+        reasons: {type: array, items: {type: string}}
     UpdateResidentCase:
       type: object
       required: [kind, status, nextStep, revision]
@@ -1876,6 +1937,7 @@ components:
         houseId: {type: string}
         address: {type: string}
         author: {type: [string, 'null']}
+        category: {type: [string, 'null'], enum: [LIGHTING, WATER, HEATING, ELEVATOR, ENTRANCE_CLEANING, YARD_CLEANING, WASTE_REMOVAL, PLAYGROUND, OTHER, null]}
         kind: {type: string, enum: [GENERAL, PROBLEM, PAYMENT, WARRANTY]}
         status: {type: string, enum: [RECEIVED, IN_REVIEW, WAITING_RESIDENT, IN_PROGRESS, RESULT_PROPOSED, CLOSED, REOPENED]}
         description: {type: string}

@@ -1,3 +1,4 @@
+import {PlaceFields,defaultPlace} from "./problem-fields.jsx";
 import {AppearancePicker,ResidentHeader,ResidentNavigation,useAppearance} from "./design.jsx";
 import {OperationsInbox} from "./operations.jsx";
 import {ExchangePortal} from "./case-exchange.jsx";
@@ -347,41 +348,7 @@ function AttachmentList({ attachments, role, onError }) {
   })}</div>{photo && <PhotoPreview key={photo.id} attachment={photo} role={role} onClose={() => setPhoto(null)} />}</>;
 }
 
-const placeAreas = { ENTRANCE: "Подъезд", APARTMENT: "В квартире", BASEMENT: "Подвал", YARD: "Двор", WHOLE_HOUSE: "Весь дом", OTHER: "Другое место" };
-function defaultPlace(category) {
-  if (category === "ELEVATOR") return { area: "ENTRANCE", liftType: "UNKNOWN" };
-  if (category === "ENTRANCE_CLEANING") return { area: "ENTRANCE", coverage: "ENTIRE" };
-  if (["YARD_CLEANING", "WASTE_REMOVAL", "PLAYGROUND"].includes(category)) return { area: "YARD" };
-  return { area: ["WATER", "HEATING"].includes(category) ? "APARTMENT" : "ENTRANCE" };
-}
-function PlaceFields({ category, value, onChange, passport, disabled }) {
-  if (!category) return <p className="hint">Выберите категорию — покажем нужные поля места.</p>;
-  const update = (key, next) => onChange(current => ({ ...current, [key]: next }));
-  const count = key => {
-    const n = Number(passport?.fields?.find(field => field.key === key)?.value);
-    return Number.isInteger(n) && n > 0 && n <= 200 ? n : null;
-  };
-  const numberField = (key, label, total, required = true) => <Field key={key} id={`place-${key}`} label={label}>
-    {total && total <= 30 ? <select id={`place-${key}`} required={required} disabled={disabled} value={value[key] ?? ""} onChange={event => update(key, event.target.value ? Number(event.target.value) : null)}>
-      <option value="">{required ? "Выберите номер" : "Не указан"}</option>{Array.from({ length: total }, (_, i) => <option key={i + 1} value={i + 1}>{i + 1}</option>)}
-    </select> : <input id={`place-${key}`} type="number" inputMode="numeric" min="1" max={total || (key === "floor" ? 200 : 100)} required={required} disabled={disabled} value={value[key] ?? ""} onChange={event => update(key, event.target.value ? Number(event.target.value) : null)} placeholder={required ? "Введите номер" : "Необязательно"} />}
-  </Field>;
-  const areas = category === "LIGHTING" ? ["ENTRANCE", "YARD"] : category === "WATER" ? ["APARTMENT", "ENTRANCE", "BASEMENT", "YARD"]
-    : category === "HEATING" ? ["APARTMENT", "ENTRANCE", "WHOLE_HOUSE"] : category === "OTHER" ? ["ENTRANCE", "YARD", "BASEMENT", "WHOLE_HOUSE", "OTHER"] : [];
-  const indoors = ["ENTRANCE", "APARTMENT"].includes(value.area);
-  const needFloor = indoors && category !== "ELEVATOR" && (category !== "ENTRANCE_CLEANING" || value.coverage === "LOCAL");
-  return <div className="place-fields">
-    {!!areas.length && <Field id="place-area" label="Где находится проблема?"><select id="place-area" value={value.area} disabled={disabled} onChange={event => onChange({ area: event.target.value })}>{areas.map(area => <option key={area} value={area}>{placeAreas[area]}</option>)}</select></Field>}
-    {indoors && numberField("entrance", "Подъезд", count("entrance_count"))}
-    {category === "ENTRANCE_CLEANING" && <Field id="place-coverage" label="Область уборки"><select id="place-coverage" disabled={disabled} value={value.coverage} onChange={event => onChange(current => ({ ...current, coverage: event.target.value, floor: null }))}><option value="ENTIRE">Весь подъезд</option><option value="LOCAL">Конкретный этаж</option></select></Field>}
-    {needFloor && numberField("floor", "Этаж", count("floor_count"), category !== "OTHER")}
-    {category === "ELEVATOR" && <><Field id="place-lift-type" label="Тип лифта"><select id="place-lift-type" value={value.liftType} disabled={disabled} onChange={event => update("liftType", event.target.value)}><option value="UNKNOWN">Не знаю</option><option value="PASSENGER">Пассажирский</option><option value="CARGO">Грузовой</option></select></Field>{numberField("liftNumber", "Номер лифта, если одинаковых несколько", null, false)}</>}
-    {category === "WASTE_REMOVAL" && <>{numberField("site", "Номер мусорной площадки, если их несколько", null, false)}<p className="hint">Если площадка одна или её номер неизвестен, оставьте поле пустым.</p></>}
-    {category === "PLAYGROUND" && <Field id="place-object" label="Объект площадки — необязательно"><select id="place-object" disabled={disabled} value={value.object || ""} onChange={event => update("object", event.target.value || null)}><option value="">Не указан</option><option value="SWING">Качели</option><option value="SLIDE">Горка</option><option value="SANDBOX">Песочница</option><option value="WHOLE_PLAYGROUND">Вся площадка</option><option value="OTHER">Другой объект</option></select></Field>}
-    {category === "OTHER" && value.area === "OTHER" && <Field id="place-details" label="Уточните место"><input id="place-details" maxLength="160" required disabled={disabled} value={value.details || ""} onChange={event => update("details", event.target.value)} placeholder="Например, вход со стороны дороги" /></Field>}
-    {["YARD_CLEANING", "PLAYGROUND"].includes(category) && <p className="hint">Дом уже выбран. Опишите проблему ниже, чтобы отличить её от других обращений.</p>}
-  </div>;
-}
+
 function IssueCard({ issue, onClick }) {
   const overdue = issueOverdue(issue);
   return <button type="button" className="issue-summary-card" onClick={onClick}>
@@ -644,8 +611,8 @@ function Resident() {
     <ResidentHeader house={selectedHouse} houses={houses} disabled={step !== "form" || !!reportId} onChange={id=>{setSelectedHouseId(id);setPlaceFeatures(defaultPlace(reportCategory));request("/v1/me/active-house",{method:"PUT",body:JSON.stringify({houseId:id})}).catch(fail);}} />
     {!!awaitingVerification.length && step === "form" && <div className="priority-notice"><div><strong>Подтвердите выполнение работ</strong><p>{countLabel(awaitingVerification.length, "заявка ждёт", "заявки ждут", "заявок ждут")} вашего ответа.</p></div><Button mode="secondary" type="button" onClick={() => showIssue(awaitingVerification[0])}>Открыть</Button></div>}
 
-    {selectedHouse && step === "form" && <ResidentCases key={`${demoSession}:${selectedHouseId}`} house={selectedHouse} role={demoSession} api={api} headers={authHeaders} canSubmit={canReport} view={residentView} onShowCases={()=>changeResidentView("cases")} initialCaseId={initialCaseId} legacyIssues={houseIssues} legacyStatusLabels={statusLabels} onLegacyOpen={showIssue} />}
-    {selectedHouse && canReport && residentView==="home" && step === "form" && !showReportForm && <div className="start-action"><div><strong>Хотите найти похожую проблему?</strong><p>Можно дополнительно указать категорию и место.</p></div><Button mode="secondary" type="button" onClick={() => setShowReportForm(true)}>Проверить похожие заявки</Button></div>}
+    {selectedHouse && step === "form" && <ResidentCases key={`${demoSession}:${selectedHouseId}`} house={selectedHouse} role={demoSession} api={api} headers={authHeaders} canSubmit={canReport} view={residentView} onShowCases={()=>changeResidentView("cases")} initialCaseId={initialCaseId} legacyIssues={houseIssues} legacyStatusLabels={statusLabels} onLegacyOpen={(next,message)=>{showIssue(next,message);refreshIssues().catch(fail);}} passport={passport} candidateReason={candidateReason} />}
+
     <div hidden={residentView!=="home"} className="resident-tariffs">{selectedHouse && step === "form" && <HouseTariffs key={`tariffs:${demoSession}:${selectedHouseId}`} houseId={selectedHouseId} role={demoSession} api={api} headers={authHeaders} onQuestion={canReport?text=>{if(typeof text==="string")window.dispatchEvent(new CustomEvent("pulse-payment-question",{detail:{houseId:selectedHouseId,text}}));else document.getElementById("resident-payment-start")?.click();}:undefined}/>}</div>
     <div className="content-grid resident-events">
       {step === "form" && showReportForm && canReport && <Card className="form-card">
@@ -675,7 +642,7 @@ function Resident() {
         <IssueDetails issue={issue} role="true" onError={setNotice} />
         {editableIssueStatuses.includes(issue.status) && !!issue.reports?.length && <div className="secondary-operation"><h3>Мои обращения в заявке</h3>{issue.reports.map(report => <div className="report-entry" key={report.id}><div className="linked-report"><small>Текст вашего обращения</small><p>{report.description}</p></div>{withdrawTargetId === report.id ? <div className="withdraw-panel"><Field id={`withdraw-reason-${report.id}`} label="Причина отзыва"><textarea id={`withdraw-reason-${report.id}`} maxLength="1000" value={withdrawReason} onChange={event => setWithdrawReason(event.target.value)} placeholder="Например, проблема уже решена" /></Field><div className="withdraw-actions"><Button mode="secondary" type="button" disabled={busy || !withdrawReason.trim()} onClick={() => withdrawReport(report.id)}>Подтвердить отзыв</Button><Button mode="tertiary" type="button" disabled={busy} onClick={() => { setWithdrawTargetId(null); setWithdrawReason(""); }}>Отмена</Button></div></div> : <Button mode="tertiary" className="withdraw-trigger" type="button" disabled={busy} onClick={() => { setWithdrawTargetId(report.id); setWithdrawReason(""); }}>{issue.participants === 1 && issue.reports.length === 1 ? "Отозвать заявку" : "Отозвать обращение"}</Button>}</div>)}</div>}
         {issue.status === "VERIFICATION_72H" && <div className="verification"><h3>Работа выполнена?</h3><p className="muted">{issue.verificationDueAt ? `Подтвердите до ${new Date(issue.verificationDueAt).toLocaleString("ru-RU")}` : ""}</p><Field id="verification-comment" label="Комментарий, если проблема осталась"><textarea id="verification-comment" maxLength="2000" placeholder="Что ещё не исправлено?" value={verificationComment} onChange={event => setVerificationComment(event.target.value)} /></Field><Button mode="primary" className="brand-button" type="button" stretched disabled={busy} onClick={() => verify(true)}>Да, проблема решена</Button><Button mode="secondary" type="button" stretched disabled={busy} onClick={() => verify(false)}>Нет, проблема осталась</Button></div>}
-        <Button mode="secondary" className="bottom-action" type="button" stretched onClick={again}>Сообщить о другой проблеме</Button>
+        <Button mode="secondary" className="bottom-action" type="button" stretched onClick={()=>{again();setShowReportForm(false);}}>Сообщить о другой проблеме</Button>
         <Button mode="tertiary" className="quiet-action" type="button" stretched onClick={() => { again(); setShowReportForm(false); }}>На главную</Button>
       </Card>}
     </div>
