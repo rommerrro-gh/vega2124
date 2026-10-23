@@ -27,4 +27,12 @@ class ProblemIntakeFlowTest {
     }
     @Test void searchDoesNotCreateReportsAndMatchesOwnSharedCase(){String text="Не горит свет "+UUID.randomUUID();var input=new ProblemIntakeService.Input("demo-house-1",text,ReportCategory.LIGHTING,null,null);var c=intake.create(input,CaseKind.PROBLEM,UUID.randomUUID().toString(),"demo-resident-1");int before=jdbc.queryForObject("SELECT count(*) FROM resident_cases",Integer.class);assertTrue(intake.search(input,"demo-resident-1").stream().anyMatch(m->m.id().equals(c.sharedRequestId())&&m.source()==ProblemIntakeService.Source.OWN_SHARED));assertEquals(before,jdbc.queryForObject("SELECT count(*) FROM resident_cases",Integer.class));}
     @Test void privateCasesRemainPrivateAndPublicDescriptionIsShared(){jdbc.update("INSERT OR IGNORE INTO users(id,display_name,status) VALUES ('intake-neighbour','Сосед','ACTIVE')");jdbc.update("INSERT OR IGNORE INTO house_memberships(house_id,user_id,role,verification_status,access_status) VALUES ('demo-house-1','intake-neighbour','RESIDENT','VERIFIED','ACTIVE')");var input=new ProblemIntakeService.Input("demo-house-1","Протечка в подъезде",ReportCategory.WATER,null,null);var c=intake.create(input,CaseKind.PROBLEM,UUID.randomUUID().toString(),"intake-neighbour");assertThrows(RuntimeException.class,()->cases.get(c.id(),"demo-resident-1"));assertTrue(intake.search(input,"demo-resident-1").stream().anyMatch(m->m.id().equals(c.sharedRequestId())));assertThrows(RuntimeException.class,()->cases.get(c.workflowCaseId(),"intake-neighbour"));}
+    @Test void extraContextFindsCommonLiftButDifferentEntranceDoesNot(){
+      var input=new ProblemIntakeService.Input("demo-house-1","Не работает пассажирский лифт",ReportCategory.ELEVATOR,"Подъезд 2",null);
+      var c=intake.create(input,CaseKind.PROBLEM,UUID.randomUUID().toString(),"demo-resident-1");
+      var matching=new ProblemIntakeService.Input(input.houseId(),input.description()+" в подъезде 2",input.category(),null,null);
+      assertTrue(intake.search(matching,"demo-resident-1").stream().anyMatch(m->m.id().equals(c.sharedRequestId())&&m.source()==ProblemIntakeService.Source.OWN_SHARED));
+      var different=new ProblemIntakeService.Input(input.houseId(),input.description()+" в подъезде 3",input.category(),null,null);
+      assertTrue(intake.search(different,"demo-resident-1").stream().noneMatch(m->m.id().equals(c.sharedRequestId())));
+    }
 }

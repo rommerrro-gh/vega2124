@@ -52,6 +52,15 @@ public class ProblemIntakeService {
             Set<String> a=terms(normalized),b=terms(normalizer.normalize((String)row.get("normalized_text")));
             var common=new HashSet<>(a);common.retainAll(b);var union=new HashSet<>(a);union.addAll(b);
             double text=union.isEmpty()?0:(double)common.size()/union.size();
+            // Additional context must not hide an otherwise complete problem description.
+            // Explicit entrance conflicts in that context still exclude the candidate.
+            if(b.size()>=3&&common.size()==b.size()){
+                var parser=new LocationMatcher();
+                var mentioned=parser.legacyFeatures(storedCategory,input.description());
+                var known=other!=null?other:parser.legacyFeatures(storedCategory,(String)row.get("location"));
+                if(mentioned.entrance()!=null&&known.entrance()!=null&&!mentioned.entrance().equals(known.entrance()))continue;
+                text=1;
+            }
             double recency=Math.max(0,1-(double)Duration.between(Instant.ofEpochSecond(Long.parseLong(row.get("created_epoch").toString())),Instant.now()).toHours()/720);
             boolean same=category!=null&&category.equals(storedCategory);
             double score=same&&other!=null&&input.locationFeatures()!=null ? .4+.35*place+.15*recency+.1*text : .7*text+.3*place;
