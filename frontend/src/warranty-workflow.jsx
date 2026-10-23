@@ -1,125 +1,1551 @@
-import {HouseOperations,OperationsManagement} from "./operations.jsx";
-import {ControlPanel,ExchangeRegistry} from "./case-exchange.jsx";
-import {HouseTariffs} from "./house-tariffs.jsx";
-import React, {useEffect,useState} from "react";
+import { HouseOperations, OperationsManagement } from "./operations.jsx";
+import { ControlPanel, ExchangeRegistry } from "./case-exchange.jsx";
+import { HouseTariffs } from "./house-tariffs.jsx";
+import React, { useEffect, useState } from "react";
 
-const fn={COORDINATOR:"Координатор",ENGINEER:"Инженер",WARRANTY:"Гарантийный специалист",CONTRACTOR:"Исполнитель"};
-const objects={CONSTRUCTION:"Конструкции дома",EQUIPMENT:"Оборудование",FINISHING:"Отделка",OTHER:"Другой объект"};
-const wstates={DRAFT:"Сведения уточняются",VERIFIED:"Условия проверены",SUPERSEDED:"Заменено новой записью"};
-const reviews={NEED_INFORMATION:"Недостаточно сведений",POSSIBLE_WARRANTY:"Возможен строительный дефект",WARRANTY_CONFIRMED:"Позиция: гарантия применима",NON_WARRANTY:"Позиция: гарантия не применима",DISPUTED:"Позиция оспаривается"};
-const refusals={NORMAL_WEAR:"Предполагаемый износ",MISUSE:"Предполагаемое нарушение эксплуатации",THIRD_PARTY_WORK:"Вмешательство третьих лиц",OUTSIDE_TERMS:"Вопрос о применимых сроках",OTHER:"Иное обоснование"};
-const handoffs={PREPARED:"Материалы подготовлены",SENT:"Отправка подтверждена",RECEIVED:"Получение подтверждено",RESPONDED:"Ответ получен",CANCELLED:"Передача отменена"};
-const recipients={DEVELOPER:"Застройщик",GENERAL_CONTRACTOR:"Генеральный подрядчик",EXPERT:"Экспертная организация",OTHER:"Другой адресат"};
-const inspectionStates={PROPOSED:"Предложено время",SCHEDULED:"Время согласовано",COMPLETED:"Осмотр проведён",NO_ACCESS:"Осмотр не состоялся",CANCELLED:"Осмотр отменён"};
-const workStates={ASSIGNED:"Назначено",IN_PROGRESS:"Выполняется",BLOCKED:"Есть препятствие",REPORTED:"Отчёт на проверке",NEED_REWORK:"Нужна доработка",ACCEPTED:"Проверено координатором",CANCELLED:"Отменено"};
-const bases={WARRANTY:"Гарантийные работы",MAINTENANCE:"Текущее обслуживание",OTHER:"Другое основание"};
-const date=v=>v?new Date(v).toLocaleString("ru-RU",{timeZone:"Europe/Moscow",year:"numeric",month:"2-digit",day:"2-digit",hour:"2-digit",minute:"2-digit"}):"Срок уточняется";
-const local=v=>v?new Date(new Date(v).getTime()-new Date(v).getTimezoneOffset()*60000).toISOString().slice(0,16):"";
-const instant=v=>v?new Date(v).toISOString():null;
-const field=(name,label,type="text",extra={})=>({name,label,type,...extra});
-const opts=map=>Object.entries(map).map(([value,label])=>({value,label}));
-function Notice({children}){return children?<p className="case-notice" role="status">{children}</p>:null;}
-function Form({fields,initial={},onSubmit,label="Сохранить",busy=false}){
- const [data,setData]=useState(()=>Object.fromEntries(fields.map(f=>[f.name,f.type==="select"?((f.options||[]).some(o=>o.value===(initial[f.name]??f.value))?(initial[f.name]??f.value):f.required===false?"":f.options?.[0]?.value||""):(initial[f.name]??f.value??"")])));
- return <form className="workflow-form" onSubmit={e=>{e.preventDefault();onSubmit(data);}}>{fields.map(f=><label key={f.name}>{f.label}{f.type==="select"?<select value={data[f.name]} required={f.required!==false} onChange={e=>setData({...data,[f.name]:e.target.value})}>{f.required===false&&<option value="">Не указано</option>}{f.options?.map(o=><option key={o.value} value={o.value}>{o.label}</option>)}</select>:f.type==="textarea"?<textarea value={data[f.name]} required={f.required!==false} maxLength={f.max||4000} rows={3} placeholder={f.placeholder} onChange={e=>setData({...data,[f.name]:e.target.value})}/>:<input type={f.type} value={data[f.name]} required={f.required!==false} maxLength={f.max||250} min={f.min} max={f.max} placeholder={f.placeholder} onChange={e=>setData({...data,[f.name]:e.target.value})}/>}</label>)}<button disabled={busy} type="submit">{label}</button></form>;
+const fn = {
+  COORDINATOR: "Координатор",
+  ENGINEER: "Инженер",
+  WARRANTY: "Гарантийный специалист",
+  CONTRACTOR: "Исполнитель",
+};
+const objects = {
+  CONSTRUCTION: "Конструкции дома",
+  EQUIPMENT: "Оборудование",
+  FINISHING: "Отделка",
+  OTHER: "Другой объект",
+};
+const wstates = {
+  DRAFT: "Сведения уточняются",
+  VERIFIED: "Условия проверены",
+  SUPERSEDED: "Заменено новой записью",
+};
+const reviews = {
+  NEED_INFORMATION: "Недостаточно сведений",
+  POSSIBLE_WARRANTY: "Возможен строительный дефект",
+  WARRANTY_CONFIRMED: "Позиция: гарантия применима",
+  NON_WARRANTY: "Позиция: гарантия не применима",
+  DISPUTED: "Позиция оспаривается",
+};
+const refusals = {
+  NORMAL_WEAR: "Предполагаемый износ",
+  MISUSE: "Предполагаемое нарушение эксплуатации",
+  THIRD_PARTY_WORK: "Вмешательство третьих лиц",
+  OUTSIDE_TERMS: "Вопрос о применимых сроках",
+  OTHER: "Иное обоснование",
+};
+const handoffs = {
+  PREPARED: "Материалы подготовлены",
+  SENT: "Отправка подтверждена",
+  RECEIVED: "Получение подтверждено",
+  RESPONDED: "Ответ получен",
+  CANCELLED: "Передача отменена",
+};
+const recipients = {
+  DEVELOPER: "Застройщик",
+  GENERAL_CONTRACTOR: "Генеральный подрядчик",
+  EXPERT: "Экспертная организация",
+  OTHER: "Другой адресат",
+};
+const inspectionStates = {
+  PROPOSED: "Предложено время",
+  SCHEDULED: "Время согласовано",
+  COMPLETED: "Осмотр проведён",
+  NO_ACCESS: "Осмотр не состоялся",
+  CANCELLED: "Осмотр отменён",
+};
+const workStates = {
+  ASSIGNED: "Назначено",
+  IN_PROGRESS: "Выполняется",
+  BLOCKED: "Есть препятствие",
+  REPORTED: "Отчёт на проверке",
+  NEED_REWORK: "Нужна доработка",
+  ACCEPTED: "Проверено координатором",
+  CANCELLED: "Отменено",
+};
+const bases = {
+  WARRANTY: "Гарантийные работы",
+  MAINTENANCE: "Текущее обслуживание",
+  OTHER: "Другое основание",
+};
+const date = (v) =>
+  v
+    ? new Date(v).toLocaleString("ru-RU", {
+        timeZone: "Europe/Moscow",
+        year: "numeric",
+        month: "2-digit",
+        day: "2-digit",
+        hour: "2-digit",
+        minute: "2-digit",
+      })
+    : "Срок уточняется";
+const local = (v) =>
+  v
+    ? new Date(new Date(v).getTime() - new Date(v).getTimezoneOffset() * 60000)
+        .toISOString()
+        .slice(0, 16)
+    : "";
+const instant = (v) => (v ? new Date(v).toISOString() : null);
+const field = (name, label, type = "text", extra = {}) => ({ name, label, type, ...extra });
+const opts = (map) => Object.entries(map).map(([value, label]) => ({ value, label }));
+function Notice({ children }) {
+  return children ? (
+    <p className="case-notice" role="status">
+      {children}
+    </p>
+  ) : null;
 }
-async function download(path,name,role,headers){const r=await fetch(path,{headers:headers(role)});if(!r.ok)throw new Error("Документ недоступен. Обновите карточку и проверьте доступ.");const url=URL.createObjectURL(await r.blob()),a=document.createElement("a");a.href=url;a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(url),30000);}
-const evidenceFields=item=>[field("evidenceVersionId","Материал из документов обращения","select",{required:false,options:item.documents.flatMap(d=>d.versions.map(v=>({value:v.id,label:`${d.title} · версия ${v.version}`})))})];
+function Form({ fields, initial = {}, onSubmit, label = "Сохранить", busy = false }) {
+  const [data, setData] = useState(() =>
+    Object.fromEntries(
+      fields.map((f) => [
+        f.name,
+        f.type === "select"
+          ? (f.options || []).some((o) => o.value === (initial[f.name] ?? f.value))
+            ? (initial[f.name] ?? f.value)
+            : f.required === false
+              ? ""
+              : f.options?.[0]?.value || ""
+          : (initial[f.name] ?? f.value ?? ""),
+      ]),
+    ),
+  );
+  return (
+    <form
+      className="workflow-form"
+      onSubmit={(e) => {
+        e.preventDefault();
+        onSubmit(data);
+      }}
+    >
+      {fields.map((f) => (
+        <label key={f.name}>
+          {f.label}
+          {f.type === "select" ? (
+            <select
+              value={data[f.name]}
+              required={f.required !== false}
+              onChange={(e) => setData({ ...data, [f.name]: e.target.value })}
+            >
+              {f.required === false && <option value="">Не указано</option>}
+              {f.options?.map((o) => (
+                <option key={o.value} value={o.value}>
+                  {o.label}
+                </option>
+              ))}
+            </select>
+          ) : f.type === "textarea" ? (
+            <textarea
+              value={data[f.name]}
+              required={f.required !== false}
+              maxLength={f.max || 4000}
+              rows={3}
+              placeholder={f.placeholder}
+              onChange={(e) => setData({ ...data, [f.name]: e.target.value })}
+            />
+          ) : (
+            <input
+              type={f.type}
+              value={data[f.name]}
+              required={f.required !== false}
+              maxLength={f.max || 250}
+              min={f.min}
+              max={f.max}
+              placeholder={f.placeholder}
+              onChange={(e) => setData({ ...data, [f.name]: e.target.value })}
+            />
+          )}
+        </label>
+      ))}
+      <button disabled={busy} type="submit">
+        {label}
+      </button>
+    </form>
+  );
+}
+async function download(path, name, role, headers) {
+  const r = await fetch(path, { headers: headers(role) });
+  if (!r.ok) throw new Error("Документ недоступен. Обновите карточку и проверьте доступ.");
+  const url = URL.createObjectURL(await r.blob()),
+    a = document.createElement("a");
+  a.href = url;
+  a.download = name;
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(url), 30000);
+}
+const evidenceFields = (item) => [
+  field("evidenceVersionId", "Материал из документов обращения", "select", {
+    required: false,
+    options: item.documents.flatMap((d) =>
+      d.versions.map((v) => ({ value: v.id, label: `${d.title} · версия ${v.version}` })),
+    ),
+  }),
+];
 
-export function WarrantyRegistry({houseId,role,api,headers,canManage=false}){
- const [items,setItems]=useState([]),[notice,setNotice]=useState(""),[busy,setBusy]=useState(false),[edit,setEdit]=useState(null),[file,setFile]=useState(null),[fileTarget,setFileTarget]=useState("");
- const load=()=>api(role,`/v1/houses/${houseId}/warranties`).then(setItems);
- useEffect(()=>{let active=true;setItems([]);setEdit(null);setNotice("");if(houseId)api(role,`/v1/houses/${houseId}/warranties`).then(r=>{if(active)setItems(r);}).catch(e=>{if(active)setNotice(e.message);});return()=>{active=false;};},[houseId,role]);
- const fields=[field("title","Объект / часть дома"),field("objectType","Вид объекта","select",{options:opts(objects),value:"CONSTRUCTION"}),field("state","Проверка сведений","select",{options:opts(wstates),value:"DRAFT"}),field("developer","Застройщик", "text",{required:false}),field("contractor","Подрядчик", "text",{required:false}),field("contractReference","Договор / документ и нужный пункт","textarea",{max:500,required:false}),field("basis","Что подтверждено документами и к чему применяются условия","textarea",{max:3000}),field("transferredOn","Дата передачи, если подтверждена","date",{required:false}),field("startsOn","Начало периода, если установлено","date",{required:false}),field("endsOn","Конец периода, если установлен","date",{required:false}),field("reason","Причина внесения / изменения сведений","textarea",{max:1000})];
- async function save(data){setBusy(true);setNotice("");try{const body={...data,transferredOn:data.transferredOn||null,startsOn:data.startsOn||null,endsOn:data.endsOn||null,revision:edit?.revision||0};await api(role,`/v1/houses/${houseId}/warranties${edit?.id?`/${edit.id}`:""}`,{method:edit?.id?"PUT":"POST",body:JSON.stringify(body)});setEdit(null);await load();}catch(e){setNotice(e.message);}finally{setBusy(false);}}
- async function upload(e){e.preventDefault();setBusy(true);setNotice("");try{const w=items.find(i=>i.id===fileTarget),body=new FormData();body.append("file",file);await api(role,`/v1/warranties/${w.id}/documents?${new URLSearchParams({title:file.name,revision:String(w.revision)})}`,{method:"POST",body});setFile(null);await load();e.target.reset();}catch(e){setNotice(e.message);}finally{setBusy(false);}}
- return <section className="case-panel workflow-registry"><div className="case-heading"><div><small>ГАРАНТИЙНЫЕ СВЕДЕНИЯ ДОМА</small><h2>Условия и основания</h2></div>{canManage&&<button type="button" onClick={()=>setEdit({})}>Добавить сведения</button>}</div><p className="muted">Сроки берутся из проверенных документов. Неизвестная дата не блокирует обращение; прошедшая дата сама по себе не означает отказ.</p><Notice>{notice}</Notice>
- {edit&&<details open className="case-editor"><summary>{edit.id?"Уточнить запись":"Новая запись"}</summary><Form key={edit.id||"new"} fields={fields} initial={edit} onSubmit={save} busy={busy}/><button type="button" className="case-link" onClick={()=>setEdit(null)}>Отменить редактирование</button></details>}
- <div className="workflow-grid">{items.map(w=><article className="workflow-card" key={w.id}><small>{objects[w.objectType]} · {wstates[w.state]}</small><h3>{w.title}</h3><p>{w.basis}</p><p>Застройщик: {w.developer||"уточняется"}<br/>Подрядчик: {w.contractor||"уточняется"}</p><p>{w.contractReference||"Документ-основание уточняется"}</p><p>Передача: {w.transferredOn||"не установлена"}<br/>Период: {w.startsOn||"не установлен"} — {w.endsOn||"не установлен"}</p>{w.checkedAt&&<small>Проверено: {date(w.checkedAt)}</small>}<div className="case-actions">{canManage&&<button type="button" className="case-secondary" onClick={()=>setEdit(w)}>Уточнить сведения</button>}{w.files.map(f=><button key={f.id} type="button" className="case-link" onClick={()=>download(`/v1/warranty-documents/${f.id}`,f.title,role,headers).catch(e=>setNotice(e.message))}>{f.title}</button>)}</div><details><summary>История изменений · {w.history.length}</summary>{w.history.map(h=><p key={h.revision}>{date(h.created_at)} · {h.actor}<br/>{h.reason}<br/>{h.title} · {h.starts_on||"начало уточняется"} — {h.ends_on||"конец уточняется"}<br/>{h.contract_reference}<br/>{h.basis}</p>)}</details></article>)}</div>{!items.length&&<p className="muted">Проверенные гарантийные сведения пока не внесены. Это не мешает принять проблему и организовать осмотр.</p>}
- {canManage&&items.length>0&&<details className="case-editor"><summary>Приложить договор или исходный документ</summary><form className="workflow-form" onSubmit={upload}><label>Запись<select required value={fileTarget} onChange={e=>setFileTarget(e.target.value)}><option value="">Выберите объект</option>{items.map(w=><option key={w.id} value={w.id}>{w.title}</option>)}</select></label><label>PDF, JPEG или PNG до 10 МБ<input type="file" accept="application/pdf,image/jpeg,image/png" required onChange={e=>setFile(e.target.files[0])}/></label><button disabled={busy||!file||!fileTarget}>Добавить документ</button></form></details>}
- </section>;
+export function WarrantyRegistry({ houseId, role, api, headers, canManage = false }) {
+  const [items, setItems] = useState([]),
+    [notice, setNotice] = useState(""),
+    [busy, setBusy] = useState(false),
+    [edit, setEdit] = useState(null),
+    [file, setFile] = useState(null),
+    [fileTarget, setFileTarget] = useState("");
+  const load = () => api(role, `/v1/houses/${houseId}/warranties`).then(setItems);
+  useEffect(() => {
+    let active = true;
+    setItems([]);
+    setEdit(null);
+    setNotice("");
+    if (houseId)
+      api(role, `/v1/houses/${houseId}/warranties`)
+        .then((r) => {
+          if (active) setItems(r);
+        })
+        .catch((e) => {
+          if (active) setNotice(e.message);
+        });
+    return () => {
+      active = false;
+    };
+  }, [houseId, role]);
+  const fields = [
+    field("title", "Объект / часть дома"),
+    field("objectType", "Вид объекта", "select", { options: opts(objects), value: "CONSTRUCTION" }),
+    field("state", "Проверка сведений", "select", { options: opts(wstates), value: "DRAFT" }),
+    field("developer", "Застройщик", "text", { required: false }),
+    field("contractor", "Подрядчик", "text", { required: false }),
+    field("contractReference", "Договор / документ и нужный пункт", "textarea", {
+      max: 500,
+      required: false,
+    }),
+    field("basis", "Что подтверждено документами и к чему применяются условия", "textarea", {
+      max: 3000,
+    }),
+    field("transferredOn", "Дата передачи, если подтверждена", "date", { required: false }),
+    field("startsOn", "Начало периода, если установлено", "date", { required: false }),
+    field("endsOn", "Конец периода, если установлен", "date", { required: false }),
+    field("reason", "Причина внесения / изменения сведений", "textarea", { max: 1000 }),
+  ];
+  async function save(data) {
+    setBusy(true);
+    setNotice("");
+    try {
+      const body = {
+        ...data,
+        transferredOn: data.transferredOn || null,
+        startsOn: data.startsOn || null,
+        endsOn: data.endsOn || null,
+        revision: edit?.revision || 0,
+      };
+      await api(role, `/v1/houses/${houseId}/warranties${edit?.id ? `/${edit.id}` : ""}`, {
+        method: edit?.id ? "PUT" : "POST",
+        body: JSON.stringify(body),
+      });
+      setEdit(null);
+      await load();
+    } catch (e) {
+      setNotice(e.message);
+    } finally {
+      setBusy(false);
+    }
+  }
+  async function upload(e) {
+    e.preventDefault();
+    setBusy(true);
+    setNotice("");
+    try {
+      const w = items.find((i) => i.id === fileTarget),
+        body = new FormData();
+      body.append("file", file);
+      await api(
+        role,
+        `/v1/warranties/${w.id}/documents?${new URLSearchParams({ title: file.name, revision: String(w.revision) })}`,
+        { method: "POST", body },
+      );
+      setFile(null);
+      await load();
+      e.target.reset();
+    } catch (e) {
+      setNotice(e.message);
+    } finally {
+      setBusy(false);
+    }
+  }
+  return (
+    <section className="case-panel workflow-registry">
+      <div className="case-heading">
+        <div>
+          <small>ГАРАНТИЙНЫЕ СВЕДЕНИЯ ДОМА</small>
+          <h2>Условия и основания</h2>
+        </div>
+        {canManage && (
+          <button type="button" onClick={() => setEdit({})}>
+            Добавить сведения
+          </button>
+        )}
+      </div>
+      <p className="muted">
+        Сроки берутся из проверенных документов. Неизвестная дата не блокирует обращение; прошедшая
+        дата сама по себе не означает отказ.
+      </p>
+      <Notice>{notice}</Notice>
+      {edit && (
+        <details open className="case-editor">
+          <summary>{edit.id ? "Уточнить запись" : "Новая запись"}</summary>
+          <Form key={edit.id || "new"} fields={fields} initial={edit} onSubmit={save} busy={busy} />
+          <button type="button" className="case-link" onClick={() => setEdit(null)}>
+            Отменить редактирование
+          </button>
+        </details>
+      )}
+      <div className="workflow-grid">
+        {items.map((w) => (
+          <article className="workflow-card" key={w.id}>
+            <small>
+              {objects[w.objectType]} · {wstates[w.state]}
+            </small>
+            <h3>{w.title}</h3>
+            <p>{w.basis}</p>
+            <p>
+              Застройщик: {w.developer || "уточняется"}
+              <br />
+              Подрядчик: {w.contractor || "уточняется"}
+            </p>
+            <p>{w.contractReference || "Документ-основание уточняется"}</p>
+            <p>
+              Передача: {w.transferredOn || "не установлена"}
+              <br />
+              Период: {w.startsOn || "не установлен"} — {w.endsOn || "не установлен"}
+            </p>
+            {w.checkedAt && <small>Проверено: {date(w.checkedAt)}</small>}
+            <div className="case-actions">
+              {canManage && (
+                <button type="button" className="case-secondary" onClick={() => setEdit(w)}>
+                  Уточнить сведения
+                </button>
+              )}
+              {w.files.map((f) => (
+                <button
+                  key={f.id}
+                  type="button"
+                  className="case-link"
+                  onClick={() =>
+                    download(`/v1/warranty-documents/${f.id}`, f.title, role, headers).catch((e) =>
+                      setNotice(e.message),
+                    )
+                  }
+                >
+                  {f.title}
+                </button>
+              ))}
+            </div>
+            <details>
+              <summary>История изменений · {w.history.length}</summary>
+              {w.history.map((h) => (
+                <p key={h.revision}>
+                  {date(h.created_at)} · {h.actor}
+                  <br />
+                  {h.reason}
+                  <br />
+                  {h.title} · {h.starts_on || "начало уточняется"} —{" "}
+                  {h.ends_on || "конец уточняется"}
+                  <br />
+                  {h.contract_reference}
+                  <br />
+                  {h.basis}
+                </p>
+              ))}
+            </details>
+          </article>
+        ))}
+      </div>
+      {!items.length && (
+        <p className="muted">
+          Проверенные гарантийные сведения пока не внесены. Это не мешает принять проблему и
+          организовать осмотр.
+        </p>
+      )}
+      {canManage && items.length > 0 && (
+        <details className="case-editor">
+          <summary>Приложить договор или исходный документ</summary>
+          <form className="workflow-form" onSubmit={upload}>
+            <label>
+              Запись
+              <select required value={fileTarget} onChange={(e) => setFileTarget(e.target.value)}>
+                <option value="">Выберите объект</option>
+                {items.map((w) => (
+                  <option key={w.id} value={w.id}>
+                    {w.title}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label>
+              PDF, JPEG или PNG до 10 МБ
+              <input
+                type="file"
+                accept="application/pdf,image/jpeg,image/png"
+                required
+                onChange={(e) => setFile(e.target.files[0])}
+              />
+            </label>
+            <button disabled={busy || !file || !fileTarget}>Добавить документ</button>
+          </form>
+        </details>
+      )}
+    </section>
+  );
 }
 
-export function WorkflowStaff({houseId,role,api}){
- const [staff,setStaff]=useState([]),[invites,setInvites]=useState([]),[token,setToken]=useState(""),[username,setUsername]=useState(""),[notice,setNotice]=useState(""),[busy,setBusy]=useState(false);
- async function load(){const [s,i]=await Promise.all([api(role,`/v1/houses/${houseId}/workflow/staff`),api(role,`/v1/houses/${houseId}/workflow/invitations`)]);setStaff(s);setInvites(i);}
- useEffect(()=>{setToken("");setNotice("");load().catch(e=>setNotice(e.message));api(role,"/v1/access/config").then(c=>setUsername(c.botUsername||"")).catch(()=>{});},[houseId,role]);
- async function action(path,body){setBusy(true);setNotice("");try{const r=await api(role,path,{method:"POST",...(body?{body:JSON.stringify(body)}:{})});if(r?.token)setToken(r.token);await load();}catch(e){setNotice(e.message);}finally{setBusy(false);}}
- const link=token?(username?`https://max.ru/${username}?startapp=${token}`:`${location.origin}/work/index.html?invite=${token}`):"";
- return <details className="case-panel"><summary>Инженеры, гарантийная служба и исполнители</summary><p className="muted">Служебное подключение не делает сотрудника жителем. Укажите согласованное участие организации; материалы конкретного обращения откроются только после назначения в его карточке. Это не подтверждает полномочия на юридическую подпись.</p><Notice>{notice}</Notice><button disabled={busy} type="button" className="case-secondary" onClick={()=>action(`/v1/houses/${houseId}/workflow/staff/self`)}>Включить себе рабочую функцию координатора</button>
- <Form fields={[field("function","Функция","select",{options:opts(fn),value:"ENGINEER"}),field("organizationLabel","Организация / служба"),field("authority","Основание подключения и согласованные полномочия","textarea",{max:1000}),field("days","Срок приглашения, дней","number",{value:"7",min:1,max:14})]} onSubmit={d=>action(`/v1/houses/${houseId}/workflow/invitations`,{...d,days:Number(d.days)})} busy={busy} label="Создать приглашение"/>
- {link&&<div className="invite-token"><strong>Ссылка для сотрудника</strong><code>{link}</code><button type="button" onClick={()=>navigator.clipboard.writeText(link)}>Скопировать</button><p>Ссылка одноразовая. Передайте её нужному сотруднику.</p></div>}
- {staff.map(s=><div className="case-permission" key={`${s.userId}:${s.function}`}><span>{s.name} · {fn[s.function]}<small>{s.organizationLabel} · {s.active?"активен":"доступ отозван"}</small></span>{s.active&&<button disabled={busy} type="button" className="case-link" onClick={()=>action(`/v1/houses/${houseId}/workflow/staff/${s.userId}/revoke?function=${s.function}`)}>Отозвать</button>}</div>)}
- <details><summary>Выданные приглашения · {invites.length}</summary>{invites.map(i=><div className="case-permission" key={i.id}><span>{fn[i.function]} · {i.organizationLabel}<small>{i.revoked?"Отозвано":i.accepted?"Использовано":`Действует до ${date(i.expiresAt)}`}</small></span>{!i.revoked&&!i.accepted&&<button type="button" className="case-link" disabled={busy} onClick={()=>action(`/v1/workflow/invitations/${i.id}/revoke`)}>Отозвать приглашение</button>}</div>)}</details>
- </details>;
+export function WorkflowStaff({ houseId, role, api }) {
+  const [staff, setStaff] = useState([]),
+    [invites, setInvites] = useState([]),
+    [token, setToken] = useState(""),
+    [username, setUsername] = useState(""),
+    [notice, setNotice] = useState(""),
+    [busy, setBusy] = useState(false);
+  async function load() {
+    const [s, i] = await Promise.all([
+      api(role, `/v1/houses/${houseId}/workflow/staff`),
+      api(role, `/v1/houses/${houseId}/workflow/invitations`),
+    ]);
+    setStaff(s);
+    setInvites(i);
+  }
+  useEffect(() => {
+    setToken("");
+    setNotice("");
+    load().catch((e) => setNotice(e.message));
+    api(role, "/v1/access/config")
+      .then((c) => setUsername(c.botUsername || ""))
+      .catch(() => {});
+  }, [houseId, role]);
+  async function action(path, body) {
+    setBusy(true);
+    setNotice("");
+    try {
+      const r = await api(role, path, {
+        method: "POST",
+        ...(body ? { body: JSON.stringify(body) } : {}),
+      });
+      if (r?.token) setToken(r.token);
+      await load();
+    } catch (e) {
+      setNotice(e.message);
+    } finally {
+      setBusy(false);
+    }
+  }
+  const link = token
+    ? username
+      ? `https://max.ru/${username}?startapp=${token}`
+      : `${location.origin}/work/index.html?invite=${token}`
+    : "";
+  return (
+    <details className="case-panel">
+      <summary>Инженеры, гарантийная служба и исполнители</summary>
+      <p className="muted">
+        Служебное подключение не делает сотрудника жителем. Укажите согласованное участие
+        организации; материалы конкретного обращения откроются только после назначения в его
+        карточке. Это не подтверждает полномочия на юридическую подпись.
+      </p>
+      <Notice>{notice}</Notice>
+      <button
+        disabled={busy}
+        type="button"
+        className="case-secondary"
+        onClick={() => action(`/v1/houses/${houseId}/workflow/staff/self`)}
+      >
+        Включить себе рабочую функцию координатора
+      </button>
+      <Form
+        fields={[
+          field("function", "Функция", "select", { options: opts(fn), value: "ENGINEER" }),
+          field("organizationLabel", "Организация / служба"),
+          field("authority", "Основание подключения и согласованные полномочия", "textarea", {
+            max: 1000,
+          }),
+          field("days", "Срок приглашения, дней", "number", { value: "7", min: 1, max: 14 }),
+        ]}
+        onSubmit={(d) =>
+          action(`/v1/houses/${houseId}/workflow/invitations`, { ...d, days: Number(d.days) })
+        }
+        busy={busy}
+        label="Создать приглашение"
+      />
+      {link && (
+        <div className="invite-token">
+          <strong>Ссылка для сотрудника</strong>
+          <code>{link}</code>
+          <button type="button" onClick={() => navigator.clipboard.writeText(link)}>
+            Скопировать
+          </button>
+          <p>Ссылка одноразовая. Передайте её нужному сотруднику.</p>
+        </div>
+      )}
+      {staff.map((s) => (
+        <div className="case-permission" key={`${s.userId}:${s.function}`}>
+          <span>
+            {s.name} · {fn[s.function]}
+            <small>
+              {s.organizationLabel} · {s.active ? "активен" : "доступ отозван"}
+            </small>
+          </span>
+          {s.active && (
+            <button
+              disabled={busy}
+              type="button"
+              className="case-link"
+              onClick={() =>
+                action(
+                  `/v1/houses/${houseId}/workflow/staff/${s.userId}/revoke?function=${s.function}`,
+                )
+              }
+            >
+              Отозвать
+            </button>
+          )}
+        </div>
+      ))}
+      <details>
+        <summary>Выданные приглашения · {invites.length}</summary>
+        {invites.map((i) => (
+          <div className="case-permission" key={i.id}>
+            <span>
+              {fn[i.function]} · {i.organizationLabel}
+              <small>
+                {i.revoked
+                  ? "Отозвано"
+                  : i.accepted
+                    ? "Использовано"
+                    : `Действует до ${date(i.expiresAt)}`}
+              </small>
+            </span>
+            {!i.revoked && !i.accepted && (
+              <button
+                type="button"
+                className="case-link"
+                disabled={busy}
+                onClick={() => action(`/v1/workflow/invitations/${i.id}/revoke`)}
+              >
+                Отозвать приглашение
+              </button>
+            )}
+          </div>
+        ))}
+      </details>
+    </details>
+  );
 }
 
-export function CaseWorkflow({item,role,api,headers,onChange}){
- const [data,setData]=useState(null),[registry,setRegistry]=useState([]),[notice,setNotice]=useState(""),[busy,setBusy]=useState(false);
- async function load(){setData(await api(role,`/v1/cases/${item.id}/workflow`));}
- useEffect(()=>{let active=true;setData(null);setNotice("");api(role,`/v1/cases/${item.id}/workflow`).then(d=>{if(active){setData(d);if(d.canCoordinate||d.canReviewWarranty)api(role,`/v1/houses/${item.houseId}/warranties`).then(r=>{if(active)setRegistry(r);}).catch(()=>{});}}).catch(e=>{if(active)setNotice(e.message);});return()=>{active=false;};},[item.id,item.revision,role]);
- async function act(path,body,method="POST"){setBusy(true);setNotice("");try{setData(await api(role,path,{method,body:JSON.stringify(body)}));onChange(await api(role,`/v1/cases/${item.id}`));}catch(e){setNotice(e.message);await load().catch(()=>{});}finally{setBusy(false);}}
- const evidence=evidenceFields(item),cr=data?.revision;
- const reportOptions=data?.inspections.flatMap(i=>i.acts.filter(a=>a.state==="PUBLISHED").map(a=>({value:a.id,label:`Акт осмотра · ${date(a.inspectedAt)} · версия ${a.version}`})))||[];
- const participants=data?.staff.map(s=>({value:s.id,label:s.name}))||[];
- const personField=(name,label)=>field(name,label,"select",{options:[{value:"",label:"Выберите назначенного сотрудника"},...participants]});
- const finish=(path,d,method="POST")=>act(path,{...d,revision:cr,evidenceVersionId:d.evidenceVersionId||null,warrantyId:d.warrantyId||null,refusalReason:d.refusalReason||null},method);
- if(!data)return <section className="case-editor"><Notice>{notice||"Загружаем осмотры и работы…"}</Notice></section>;
- const editable=item.status!=="CLOSED";
- const staffView=!data.isAuthor||data.canCoordinate||data.canInspect||data.canReviewWarranty;
- if(!staffView&&!data.reviews.length&&!data.inspections.length&&!data.orders.length&&!data.handoffs.length)return null;
- const inspectionForm=(i)=>[personField("inspectorId","Инженер — участник обращения"),field("location","Где провести осмотр"),field("participants","Планируемые участники","textarea",{max:1500}),field("startsAt","Начало интервала (местное время)","datetime-local"),field("endsAt","Конец интервала (местное время)","datetime-local"),...(i?[field("reason","Причина переноса","textarea",{max:1000})]:[])];
- return <section className="case-workflow"><div className="case-heading"><div><small>ОДНО ОБРАЩЕНИЕ · ВСЕ ШАГИ</small><h3>Рассмотрение, осмотры и работы</h3></div><button type="button" className="case-link" disabled={busy} onClick={()=>{load().catch(e=>setNotice(e.message));onChange&&api(role,`/v1/cases/${item.id}`).then(onChange).catch(()=>{});}}>Обновить</button></div><Notice>{notice}</Notice>
- {editable&&data.canCoordinate&&<details className="case-editor"><summary>Назначить инженера или исполнителя в это обращение</summary><Form fields={[personField("target","Подключённый сотрудник"),field("function","Функция в обращении","select",{options:opts({ENGINEER:fn.ENGINEER,CONTRACTOR:fn.CONTRACTOR}),value:"ENGINEER"})]} onSubmit={async d=>{setBusy(true);setNotice("");try{onChange(await api(role,`/v1/cases/${item.id}/collaborators/${d.target}`,{method:"PUT",body:JSON.stringify({function:d.function,enabled:true,revision:cr})}));}catch(e){setNotice(e.message);}finally{setBusy(false);}}} busy={busy} label="Назначить участника"/></details>}
- {(staffView||data.reviews.length>0)&&<details className="workflow-section" open={!!data.reviews.length}><summary>Гарантийное рассмотрение · {data.reviews.length}</summary>{data.reviews.map(r=><article className="workflow-card" key={r.id}><strong>{reviews[r.outcome]}</strong><p>{r.explanation}</p><p className="muted">Основание позиции: {r.basis}</p><small>{r.reviewer} · {date(r.createdAt)}</small>{r.outcome==="NON_WARRANTY"&&<p>Это зафиксированная позиция сотрудника. Если вы не согласны, напишите в обращении; оно не закрывается автоматически.</p>}</article>)}
- {editable&&(data.canCoordinate||data.canReviewWarranty)&&<details className="case-editor"><summary>Зафиксировать рассмотрение</summary><p className="muted">Неизвестный или прошедший срок не означает автоматического отказа. Для окончательной позиции нужны материалы осмотра либо обследования. Гарантийный вывод фиксирует назначенный специалист.</p><Form fields={[field("outcome","Результат рассмотрения","select",{options:opts(reviews).filter(o=>data.canReviewWarranty||!["WARRANTY_CONFIRMED","NON_WARRANTY"].includes(o.value)),value:"NEED_INFORMATION"}),field("warrantyId","Условия из реестра дома","select",{required:false,options:registry.map(w=>({value:w.id,label:`${w.title} · ${wstates[w.state]}`}))}),field("refusalReason","Причина позиции о неприменимости (если нужна)","select",{required:false,options:opts(refusals)}),field("basis","Документы, факты и основание позиции","textarea",{max:3000}),field("explanation","Понятное жителю объяснение","textarea",{max:2000}),...evidence]} onSubmit={d=>finish(`/v1/cases/${item.id}/warranty-reviews`,d)} busy={busy} label="Сохранить позицию"/></details>}
- </details>}
- {(staffView||data.inspections.length>0)&&<details className="workflow-section" open={!!data.inspections.length}><summary>Осмотры и акты · {data.inspections.length}</summary>
- {data.inspections.map(i=><article key={i.id} className="workflow-card"><small>{inspectionStates[i.state]}</small><h4>{date(i.startsAt)} — {date(i.endsAt)} МСК</h4><p>Место: {i.location}<br/>Инженер: {i.inspector}<br/>Участники: {i.participants}</p>{i.residentAvailability==="REQUEST_OTHER_TIME"&&<p className="case-notice">{data.isAuthor?"Вы попросили другое время. Координатор предложит новый интервал.":"Жителю нужно другое время. Согласуйте новый интервал."}</p>}
- {editable&&data.isAuthor&&["PROPOSED","SCHEDULED"].includes(i.state)&&<div className="case-actions">{i.residentAvailability!=="CONFIRMED"&&<button disabled={busy||new Date(i.endsAt)<new Date()} type="button" onClick={()=>act(`/v1/inspections/${i.id}/response`,{action:"CONFIRM_TIME",revision:i.revision,caseRevision:cr})}>Это время подходит</button>}<button disabled={busy} type="button" className="case-secondary" onClick={()=>act(`/v1/inspections/${i.id}/response`,{action:"REQUEST_OTHER_TIME",revision:i.revision,caseRevision:cr,comment:"Прошу предложить другое время"})}>Нужно другое время</button></div>}
- {editable&&data.canCoordinate&&!["COMPLETED","CANCELLED"].includes(i.state)&&<details className="case-editor"><summary>Перенести осмотр</summary><Form fields={inspectionForm(i)} initial={{...i,startsAt:local(i.startsAt),endsAt:local(i.endsAt)}} onSubmit={d=>act(`/v1/cases/${item.id}/inspections/${i.id}`,{...d,startsAt:instant(d.startsAt),endsAt:instant(d.endsAt),revision:i.revision,caseRevision:cr},"PUT")} busy={busy} label="Предложить новое время"/></details>}
- {editable&&(data.canCoordinate||data.canInspect&&data.actorId===i.inspectorId)&&!["COMPLETED","CANCELLED"].includes(i.state)&&<details className="case-editor"><summary>Осмотр не состоялся / отмена</summary><Form fields={[field("state","Что произошло","select",{options:opts({NO_ACCESS:"Не удалось получить доступ",...(data.canCoordinate?{CANCELLED:"Осмотр отменён"}:{})}),value:"NO_ACCESS"}),field("reason","Что произошло и что делать дальше","textarea",{max:1500})]} onSubmit={d=>act(`/v1/inspections/${i.id}`,{...d,revision:i.revision,caseRevision:cr},"PATCH")} busy={busy}/></details>}
- {i.acts.map(a=><div key={a.id} className="workflow-act"><strong>Акт · версия {a.version} · {a.state==="PUBLISHED"?"Опубликован":"Проект"}</strong>{a.state==="PUBLISHED"&&<><p>{a.findings}</p><p>Дефекты: {a.defects}</p><p>Предварительная причина: {a.preliminaryCause||"не установлена"}</p>{a.correctionReason&&<p>Причина новой версии: {a.correctionReason}</p>}<button type="button" className="case-link" onClick={()=>download(`/v1/inspection-acts/${a.id}/print`,`Акт-осмотра-v${a.version}.html`,role,headers).catch(e=>setNotice(e.message))}>Скачать для ознакомления и печати</button><small>Публикация не подтверждает подпись или согласие участников.</small></>}{a.state==="DRAFT"&&editable&&data.canInspect&&data.actorId===i.inspectorId&&<><ActForm key={`${a.id}:${i.revision}`} initial={a} evidence={evidence} onSubmit={d=>act(`/v1/inspection-acts/${a.id}`,{...d,revision:i.revision,caseRevision:cr},"PUT")} busy={busy}/><button disabled={busy} type="button" onClick={()=>act(`/v1/inspection-acts/${a.id}/publish`,{revision:i.revision,caseRevision:cr})}>Опубликовать акт</button></>}
- {editable&&data.isAuthor&&a.state==="PUBLISHED"&&<details className="case-editor"><summary>Есть замечания к этому акту</summary><Form fields={[field("comment","Что нужно уточнить или с чем вы не согласны","textarea",{max:2000})]} label="Передать замечание" busy={busy} onSubmit={d=>act(`/v1/inspections/${i.id}/response`,{...d,action:"COMMENT_ACT",actId:a.id,revision:i.revision,caseRevision:cr})}/></details>}</div>)}
- {editable&&data.canInspect&&data.actorId===i.inspectorId&&i.state!=="CANCELLED"&&!i.acts.some(a=>a.state==="DRAFT")&&<details className="case-editor"><summary>{i.acts.length?"Новая версия акта с исправлениями":"Составить акт осмотра"}</summary><ActForm evidence={evidence} correctionRequired={!!i.acts.length} busy={busy} onSubmit={d=>act(`/v1/inspections/${i.id}/acts`,{...d,revision:i.revision,caseRevision:cr})}/></details>}
- {i.responses.map((r,n)=><p className="muted" key={n}>{date(r.created_at)} · {r.actor}: {r.comment||({CONFIRM_TIME:"Время подходит",REQUEST_OTHER_TIME:"Нужно другое время",COMMENT_ACT:"Замечание к акту"}[r.action])}</p>)}
- </article>)}
- {editable&&data.canCoordinate&&<details className="case-editor"><summary>Предложить осмотр</summary><p className="muted">Сначала назначьте инженера участником обращения. Жителю достаточно подтвердить интервал или попросить другой.</p><Form fields={inspectionForm()} onSubmit={d=>act(`/v1/cases/${item.id}/inspections`,{...d,startsAt:instant(d.startsAt),endsAt:instant(d.endsAt),revision:0,caseRevision:cr})} label="Предложить время" busy={busy}/></details>}
- </details>}
- {(staffView||data.orders.length>0)&&<details className="workflow-section" open={!!data.orders.length}><summary>Работы и проверка отчёта · {data.orders.length}</summary>
- {data.orders.map(o=><article key={o.id} className="workflow-card"><small>{workStates[o.state]} · {bases[o.basisType]}</small><h4>{o.title}</h4><p>{o.scope}</p><p>Исполнитель: {o.assignee}<br/>Срок: {date(o.dueAt)}{o.dueAt&&new Date(o.dueAt)<new Date()&&!["ACCEPTED","CANCELLED"].includes(o.state)&&<strong className="workflow-overdue"> · Срок прошёл</strong>}<br/>Основание срока: {o.dueBasis}</p><p className="muted">Основание работ: {o.basis}</p>{o.reports.map(r=><div key={r.id} className="workflow-act"><strong>Отчёт исполнителя · версия {r.version}</strong><p>{r.report}</p><small>{r.author} · {date(r.created_at)}</small></div>)}
- {editable&&!["ACCEPTED","CANCELLED"].includes(o.state)&&(data.canCoordinate||data.actorId===o.assigneeId)&&<details className="case-editor"><summary>{data.actorId===o.assigneeId?"Ход работ / отчёт":"Проверить работы / изменить условия"}</summary><p className="muted">Причина изменения срока, препятствия или решения сохраняется в истории. Приёмка координатором не заменяет подтверждение жителя.</p><Form key={`${o.id}:${o.revision}`} initial={{assigneeId:o.assigneeId,dueAt:local(o.dueAt),dueBasis:o.dueBasis,state:o.state}} fields={[field("state","Следующее действие","select",{options:opts(workStates).filter(s=>(data.canCoordinate&&(s.value===o.state||s.value==="ASSIGNED"||s.value==="CANCELLED"||o.state==="REPORTED"&&["NEED_REWORK",...(data.actorId!==o.assigneeId?["ACCEPTED"]:[])].includes(s.value)))||(data.actorId===o.assigneeId&&(["ASSIGNED","NEED_REWORK"].includes(o.state)?["IN_PROGRESS","BLOCKED"]:["IN_PROGRESS","BLOCKED"].includes(o.state)?["IN_PROGRESS","BLOCKED","REPORTED"]:[]).includes(s.value)))}),...(data.canCoordinate?[personField("assigneeId","Назначенный исполнитель"),field("dueAt","Срок (местное время)","datetime-local",{required:false}),field("dueBasis","Основание срока / причина отсутствия","textarea",{max:1000})]:[]),field("note","Отчёт, причина переноса или результат проверки","textarea",{max:2000}),...evidence]} onSubmit={d=>act(`/v1/work-orders/${o.id}`,{...d,assigneeId:d.assigneeId||o.assigneeId,dueAt:data.canCoordinate?instant(d.dueAt):o.dueAt,dueBasis:d.dueBasis||o.dueBasis,evidenceVersionId:d.evidenceVersionId||null,revision:o.revision,caseRevision:cr},"PATCH")} busy={busy}/></details>}
- </article>)}
- {editable&&data.canCoordinate&&<details className="case-editor"><summary>Назначить работы</summary><Form fields={[field("title","Название задания"),field("scope","Что нужно сделать и как проверить результат","textarea"),personField("assigneeId","Исполнитель — участник обращения"),field("basisType","Направление работ","select",{options:opts(bases),value:"MAINTENANCE"}),field("basis","Основание назначения","textarea",{max:3000}),field("dueAt","Плановый срок (местное время)","datetime-local",{required:false}),field("dueBasis","Основание срока / почему пока не установлен","textarea",{max:1000}),field("actId","Связанный акт осмотра","select",{options:reportOptions,required:false})]} busy={busy} label="Создать задание" onSubmit={d=>act(`/v1/cases/${item.id}/work-orders`,{...d,dueAt:instant(d.dueAt),actId:d.actId||null,revision:cr})}/></details>}
- </details>}
- {data.handoffs.length>0&&<details className="workflow-section"><summary>Передача материалов · {data.handoffs.length}</summary><p className="muted">Подготовка документа не означает отправку. Подтверждения и ответы фиксирует сотрудник с приложением документов; подключённая интеграция с адресатом не имитируется.</p>
- {data.handoffs.map(h=><article key={h.id} className="workflow-card"><small>{handoffs[h.state]}</small><h4>{h.recipient}</h4><p>{h.statement}</p><p>Канал: {h.channel}<br/>Ожидаемый срок: {date(h.dueAt)}</p>{h.events.map((e,n)=><p className="muted" key={n}>{date(e.created_at)} · {handoffs[e.state]}<br/>{e.note}</p>)}
- {data.canCoordinate&&<button type="button" className="case-link" onClick={()=>download(`/v1/handoffs/${h.id}/print`,"Материалы-для-передачи.html",role,headers).catch(e=>setNotice(e.message))}>Скачать подготовленные материалы</button>}
- {editable&&data.canCoordinate&&!["RESPONDED","CANCELLED"].includes(h.state)&&<Form fields={[field("state","Подтверждённый шаг","select",{options:opts(handoffs).filter(o=>o.value==="CANCELLED"||o.value===({PREPARED:"SENT",SENT:"RECEIVED",RECEIVED:"RESPONDED"}[h.state])),value:({PREPARED:"SENT",SENT:"RECEIVED",RECEIVED:"RESPONDED"}[h.state])}),field("note","Что подтверждено и каким документом","textarea",{max:2000}),...evidence]} busy={busy} label="Зафиксировать подтверждение" onSubmit={d=>act(`/v1/handoffs/${h.id}`,{...d,evidenceVersionId:d.evidenceVersionId||null,revision:h.revision,caseRevision:cr},"PATCH")}/>}</article>)}
- </details>}
- {data.history.length>0&&<details className="workflow-section"><summary>История этапов · {data.history.length}</summary>{data.history.map((h,n)=><p key={n}>{date(h.created_at)} · {h.actor}<br/>{h.note}</p>)}</details>}
- </section>;
+export function CaseWorkflow({ item, role, api, headers, onChange }) {
+  const [data, setData] = useState(null),
+    [registry, setRegistry] = useState([]),
+    [notice, setNotice] = useState(""),
+    [busy, setBusy] = useState(false);
+  async function load() {
+    setData(await api(role, `/v1/cases/${item.id}/workflow`));
+  }
+  useEffect(() => {
+    let active = true;
+    setData(null);
+    setNotice("");
+    api(role, `/v1/cases/${item.id}/workflow`)
+      .then((d) => {
+        if (active) {
+          setData(d);
+          if (d.canCoordinate || d.canReviewWarranty)
+            api(role, `/v1/houses/${item.houseId}/warranties`)
+              .then((r) => {
+                if (active) setRegistry(r);
+              })
+              .catch(() => {});
+        }
+      })
+      .catch((e) => {
+        if (active) setNotice(e.message);
+      });
+    return () => {
+      active = false;
+    };
+  }, [item.id, item.revision, role]);
+  async function act(path, body, method = "POST") {
+    setBusy(true);
+    setNotice("");
+    try {
+      setData(await api(role, path, { method, body: JSON.stringify(body) }));
+      onChange(await api(role, `/v1/cases/${item.id}`));
+    } catch (e) {
+      setNotice(e.message);
+      await load().catch(() => {});
+    } finally {
+      setBusy(false);
+    }
+  }
+  const evidence = evidenceFields(item),
+    cr = data?.revision;
+  const reportOptions =
+    data?.inspections.flatMap((i) =>
+      i.acts
+        .filter((a) => a.state === "PUBLISHED")
+        .map((a) => ({
+          value: a.id,
+          label: `Акт осмотра · ${date(a.inspectedAt)} · версия ${a.version}`,
+        })),
+    ) || [];
+  const participants = data?.staff.map((s) => ({ value: s.id, label: s.name })) || [];
+  const personField = (name, label) =>
+    field(name, label, "select", {
+      options: [{ value: "", label: "Выберите назначенного сотрудника" }, ...participants],
+    });
+  const finish = (path, d, method = "POST") =>
+    act(
+      path,
+      {
+        ...d,
+        revision: cr,
+        evidenceVersionId: d.evidenceVersionId || null,
+        warrantyId: d.warrantyId || null,
+        refusalReason: d.refusalReason || null,
+      },
+      method,
+    );
+  if (!data)
+    return (
+      <section className="case-editor">
+        <Notice>{notice || "Загружаем осмотры и работы…"}</Notice>
+      </section>
+    );
+  const editable = item.status !== "CLOSED";
+  const staffView =
+    !data.isAuthor || data.canCoordinate || data.canInspect || data.canReviewWarranty;
+  if (
+    !staffView &&
+    !data.reviews.length &&
+    !data.inspections.length &&
+    !data.orders.length &&
+    !data.handoffs.length
+  )
+    return null;
+  const inspectionForm = (i) => [
+    personField("inspectorId", "Инженер — участник обращения"),
+    field("location", "Где провести осмотр"),
+    field("participants", "Планируемые участники", "textarea", { max: 1500 }),
+    field("startsAt", "Начало интервала (местное время)", "datetime-local"),
+    field("endsAt", "Конец интервала (местное время)", "datetime-local"),
+    ...(i ? [field("reason", "Причина переноса", "textarea", { max: 1000 })] : []),
+  ];
+  return (
+    <section className="case-workflow">
+      <div className="case-heading">
+        <div>
+          <small>ОДНО ОБРАЩЕНИЕ · ВСЕ ШАГИ</small>
+          <h3>Рассмотрение, осмотры и работы</h3>
+        </div>
+        <button
+          type="button"
+          className="case-link"
+          disabled={busy}
+          onClick={() => {
+            load().catch((e) => setNotice(e.message));
+            onChange &&
+              api(role, `/v1/cases/${item.id}`)
+                .then(onChange)
+                .catch(() => {});
+          }}
+        >
+          Обновить
+        </button>
+      </div>
+      <Notice>{notice}</Notice>
+      {editable && data.canCoordinate && (
+        <details className="case-editor">
+          <summary>Назначить инженера или исполнителя в это обращение</summary>
+          <Form
+            fields={[
+              personField("target", "Подключённый сотрудник"),
+              field("function", "Функция в обращении", "select", {
+                options: opts({ ENGINEER: fn.ENGINEER, CONTRACTOR: fn.CONTRACTOR }),
+                value: "ENGINEER",
+              }),
+            ]}
+            onSubmit={async (d) => {
+              setBusy(true);
+              setNotice("");
+              try {
+                onChange(
+                  await api(role, `/v1/cases/${item.id}/collaborators/${d.target}`, {
+                    method: "PUT",
+                    body: JSON.stringify({ function: d.function, enabled: true, revision: cr }),
+                  }),
+                );
+              } catch (e) {
+                setNotice(e.message);
+              } finally {
+                setBusy(false);
+              }
+            }}
+            busy={busy}
+            label="Назначить участника"
+          />
+        </details>
+      )}
+      {(staffView || data.reviews.length > 0) && (
+        <details className="workflow-section" open={!!data.reviews.length}>
+          <summary>Гарантийное рассмотрение · {data.reviews.length}</summary>
+          {data.reviews.map((r) => (
+            <article className="workflow-card" key={r.id}>
+              <strong>{reviews[r.outcome]}</strong>
+              <p>{r.explanation}</p>
+              <p className="muted">Основание позиции: {r.basis}</p>
+              <small>
+                {r.reviewer} · {date(r.createdAt)}
+              </small>
+              {r.outcome === "NON_WARRANTY" && (
+                <p>
+                  Это зафиксированная позиция сотрудника. Если вы не согласны, напишите в обращении;
+                  оно не закрывается автоматически.
+                </p>
+              )}
+            </article>
+          ))}
+          {editable && (data.canCoordinate || data.canReviewWarranty) && (
+            <details className="case-editor">
+              <summary>Зафиксировать рассмотрение</summary>
+              <p className="muted">
+                Неизвестный или прошедший срок не означает автоматического отказа. Для окончательной
+                позиции нужны материалы осмотра либо обследования. Гарантийный вывод фиксирует
+                назначенный специалист.
+              </p>
+              <Form
+                fields={[
+                  field("outcome", "Результат рассмотрения", "select", {
+                    options: opts(reviews).filter(
+                      (o) =>
+                        data.canReviewWarranty ||
+                        !["WARRANTY_CONFIRMED", "NON_WARRANTY"].includes(o.value),
+                    ),
+                    value: "NEED_INFORMATION",
+                  }),
+                  field("warrantyId", "Условия из реестра дома", "select", {
+                    required: false,
+                    options: registry.map((w) => ({
+                      value: w.id,
+                      label: `${w.title} · ${wstates[w.state]}`,
+                    })),
+                  }),
+                  field(
+                    "refusalReason",
+                    "Причина позиции о неприменимости (если нужна)",
+                    "select",
+                    { required: false, options: opts(refusals) },
+                  ),
+                  field("basis", "Документы, факты и основание позиции", "textarea", { max: 3000 }),
+                  field("explanation", "Понятное жителю объяснение", "textarea", { max: 2000 }),
+                  ...evidence,
+                ]}
+                onSubmit={(d) => finish(`/v1/cases/${item.id}/warranty-reviews`, d)}
+                busy={busy}
+                label="Сохранить позицию"
+              />
+            </details>
+          )}
+        </details>
+      )}
+      {(staffView || data.inspections.length > 0) && (
+        <details className="workflow-section" open={!!data.inspections.length}>
+          <summary>Осмотры и акты · {data.inspections.length}</summary>
+          {data.inspections.map((i) => (
+            <article key={i.id} className="workflow-card">
+              <small>{inspectionStates[i.state]}</small>
+              <h4>
+                {date(i.startsAt)} — {date(i.endsAt)} МСК
+              </h4>
+              <p>
+                Место: {i.location}
+                <br />
+                Инженер: {i.inspector}
+                <br />
+                Участники: {i.participants}
+              </p>
+              {i.residentAvailability === "REQUEST_OTHER_TIME" && (
+                <p className="case-notice">
+                  {data.isAuthor
+                    ? "Вы попросили другое время. Координатор предложит новый интервал."
+                    : "Жителю нужно другое время. Согласуйте новый интервал."}
+                </p>
+              )}
+              {editable && data.isAuthor && ["PROPOSED", "SCHEDULED"].includes(i.state) && (
+                <div className="case-actions">
+                  {i.residentAvailability !== "CONFIRMED" && (
+                    <button
+                      disabled={busy || new Date(i.endsAt) < new Date()}
+                      type="button"
+                      onClick={() =>
+                        act(`/v1/inspections/${i.id}/response`, {
+                          action: "CONFIRM_TIME",
+                          revision: i.revision,
+                          caseRevision: cr,
+                        })
+                      }
+                    >
+                      Это время подходит
+                    </button>
+                  )}
+                  <button
+                    disabled={busy}
+                    type="button"
+                    className="case-secondary"
+                    onClick={() =>
+                      act(`/v1/inspections/${i.id}/response`, {
+                        action: "REQUEST_OTHER_TIME",
+                        revision: i.revision,
+                        caseRevision: cr,
+                        comment: "Прошу предложить другое время",
+                      })
+                    }
+                  >
+                    Нужно другое время
+                  </button>
+                </div>
+              )}
+              {editable && data.canCoordinate && !["COMPLETED", "CANCELLED"].includes(i.state) && (
+                <details className="case-editor">
+                  <summary>Перенести осмотр</summary>
+                  <Form
+                    fields={inspectionForm(i)}
+                    initial={{ ...i, startsAt: local(i.startsAt), endsAt: local(i.endsAt) }}
+                    onSubmit={(d) =>
+                      act(
+                        `/v1/cases/${item.id}/inspections/${i.id}`,
+                        {
+                          ...d,
+                          startsAt: instant(d.startsAt),
+                          endsAt: instant(d.endsAt),
+                          revision: i.revision,
+                          caseRevision: cr,
+                        },
+                        "PUT",
+                      )
+                    }
+                    busy={busy}
+                    label="Предложить новое время"
+                  />
+                </details>
+              )}
+              {editable &&
+                (data.canCoordinate || (data.canInspect && data.actorId === i.inspectorId)) &&
+                !["COMPLETED", "CANCELLED"].includes(i.state) && (
+                  <details className="case-editor">
+                    <summary>Осмотр не состоялся / отмена</summary>
+                    <Form
+                      fields={[
+                        field("state", "Что произошло", "select", {
+                          options: opts({
+                            NO_ACCESS: "Не удалось получить доступ",
+                            ...(data.canCoordinate ? { CANCELLED: "Осмотр отменён" } : {}),
+                          }),
+                          value: "NO_ACCESS",
+                        }),
+                        field("reason", "Что произошло и что делать дальше", "textarea", {
+                          max: 1500,
+                        }),
+                      ]}
+                      onSubmit={(d) =>
+                        act(
+                          `/v1/inspections/${i.id}`,
+                          { ...d, revision: i.revision, caseRevision: cr },
+                          "PATCH",
+                        )
+                      }
+                      busy={busy}
+                    />
+                  </details>
+                )}
+              {i.acts.map((a) => (
+                <div key={a.id} className="workflow-act">
+                  <strong>
+                    Акт · версия {a.version} · {a.state === "PUBLISHED" ? "Опубликован" : "Проект"}
+                  </strong>
+                  {a.state === "PUBLISHED" && (
+                    <>
+                      <p>{a.findings}</p>
+                      <p>Дефекты: {a.defects}</p>
+                      <p>Предварительная причина: {a.preliminaryCause || "не установлена"}</p>
+                      {a.correctionReason && <p>Причина новой версии: {a.correctionReason}</p>}
+                      <button
+                        type="button"
+                        className="case-link"
+                        onClick={() =>
+                          download(
+                            `/v1/inspection-acts/${a.id}/print`,
+                            `Акт-осмотра-v${a.version}.html`,
+                            role,
+                            headers,
+                          ).catch((e) => setNotice(e.message))
+                        }
+                      >
+                        Скачать для ознакомления и печати
+                      </button>
+                      <small>Публикация не подтверждает подпись или согласие участников.</small>
+                    </>
+                  )}
+                  {a.state === "DRAFT" &&
+                    editable &&
+                    data.canInspect &&
+                    data.actorId === i.inspectorId && (
+                      <>
+                        <ActForm
+                          key={`${a.id}:${i.revision}`}
+                          initial={a}
+                          evidence={evidence}
+                          onSubmit={(d) =>
+                            act(
+                              `/v1/inspection-acts/${a.id}`,
+                              { ...d, revision: i.revision, caseRevision: cr },
+                              "PUT",
+                            )
+                          }
+                          busy={busy}
+                        />
+                        <button
+                          disabled={busy}
+                          type="button"
+                          onClick={() =>
+                            act(`/v1/inspection-acts/${a.id}/publish`, {
+                              revision: i.revision,
+                              caseRevision: cr,
+                            })
+                          }
+                        >
+                          Опубликовать акт
+                        </button>
+                      </>
+                    )}
+                  {editable && data.isAuthor && a.state === "PUBLISHED" && (
+                    <details className="case-editor">
+                      <summary>Есть замечания к этому акту</summary>
+                      <Form
+                        fields={[
+                          field(
+                            "comment",
+                            "Что нужно уточнить или с чем вы не согласны",
+                            "textarea",
+                            { max: 2000 },
+                          ),
+                        ]}
+                        label="Передать замечание"
+                        busy={busy}
+                        onSubmit={(d) =>
+                          act(`/v1/inspections/${i.id}/response`, {
+                            ...d,
+                            action: "COMMENT_ACT",
+                            actId: a.id,
+                            revision: i.revision,
+                            caseRevision: cr,
+                          })
+                        }
+                      />
+                    </details>
+                  )}
+                </div>
+              ))}
+              {editable &&
+                data.canInspect &&
+                data.actorId === i.inspectorId &&
+                i.state !== "CANCELLED" &&
+                !i.acts.some((a) => a.state === "DRAFT") && (
+                  <details className="case-editor">
+                    <summary>
+                      {i.acts.length
+                        ? "Новая версия акта с исправлениями"
+                        : "Составить акт осмотра"}
+                    </summary>
+                    <ActForm
+                      evidence={evidence}
+                      correctionRequired={!!i.acts.length}
+                      busy={busy}
+                      onSubmit={(d) =>
+                        act(`/v1/inspections/${i.id}/acts`, {
+                          ...d,
+                          revision: i.revision,
+                          caseRevision: cr,
+                        })
+                      }
+                    />
+                  </details>
+                )}
+              {i.responses.map((r, n) => (
+                <p className="muted" key={n}>
+                  {date(r.created_at)} · {r.actor}:{" "}
+                  {r.comment ||
+                    {
+                      CONFIRM_TIME: "Время подходит",
+                      REQUEST_OTHER_TIME: "Нужно другое время",
+                      COMMENT_ACT: "Замечание к акту",
+                    }[r.action]}
+                </p>
+              ))}
+            </article>
+          ))}
+          {editable && data.canCoordinate && (
+            <details className="case-editor">
+              <summary>Предложить осмотр</summary>
+              <p className="muted">
+                Сначала назначьте инженера участником обращения. Жителю достаточно подтвердить
+                интервал или попросить другой.
+              </p>
+              <Form
+                fields={inspectionForm()}
+                onSubmit={(d) =>
+                  act(`/v1/cases/${item.id}/inspections`, {
+                    ...d,
+                    startsAt: instant(d.startsAt),
+                    endsAt: instant(d.endsAt),
+                    revision: 0,
+                    caseRevision: cr,
+                  })
+                }
+                label="Предложить время"
+                busy={busy}
+              />
+            </details>
+          )}
+        </details>
+      )}
+      {(staffView || data.orders.length > 0) && (
+        <details className="workflow-section" open={!!data.orders.length}>
+          <summary>Работы и проверка отчёта · {data.orders.length}</summary>
+          {data.orders.map((o) => (
+            <article key={o.id} className="workflow-card">
+              <small>
+                {workStates[o.state]} · {bases[o.basisType]}
+              </small>
+              <h4>{o.title}</h4>
+              <p>{o.scope}</p>
+              <p>
+                Исполнитель: {o.assignee}
+                <br />
+                Срок: {date(o.dueAt)}
+                {o.dueAt &&
+                  new Date(o.dueAt) < new Date() &&
+                  !["ACCEPTED", "CANCELLED"].includes(o.state) && (
+                    <strong className="workflow-overdue"> · Срок прошёл</strong>
+                  )}
+                <br />
+                Основание срока: {o.dueBasis}
+              </p>
+              <p className="muted">Основание работ: {o.basis}</p>
+              {o.reports.map((r) => (
+                <div key={r.id} className="workflow-act">
+                  <strong>Отчёт исполнителя · версия {r.version}</strong>
+                  <p>{r.report}</p>
+                  <small>
+                    {r.author} · {date(r.created_at)}
+                  </small>
+                </div>
+              ))}
+              {editable &&
+                !["ACCEPTED", "CANCELLED"].includes(o.state) &&
+                (data.canCoordinate || data.actorId === o.assigneeId) && (
+                  <details className="case-editor">
+                    <summary>
+                      {data.actorId === o.assigneeId
+                        ? "Ход работ / отчёт"
+                        : "Проверить работы / изменить условия"}
+                    </summary>
+                    <p className="muted">
+                      Причина изменения срока, препятствия или решения сохраняется в истории.
+                      Приёмка координатором не заменяет подтверждение жителя.
+                    </p>
+                    <Form
+                      key={`${o.id}:${o.revision}`}
+                      initial={{
+                        assigneeId: o.assigneeId,
+                        dueAt: local(o.dueAt),
+                        dueBasis: o.dueBasis,
+                        state: o.state,
+                      }}
+                      fields={[
+                        field("state", "Следующее действие", "select", {
+                          options: opts(workStates).filter(
+                            (s) =>
+                              (data.canCoordinate &&
+                                (s.value === o.state ||
+                                  s.value === "ASSIGNED" ||
+                                  s.value === "CANCELLED" ||
+                                  (o.state === "REPORTED" &&
+                                    [
+                                      "NEED_REWORK",
+                                      ...(data.actorId !== o.assigneeId ? ["ACCEPTED"] : []),
+                                    ].includes(s.value)))) ||
+                              (data.actorId === o.assigneeId &&
+                                (["ASSIGNED", "NEED_REWORK"].includes(o.state)
+                                  ? ["IN_PROGRESS", "BLOCKED"]
+                                  : ["IN_PROGRESS", "BLOCKED"].includes(o.state)
+                                    ? ["IN_PROGRESS", "BLOCKED", "REPORTED"]
+                                    : []
+                                ).includes(s.value)),
+                          ),
+                        }),
+                        ...(data.canCoordinate
+                          ? [
+                              personField("assigneeId", "Назначенный исполнитель"),
+                              field("dueAt", "Срок (местное время)", "datetime-local", {
+                                required: false,
+                              }),
+                              field(
+                                "dueBasis",
+                                "Основание срока / причина отсутствия",
+                                "textarea",
+                                { max: 1000 },
+                              ),
+                            ]
+                          : []),
+                        field(
+                          "note",
+                          "Отчёт, причина переноса или результат проверки",
+                          "textarea",
+                          { max: 2000 },
+                        ),
+                        ...evidence,
+                      ]}
+                      onSubmit={(d) =>
+                        act(
+                          `/v1/work-orders/${o.id}`,
+                          {
+                            ...d,
+                            assigneeId: d.assigneeId || o.assigneeId,
+                            dueAt: data.canCoordinate ? instant(d.dueAt) : o.dueAt,
+                            dueBasis: d.dueBasis || o.dueBasis,
+                            evidenceVersionId: d.evidenceVersionId || null,
+                            revision: o.revision,
+                            caseRevision: cr,
+                          },
+                          "PATCH",
+                        )
+                      }
+                      busy={busy}
+                    />
+                  </details>
+                )}
+            </article>
+          ))}
+          {editable && data.canCoordinate && (
+            <details className="case-editor">
+              <summary>Назначить работы</summary>
+              <Form
+                fields={[
+                  field("title", "Название задания"),
+                  field("scope", "Что нужно сделать и как проверить результат", "textarea"),
+                  personField("assigneeId", "Исполнитель — участник обращения"),
+                  field("basisType", "Направление работ", "select", {
+                    options: opts(bases),
+                    value: "MAINTENANCE",
+                  }),
+                  field("basis", "Основание назначения", "textarea", { max: 3000 }),
+                  field("dueAt", "Плановый срок (местное время)", "datetime-local", {
+                    required: false,
+                  }),
+                  field("dueBasis", "Основание срока / почему пока не установлен", "textarea", {
+                    max: 1000,
+                  }),
+                  field("actId", "Связанный акт осмотра", "select", {
+                    options: reportOptions,
+                    required: false,
+                  }),
+                ]}
+                busy={busy}
+                label="Создать задание"
+                onSubmit={(d) =>
+                  act(`/v1/cases/${item.id}/work-orders`, {
+                    ...d,
+                    dueAt: instant(d.dueAt),
+                    actId: d.actId || null,
+                    revision: cr,
+                  })
+                }
+              />
+            </details>
+          )}
+        </details>
+      )}
+      {data.handoffs.length > 0 && (
+        <details className="workflow-section">
+          <summary>Передача материалов · {data.handoffs.length}</summary>
+          <p className="muted">
+            Подготовка документа не означает отправку. Подтверждения и ответы фиксирует сотрудник с
+            приложением документов; подключённая интеграция с адресатом не имитируется.
+          </p>
+          {data.handoffs.map((h) => (
+            <article key={h.id} className="workflow-card">
+              <small>{handoffs[h.state]}</small>
+              <h4>{h.recipient}</h4>
+              <p>{h.statement}</p>
+              <p>
+                Канал: {h.channel}
+                <br />
+                Ожидаемый срок: {date(h.dueAt)}
+              </p>
+              {h.events.map((e, n) => (
+                <p className="muted" key={n}>
+                  {date(e.created_at)} · {handoffs[e.state]}
+                  <br />
+                  {e.note}
+                </p>
+              ))}
+              {data.canCoordinate && (
+                <button
+                  type="button"
+                  className="case-link"
+                  onClick={() =>
+                    download(
+                      `/v1/handoffs/${h.id}/print`,
+                      "Материалы-для-передачи.html",
+                      role,
+                      headers,
+                    ).catch((e) => setNotice(e.message))
+                  }
+                >
+                  Скачать подготовленные материалы
+                </button>
+              )}
+              {editable && data.canCoordinate && !["RESPONDED", "CANCELLED"].includes(h.state) && (
+                <Form
+                  fields={[
+                    field("state", "Подтверждённый шаг", "select", {
+                      options: opts(handoffs).filter(
+                        (o) =>
+                          o.value === "CANCELLED" ||
+                          o.value ===
+                            { PREPARED: "SENT", SENT: "RECEIVED", RECEIVED: "RESPONDED" }[h.state],
+                      ),
+                      value: { PREPARED: "SENT", SENT: "RECEIVED", RECEIVED: "RESPONDED" }[h.state],
+                    }),
+                    field("note", "Что подтверждено и каким документом", "textarea", { max: 2000 }),
+                    ...evidence,
+                  ]}
+                  busy={busy}
+                  label="Зафиксировать подтверждение"
+                  onSubmit={(d) =>
+                    act(
+                      `/v1/handoffs/${h.id}`,
+                      {
+                        ...d,
+                        evidenceVersionId: d.evidenceVersionId || null,
+                        revision: h.revision,
+                        caseRevision: cr,
+                      },
+                      "PATCH",
+                    )
+                  }
+                />
+              )}
+            </article>
+          ))}
+        </details>
+      )}
+      {data.history.length > 0 && (
+        <details className="workflow-section">
+          <summary>История этапов · {data.history.length}</summary>
+          {data.history.map((h, n) => (
+            <p key={n}>
+              {date(h.created_at)} · {h.actor}
+              <br />
+              {h.note}
+            </p>
+          ))}
+        </details>
+      )}
+    </section>
+  );
 }
-function ActForm({initial={},evidence,onSubmit,busy,correctionRequired=false}){return <Form initial={{...initial,inspectedAt:local(initial.inspectedAt||new Date().toISOString())}} fields={[field("inspectedAt","Фактическое время осмотра (местное время)","datetime-local"),field("participants","Участники осмотра","textarea",{max:2000}),field("findings","Что наблюдали и измерили","textarea"),field("defects","Выявленные дефекты или их отсутствие","textarea"),field("preliminaryCause","Предварительная причина, если установлена","textarea",{max:2000,required:false}),...evidence,field("correctionReason","Причина новой версии","textarea",{max:1000,required:correctionRequired})]} onSubmit={d=>onSubmit({...d,inspectedAt:instant(d.inspectedAt),evidenceVersionId:d.evidenceVersionId||null})} busy={busy} label="Сохранить проект акта"/>;}
+function ActForm({ initial = {}, evidence, onSubmit, busy, correctionRequired = false }) {
+  return (
+    <Form
+      initial={{ ...initial, inspectedAt: local(initial.inspectedAt || new Date().toISOString()) }}
+      fields={[
+        field("inspectedAt", "Фактическое время осмотра (местное время)", "datetime-local"),
+        field("participants", "Участники осмотра", "textarea", { max: 2000 }),
+        field("findings", "Что наблюдали и измерили", "textarea"),
+        field("defects", "Выявленные дефекты или их отсутствие", "textarea"),
+        field("preliminaryCause", "Предварительная причина, если установлена", "textarea", {
+          max: 2000,
+          required: false,
+        }),
+        ...evidence,
+        field("correctionReason", "Причина новой версии", "textarea", {
+          max: 1000,
+          required: correctionRequired,
+        }),
+      ]}
+      onSubmit={(d) =>
+        onSubmit({
+          ...d,
+          inspectedAt: instant(d.inspectedAt),
+          evidenceVersionId: d.evidenceVersionId || null,
+        })
+      }
+      busy={busy}
+      label="Сохранить проект акта"
+    />
+  );
+}
 
-export function WorkPortal({api,headers,brand,renderCase,inviteToken=""}){
- const role=["admin","dispatcher","engineer"].includes(new URLSearchParams(location.search).get("demoSession"))?new URLSearchParams(location.search).get("demoSession"):"true";
- const [houses,setHouses]=useState([]),[houseId,setHouseId]=useState(new URLSearchParams(location.search).get("houseId")||""),[items,setItems]=useState([]),[context,setContext]=useState(null),[detail,setDetail]=useState(null),[notice,setNotice]=useState(""),[token,setToken]=useState(inviteToken),[busy,setBusy]=useState(false),[filter,setFilter]=useState("ALL");
- async function loadHouses(){const h=await api(role,"/v1/workflow/houses");setHouses(h);setHouseId(old=>h.some(i=>i.id===old)?old:h[0]?.id||"");}
- async function load(){if(!houseId)return;const [list,ctx]=await Promise.all([api(role,`/v1/houses/${houseId}/case-queue`),api(role,`/v1/houses/${houseId}/case-context`)]);setItems(list);setContext(ctx);}
- useEffect(()=>{loadHouses().catch(e=>setNotice(e.message));},[role]);
- useEffect(()=>{let active=true;setDetail(null);setItems([]);setContext(null);setNotice("");if(houseId)Promise.all([api(role,`/v1/houses/${houseId}/case-queue`),api(role,`/v1/houses/${houseId}/case-context`)]).then(([list,ctx])=>{if(active){setItems(list);setContext(ctx);const linked=list.find(c=>c.id===new URLSearchParams(location.search).get("caseId"));if(linked)setDetail(linked);}}).catch(e=>{if(active)setNotice(e.message);});return()=>{active=false;};},[houseId,role]);
- async function accept(){setBusy(true);setNotice("");try{const h=await api(role,"/v1/workflow/invitations/accept",{method:"POST",body:JSON.stringify({token})});setToken("");localStorage.setItem("pulse-last-mode","/work/index.html");await loadHouses();setHouseId(h.id);}catch(e){setNotice(e.message);}finally{setBusy(false);}}
- const house=houses.find(h=>h.id===houseId);
- const visible=items.filter(i=>filter==="ALL"||filter==="OVERDUE"&&i.status!=="CLOSED"&&(i.overdueWorkCount>0||i.dueAt&&new Date(i.dueAt)<new Date())||filter==="WARRANTY"&&i.kind==="WARRANTY");
- return <main className="shell">{brand}<section className="hero"><div className="hero-copy"><div className="hero-kicker"><span className="live-dot"/>Рабочий кабинет</div><h1>От осмотра до результата</h1><p>Гарантийное рассмотрение, осмотры и назначенные работы по доступным вам обращениям.</p></div></section><div className="case-workspace"><Notice>{notice}</Notice>
- {token&&<section className="case-panel"><h2>Подключение специалиста</h2><p>Примите служебное приглашение от администратора УК. Оно откроет рабочую область дома; материалы дел станут доступны после отдельного назначения.</p><button type="button" disabled={busy} onClick={accept}>Принять приглашение</button></section>}
- {!!houses.length&&<section className="case-panel"><label>Рабочий дом<select value={houseId} onChange={e=>setHouseId(e.target.value)}>{houses.map(h=><option key={h.id} value={h.id}>{h.address}</option>)}</select></label><div className="case-actions"><button type="button" className="case-link" onClick={()=>load().catch(e=>setNotice(e.message))}>Обновить очередь</button><a className="case-link" href={`/miniapp/index.html?view=resident${location.hash}`}>К кабинету жителя</a></div></section>}
- {!houses.length&&!token&&<section className="case-panel"><h2>Рабочие назначения пока не подключены</h2><p>Откройте приглашение от администратора УК. Если вы уже сотрудник, попросите назначить вас на нужные обращения.</p></section>}
- {detail?renderCase({item:detail,context,role,onChange:c=>{setDetail(c);setItems(list=>list.map(i=>i.id===c.id?c:i));},onClose:()=>setDetail(null)}):houseId&&<section className="case-panel"><h2>Рабочая очередь</h2><label>Показать<select value={filter} onChange={e=>setFilter(e.target.value)}><option value="ALL">Все доступные</option><option value="WARRANTY">Строительные дефекты</option><option value="OVERDUE">Прошёл срок шага или задания</option></select></label><div className="case-list">{visible.map(c=><button key={c.id} type="button" className="case-list-item" disabled={!c.fullAccess&&!context?.canManagePermissions} onClick={()=>setDetail(c)}><small>Обращение №{c.number}</small><strong>{c.description}</strong><span>{c.nextStep}</span>{c.openWorkCount>0&&<small>Открытых заданий: {c.openWorkCount}</small>}{c.overdueWorkCount>0&&<strong className="workflow-overdue">Прошёл срок заданий: {c.overdueWorkCount}</strong>}<small>{date(c.dueAt)}</small></button>)}{!visible.length&&<p className="muted">В этой очереди обращений пока нет.</p>}</div></section>}
- {houseId&&<><ControlPanel key={`control:${houseId}`} houseId={houseId} role={role} api={api} renderCase={renderCase}/><ExchangeRegistry key={`channels:${houseId}`} houseId={houseId} role={role} api={api} canManage={house?.canManageRegistry}/></>}
- {houseId&&<><HouseOperations key={`ops:${houseId}`} houseId={houseId} role={role} api={api} optional/><OperationsManagement key={`monitor:${houseId}`} houseId={houseId} role={role} api={api}/></>}
- {houseId&&<HouseTariffs key={`tariffs:${houseId}`} houseId={houseId} role={role} api={api} headers={headers} optional/>}
- {house?.canManageRegistry&&<WorkflowStaff key={houseId} houseId={houseId} role={role} api={api}/>}{house?.canReadRegistry&&<WarrantyRegistry key={houseId} houseId={houseId} role={role} api={api} headers={headers} canManage={house.canManageRegistry}/>}
- </div></main>;
+export function WorkPortal({ api, headers, brand, renderCase, inviteToken = "" }) {
+  const role = ["admin", "dispatcher", "engineer"].includes(
+    new URLSearchParams(location.search).get("demoSession"),
+  )
+    ? new URLSearchParams(location.search).get("demoSession")
+    : "true";
+  const [houses, setHouses] = useState([]),
+    [houseId, setHouseId] = useState(new URLSearchParams(location.search).get("houseId") || ""),
+    [items, setItems] = useState([]),
+    [context, setContext] = useState(null),
+    [detail, setDetail] = useState(null),
+    [notice, setNotice] = useState(""),
+    [token, setToken] = useState(inviteToken),
+    [busy, setBusy] = useState(false),
+    [filter, setFilter] = useState("ALL");
+  async function loadHouses() {
+    const h = await api(role, "/v1/workflow/houses");
+    setHouses(h);
+    setHouseId((old) => (h.some((i) => i.id === old) ? old : h[0]?.id || ""));
+  }
+  async function load() {
+    if (!houseId) return;
+    const [list, ctx] = await Promise.all([
+      api(role, `/v1/houses/${houseId}/case-queue`),
+      api(role, `/v1/houses/${houseId}/case-context`),
+    ]);
+    setItems(list);
+    setContext(ctx);
+  }
+  useEffect(() => {
+    loadHouses().catch((e) => setNotice(e.message));
+  }, [role]);
+  useEffect(() => {
+    let active = true;
+    setDetail(null);
+    setItems([]);
+    setContext(null);
+    setNotice("");
+    if (houseId)
+      Promise.all([
+        api(role, `/v1/houses/${houseId}/case-queue`),
+        api(role, `/v1/houses/${houseId}/case-context`),
+      ])
+        .then(([list, ctx]) => {
+          if (active) {
+            setItems(list);
+            setContext(ctx);
+            const linked = list.find(
+              (c) => c.id === new URLSearchParams(location.search).get("caseId"),
+            );
+            if (linked) setDetail(linked);
+          }
+        })
+        .catch((e) => {
+          if (active) setNotice(e.message);
+        });
+    return () => {
+      active = false;
+    };
+  }, [houseId, role]);
+  async function accept() {
+    setBusy(true);
+    setNotice("");
+    try {
+      const h = await api(role, "/v1/workflow/invitations/accept", {
+        method: "POST",
+        body: JSON.stringify({ token }),
+      });
+      setToken("");
+      localStorage.setItem("pulse-last-mode", "/work/index.html");
+      await loadHouses();
+      setHouseId(h.id);
+    } catch (e) {
+      setNotice(e.message);
+    } finally {
+      setBusy(false);
+    }
+  }
+  const house = houses.find((h) => h.id === houseId);
+  const visible = items.filter(
+    (i) =>
+      filter === "ALL" ||
+      (filter === "OVERDUE" &&
+        i.status !== "CLOSED" &&
+        (i.overdueWorkCount > 0 || (i.dueAt && new Date(i.dueAt) < new Date()))) ||
+      (filter === "WARRANTY" && i.kind === "WARRANTY"),
+  );
+  return (
+    <main className="shell">
+      {brand}
+      <section className="hero">
+        <div className="hero-copy">
+          <div className="hero-kicker">
+            <span className="live-dot" />
+            Рабочий кабинет
+          </div>
+          <h1>От осмотра до результата</h1>
+          <p>Гарантийное рассмотрение, осмотры и назначенные работы по доступным вам обращениям.</p>
+        </div>
+      </section>
+      <div className="case-workspace">
+        <Notice>{notice}</Notice>
+        {token && (
+          <section className="case-panel">
+            <h2>Подключение специалиста</h2>
+            <p>
+              Примите служебное приглашение от администратора УК. Оно откроет рабочую область дома;
+              материалы дел станут доступны после отдельного назначения.
+            </p>
+            <button type="button" disabled={busy} onClick={accept}>
+              Принять приглашение
+            </button>
+          </section>
+        )}
+        {!!houses.length && (
+          <section className="case-panel">
+            <label>
+              Рабочий дом
+              <select value={houseId} onChange={(e) => setHouseId(e.target.value)}>
+                {houses.map((h) => (
+                  <option key={h.id} value={h.id}>
+                    {h.address}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <div className="case-actions">
+              <button
+                type="button"
+                className="case-link"
+                onClick={() => load().catch((e) => setNotice(e.message))}
+              >
+                Обновить очередь
+              </button>
+              <a className="case-link" href={`/miniapp/index.html?view=resident${location.hash}`}>
+                К кабинету жителя
+              </a>
+            </div>
+          </section>
+        )}
+        {!houses.length && !token && (
+          <section className="case-panel">
+            <h2>Рабочие назначения пока не подключены</h2>
+            <p>
+              Откройте приглашение от администратора УК. Если вы уже сотрудник, попросите назначить
+              вас на нужные обращения.
+            </p>
+          </section>
+        )}
+        {detail
+          ? renderCase({
+              item: detail,
+              context,
+              role,
+              onChange: (c) => {
+                setDetail(c);
+                setItems((list) => list.map((i) => (i.id === c.id ? c : i)));
+              },
+              onClose: () => setDetail(null),
+            })
+          : houseId && (
+              <section className="case-panel">
+                <h2>Рабочая очередь</h2>
+                <label>
+                  Показать
+                  <select value={filter} onChange={(e) => setFilter(e.target.value)}>
+                    <option value="ALL">Все доступные</option>
+                    <option value="WARRANTY">Строительные дефекты</option>
+                    <option value="OVERDUE">Прошёл срок шага или задания</option>
+                  </select>
+                </label>
+                <div className="case-list">
+                  {visible.map((c) => (
+                    <button
+                      key={c.id}
+                      type="button"
+                      className="case-list-item"
+                      disabled={!c.fullAccess && !context?.canManagePermissions}
+                      onClick={() => setDetail(c)}
+                    >
+                      <small>Обращение №{c.number}</small>
+                      <strong>{c.description}</strong>
+                      <span>{c.nextStep}</span>
+                      {c.openWorkCount > 0 && <small>Открытых заданий: {c.openWorkCount}</small>}
+                      {c.overdueWorkCount > 0 && (
+                        <strong className="workflow-overdue">
+                          Прошёл срок заданий: {c.overdueWorkCount}
+                        </strong>
+                      )}
+                      <small>{date(c.dueAt)}</small>
+                    </button>
+                  ))}
+                  {!visible.length && <p className="muted">В этой очереди обращений пока нет.</p>}
+                </div>
+              </section>
+            )}
+        {houseId && (
+          <>
+            <ControlPanel
+              key={`control:${houseId}`}
+              houseId={houseId}
+              role={role}
+              api={api}
+              renderCase={renderCase}
+            />
+            <ExchangeRegistry
+              key={`channels:${houseId}`}
+              houseId={houseId}
+              role={role}
+              api={api}
+              canManage={house?.canManageRegistry}
+            />
+          </>
+        )}
+        {houseId && (
+          <>
+            <HouseOperations
+              key={`ops:${houseId}`}
+              houseId={houseId}
+              role={role}
+              api={api}
+              optional
+            />
+            <OperationsManagement
+              key={`monitor:${houseId}`}
+              houseId={houseId}
+              role={role}
+              api={api}
+            />
+          </>
+        )}
+        {houseId && (
+          <HouseTariffs
+            key={`tariffs:${houseId}`}
+            houseId={houseId}
+            role={role}
+            api={api}
+            headers={headers}
+            optional
+          />
+        )}
+        {house?.canManageRegistry && (
+          <WorkflowStaff key={houseId} houseId={houseId} role={role} api={api} />
+        )}
+        {house?.canReadRegistry && (
+          <WarrantyRegistry
+            key={houseId}
+            houseId={houseId}
+            role={role}
+            api={api}
+            headers={headers}
+            canManage={house.canManageRegistry}
+          />
+        )}
+      </div>
+    </main>
+  );
 }

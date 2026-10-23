@@ -1,17 +1,153 @@
-import React,{useEffect,useState} from 'react';
-import {House,ChatCircleDots,CalendarBlank,NotePencil,Receipt,ArrowRight,Question,CheckCircle,Clock,Circle} from '@phosphor-icons/react';
-import {housePresentation,resolveAppearance} from './design-model.mjs';
-export {housePresentation} from './design-model.mjs';
-export {NotePencil,Receipt,ArrowRight,Question,CheckCircle,Clock,Circle,CalendarBlank};
+import React, { useEffect, useState } from "react";
+import {
+  House,
+  ChatCircleDots,
+  CalendarBlank,
+  NotePencil,
+  Receipt,
+  ArrowRight,
+  Question,
+  CheckCircle,
+  Clock,
+  Circle,
+} from "@phosphor-icons/react";
+import { housePresentation, resolveAppearance } from "./design-model.mjs";
+export { housePresentation } from "./design-model.mjs";
+export { NotePencil, Receipt, ArrowRight, Question, CheckCircle, Clock, Circle, CalendarBlank };
 
-const KEY='pulse-appearance';
-function savedTheme(){try{const value=localStorage.getItem(KEY);return ['light','dark'].includes(value)?value:'system';}catch{return 'system';}}
-let themeChoice=savedTheme();
-function resolvedTheme(value){return resolveAppearance(value,window.WebApp?.colorScheme,matchMedia('(prefers-color-scheme: dark)').matches);}
-function applyTheme(){const choice=themeChoice,resolved=resolvedTheme(choice);document.documentElement.dataset.theme=resolved;document.documentElement.style.colorScheme=resolved;return {choice,resolved};}
+const KEY = "pulse-appearance";
+function savedTheme() {
+  try {
+    const value = localStorage.getItem(KEY);
+    return ["light", "dark"].includes(value) ? value : "system";
+  } catch {
+    return "system";
+  }
+}
+let themeChoice = savedTheme();
+function resolvedTheme(value) {
+  return resolveAppearance(
+    value,
+    window.WebApp?.colorScheme,
+    matchMedia("(prefers-color-scheme: dark)").matches,
+  );
+}
+function applyTheme() {
+  const choice = themeChoice,
+    resolved = resolvedTheme(choice);
+  document.documentElement.dataset.theme = resolved;
+  document.documentElement.style.colorScheme = resolved;
+  return { choice, resolved };
+}
 applyTheme();
-export function useAppearance(){const [theme,setTheme]=useState(applyTheme);useEffect(()=>{const update=()=>setTheme(applyTheme()),media=matchMedia('(prefers-color-scheme: dark)');const storageUpdate=()=>{themeChoice=savedTheme();update();};media.addEventListener('change',update);window.addEventListener('pulse-theme',update);window.addEventListener('storage',storageUpdate);window.WebApp?.onEvent?.('themeChanged',update);return()=>{media.removeEventListener('change',update);window.removeEventListener('pulse-theme',update);window.removeEventListener('storage',storageUpdate);window.WebApp?.offEvent?.('themeChanged',update);};},[]);return theme;}
-export function AppearancePicker(){const {choice}=useAppearance();return <label className="appearance-picker">Оформление<select aria-label="Оформление" value={choice} onChange={e=>{themeChoice=e.target.value;try{e.target.value==='system'?localStorage.removeItem(KEY):localStorage.setItem(KEY,e.target.value);}catch{}document.documentElement.dataset.theme=resolvedTheme(e.target.value);window.dispatchEvent(new Event('pulse-theme'));}}><option value="system">Как в MAX / системе</option><option value="light">Светлое</option><option value="dark">Тёмное</option></select></label>;}
+export function useAppearance() {
+  const [theme, setTheme] = useState(applyTheme);
+  useEffect(() => {
+    const update = () => setTheme(applyTheme()),
+      media = matchMedia("(prefers-color-scheme: dark)");
+    const storageUpdate = () => {
+      themeChoice = savedTheme();
+      update();
+    };
+    media.addEventListener("change", update);
+    window.addEventListener("pulse-theme", update);
+    window.addEventListener("storage", storageUpdate);
+    window.WebApp?.onEvent?.("themeChanged", update);
+    return () => {
+      media.removeEventListener("change", update);
+      window.removeEventListener("pulse-theme", update);
+      window.removeEventListener("storage", storageUpdate);
+      window.WebApp?.offEvent?.("themeChanged", update);
+    };
+  }, []);
+  return theme;
+}
+export function AppearancePicker() {
+  const { choice } = useAppearance();
+  return (
+    <label className="appearance-picker">
+      Оформление
+      <select
+        aria-label="Оформление"
+        value={choice}
+        onChange={(e) => {
+          themeChoice = e.target.value;
+          try {
+            e.target.value === "system"
+              ? localStorage.removeItem(KEY)
+              : localStorage.setItem(KEY, e.target.value);
+          } catch {}
+          document.documentElement.dataset.theme = resolvedTheme(e.target.value);
+          window.dispatchEvent(new Event("pulse-theme"));
+        }}
+      >
+        <option value="system">Как в MAX / системе</option>
+        <option value="light">Светлое</option>
+        <option value="dark">Тёмное</option>
+      </select>
+    </label>
+  );
+}
 
-export function ResidentHeader({house,houses=[],disabled,onChange,loading=false}){const {resolved}=useAppearance(),view=housePresentation(house);return <section className={`home-header ${view.street.length>24||view.city.length>20?"home-header-long":""}`} aria-labelledby="home-address"><img className="home-art" src={`/miniapp/art/${view.art}-${resolved}.webp`} alt="" fetchPriority="high"/><div className="home-address"><span className="eyebrow">Ваш дом</span><h1 id="home-address">{loading?'Загружаем дом…':view.street||'Добро пожаловать'}</h1>{view.city&&<p>{view.city}</p>}{houses.length>1&&<label className="home-house-choice"><span>Сменить дом</span><select aria-label="Выбранный дом" value={house?.id||''} disabled={disabled} onChange={e=>onChange(e.target.value)}>{houses.map(h=><option key={h.id} value={h.id}>{h.address}</option>)}</select></label>}{!loading&&!house&&<p>Подключите свой дом, чтобы видеть обращения и события.</p>}</div></section>;}
-export function ResidentNavigation({value,onChange,disabled}){return <nav className="resident-navigation" aria-label="Разделы жителя">{[['home','Дом',House],['cases','Обращения',ChatCircleDots],['events','События',CalendarBlank]].map(([id,label,Icon])=><button type="button" key={id} disabled={disabled} aria-current={value===id?'page':undefined} onClick={()=>onChange(id)}><Icon size={25} weight={value===id?'fill':'regular'} aria-hidden="true"/><span>{label}</span></button>)}</nav>;}
+export function ResidentHeader({ house, houses = [], disabled, onChange, loading = false }) {
+  const { resolved } = useAppearance(),
+    view = housePresentation(house);
+  return (
+    <section
+      className={`home-header ${view.street.length > 24 || view.city.length > 20 ? "home-header-long" : ""}`}
+      aria-labelledby="home-address"
+    >
+      <img
+        className="home-art"
+        src={`/miniapp/art/${view.art}-${resolved}.webp`}
+        alt=""
+        fetchPriority="high"
+      />
+      <div className="home-address">
+        <span className="eyebrow">Ваш дом</span>
+        <h1 id="home-address">{loading ? "Загружаем дом…" : view.street || "Добро пожаловать"}</h1>
+        {view.city && <p>{view.city}</p>}
+        {houses.length > 1 && (
+          <label className="home-house-choice">
+            <span>Сменить дом</span>
+            <select
+              aria-label="Выбранный дом"
+              value={house?.id || ""}
+              disabled={disabled}
+              onChange={(e) => onChange(e.target.value)}
+            >
+              {houses.map((h) => (
+                <option key={h.id} value={h.id}>
+                  {h.address}
+                </option>
+              ))}
+            </select>
+          </label>
+        )}
+        {!loading && !house && <p>Подключите свой дом, чтобы видеть обращения и события.</p>}
+      </div>
+    </section>
+  );
+}
+export function ResidentNavigation({ value, onChange, disabled }) {
+  return (
+    <nav className="resident-navigation" aria-label="Разделы жителя">
+      {[
+        ["home", "Дом", House],
+        ["cases", "Обращения", ChatCircleDots],
+        ["events", "События", CalendarBlank],
+      ].map(([id, label, Icon]) => (
+        <button
+          type="button"
+          key={id}
+          disabled={disabled}
+          aria-current={value === id ? "page" : undefined}
+          onClick={() => onChange(id)}
+        >
+          <Icon size={25} weight={value === id ? "fill" : "regular"} aria-hidden="true" />
+          <span>{label}</span>
+        </button>
+      ))}
+    </nav>
+  );
+}

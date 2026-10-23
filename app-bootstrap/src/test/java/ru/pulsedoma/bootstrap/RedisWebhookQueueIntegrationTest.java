@@ -1,17 +1,15 @@
 package ru.pulsedoma.bootstrap;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.mockito.Mockito.mock;
+
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.condition.EnabledIfSystemProperty;
 import org.springframework.data.redis.connection.lettuce.LettuceConnectionFactory;
 import org.springframework.data.redis.core.StringRedisTemplate;
-import org.springframework.jdbc.core.JdbcTemplate;
-import ru.pulsedoma.max.MaxApiClient;
-
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertNull;
-import static org.mockito.Mockito.mock;
 
 class RedisWebhookQueueIntegrationTest {
     @Test
@@ -49,7 +47,8 @@ class RedisWebhookQueueIntegrationTest {
 
             restarted.enqueue("{\"update_type\":\"ignored\"}");
             restarted.claim(); // The previous process stopped before acknowledging this delivery.
-            new MaxWebhookWorker(restarted, redis, new ObjectMapper(), mock(MaxResidentBot.class)).poll();
+            new MaxWebhookWorker(restarted, redis, new ObjectMapper(), mock(MaxResidentBot.class))
+                    .poll();
             assertNull(restarted.claim());
             assertEquals(0L, redis.opsForList().size(key + ":inflight"));
         } finally {

@@ -1,46 +1,645 @@
 package ru.pulsedoma.issues;
-import org.springframework.jdbc.core.JdbcTemplate;
-import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import java.time.*;
-import java.util.*;
+
 import static ru.pulsedoma.issues.CaseExchangeService.*;
 import static ru.pulsedoma.issues.OperationsTypes.*;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
+import java.time.*;
+import java.util.*;
+import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
 @Service
 public class HouseOperationsService {
- private final JdbcTemplate db;private final CaseWorkAccess access;private final ResidentCaseService cases;private final OperationsNotifications notifications;private final ObjectMapper mapper;private final CaseBotNotifications bot;private final SharedRequestService shared;
- public HouseOperationsService(JdbcTemplate db,CaseWorkAccess access,ResidentCaseService cases,OperationsNotifications notifications,ObjectMapper mapper,CaseBotNotifications bot,SharedRequestService shared){this.db=db;this.access=access;this.cases=cases;this.notifications=notifications;this.mapper=mapper;this.bot=bot;this.shared=shared;}
- public boolean canManage(String house,String user){return access.manager(house,user)||access.dispatcher(house,user)||access.staffFunction(house,user,CaseFunction.COORDINATOR);}
- private void member(String house,String user){if(!access.member(house,user)&&!canManage(house,user)&&!access.staff(house,user))throw missing();}
- private void manage(String house,String user){if(!canManage(house,user))throw missing();}
- private String org(String h){return db.queryForObject("SELECT organization_id FROM organization_houses WHERE house_id=? AND status='ACTIVE' ORDER BY organization_id LIMIT 1",String.class,h);}
- private Map<String,Object> row(String table,String key){var rows=db.queryForList("SELECT * FROM "+table+" WHERE id=?",key);if(rows.isEmpty())throw missing();return rows.getFirst();}
- private void current(Map<String,Object> p){if(!access.exists("SELECT count(*) FROM organization_houses WHERE house_id=? AND organization_id=? AND status='ACTIVE'",p.get("house_id"),p.get("source_organization_id")))throw missing();}
- private void history(String house,String caseId,String entity,Action action,String note,String publicNote,String user,Object data){try{db.update("INSERT INTO operations_history(id,house_id,case_id,entity_id,action,note,public_note,snapshot_json,actor_id,created_at) VALUES (?,?,?,?,?,?,?,?,?,?)",id(),house,caseId,entity,action.name(),note,publicNote,mapper.writeValueAsString(data),user,now());}catch(com.fasterxml.jackson.core.JsonProcessingException e){throw new IllegalStateException(e);}}
- private List<Map<String,Object>> history(String entity,boolean staff){return db.queryForList("SELECT "+(staff?"note,action,actor_id,":"")+"public_note,created_at FROM operations_history WHERE entity_id=? "+(staff?"":"AND public_note IS NOT NULL ")+"ORDER BY rowid",entity);}
- public record Feed(boolean canManage,List<Map<String,Object>> problems,List<Map<String,Object>> notices,Map<String,Object> subscription,List<ResidentCaseService.Staff> workers){}
- public Feed feed(String house,String user){member(house,user);boolean staff=canManage(house,user);var problems=db.queryForList("SELECT p.* FROM house_mass_problems p JOIN organization_houses h ON h.house_id=p.house_id AND h.organization_id=p.source_organization_id WHERE p.house_id=? AND h.status='ACTIVE' "+(staff?"":"AND p.state<>'DRAFT' ")+"ORDER BY p.rowid DESC",house);for(var p:problems){p.put("history",history(s(p,"id"),staff));p.put("works",works(s(p,"id"),user,staff));if(staff)p.put("linked_count",db.queryForObject("SELECT count(*) FROM case_mass_links WHERE problem_id=?",Integer.class,p.get("id")));else{p.remove("created_by");p.remove("source_organization_id");}}
- var notices=db.queryForList("SELECT n.* FROM house_operations_notices n JOIN organization_houses h ON h.house_id=n.house_id AND h.organization_id=n.source_organization_id WHERE n.house_id=? AND h.status='ACTIVE' "+(staff?"":"AND n.published_at IS NOT NULL ")+"ORDER BY n.starts_at DESC",house);for(var n:notices){n.put("history",history(s(n,"id"),staff));if(!staff){n.remove("created_by");n.remove("source_organization_id");}}
- var subs=db.queryForList("SELECT notices,payments,mass_problems FROM house_update_subscriptions WHERE house_id=? AND user_id=?",house,user);return new Feed(staff,problems,notices,subs.isEmpty()?Map.of():subs.getFirst(),staff?access.candidates(house):List.of());}
- @Transactional public Feed subscribe(String house,OperationsRequests.Subscription r,String user){if(!notifications.resident(house,user))throw missing();db.update("INSERT INTO house_update_subscriptions(house_id,user_id,notices,payments,mass_problems,updated_at) VALUES (?,?,?,?,?,?) ON CONFLICT(house_id,user_id) DO UPDATE SET notices=excluded.notices,payments=excluded.payments,mass_problems=excluded.mass_problems,updated_at=excluded.updated_at",house,user,r.notices()?1:0,r.payments()?1:0,r.massProblems()?1:0,now());history(house,null,house,Action.SUBSCRIPTION_CHANGED,"Изменены личные подписки",null,user,r);return feed(house,user);}
- @Transactional public Feed mass(String house,String key,OperationsRequests.Mass r,String user){manage(house,user);String target=key==null?id():key;Map<String,Object> old=null;if(key!=null){old=row("house_mass_problems",key);if(!house.equals(s(old,"house_id")))throw missing();current(old);if(rev(old)!=r.revision())throw conflict();var state=MassState.valueOf(s(old,"state"));if(state==MassState.CANCELLED||state==MassState.RESOLVED)throw invalid("Завершённую общую проблему нельзя переписать. Создайте новую");if(state==MassState.DRAFT&&r.state()==MassState.RESOLVED)throw invalid("Сначала опубликуйте общую проблему");if(state!=MassState.DRAFT&&r.state()==MassState.DRAFT)throw invalid("Опубликованную проблему нельзя скрыть черновиком");}else if(r.revision()!=0||r.state()!=MassState.DRAFT&&r.state()!=MassState.ACTIVE)throw invalid("Начните с черновика или активной общей проблемы");
- if(r.state()==MassState.RESOLVED&&access.exists("SELECT count(*) FROM mass_work_orders WHERE problem_id=? AND state NOT IN ('ACCEPTED','CANCELLED')",target))throw invalid("Сначала примите общие работы или обоснованно отмените их");
- if(key==null)db.update("INSERT INTO house_mass_problems(id,house_id,source_organization_id,title,scope,summary,next_step,state,due_at,due_basis,created_by,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",target,house,org(house),r.title(),r.scope(),r.summary(),r.nextStep(),r.state().name(),r.dueAt(),r.dueBasis(),user,now(),now());else db.update("UPDATE house_mass_problems SET title=?,scope=?,summary=?,next_step=?,state=?,due_at=?,due_basis=?,revision=revision+1,updated_at=? WHERE id=?",r.title(),r.scope(),r.summary(),r.nextStep(),r.state().name(),r.dueAt(),r.dueBasis(),now(),target);
- var p=row("house_mass_problems",target);String publicText=r.state()==MassState.DRAFT?null:r.summary()+" Следующий шаг: "+r.nextStep();history(house,null,target,Action.MASS_SAVED,r.reason(),publicText,user,p);if(publicText!=null){notifications.broadcast(house,NotificationKind.MASS,target,rev(p),"Обновление по общей проблеме: "+r.title()+". Подробности — в разделе вашего дома.",s(p,"source_organization_id"));for(var link:db.queryForList("SELECT c.id FROM case_mass_links l JOIN resident_cases c ON c.id=l.case_id WHERE l.problem_id=? AND c.status<>'CLOSED'",target)){String c=s(link,"id");db.update("UPDATE resident_cases SET revision=revision+1,updated_at=? WHERE id=?",now(),c);db.update("INSERT INTO case_events(id,case_id,actor_id,type,text,created_at) VALUES (?,?,?,'UPDATED',?,?)",id(),c,user,"Общая проблема дома: "+publicText+". Результат вашего обращения подтверждается отдельно.",now());bot.enqueue(c,user,CaseEventType.UPDATED);}}
- return feed(house,user);}
- public Map<String,Object> linked(String caseId,String user){var c=cases.get(caseId,user);if(!c.fullAccess())throw missing();var rows=db.queryForList("SELECT p.* FROM case_mass_links l JOIN house_mass_problems p ON p.id=l.problem_id WHERE l.case_id=?",caseId);if(rows.isEmpty())return Map.of();var p=rows.getFirst();current(p);p.put("history",history(s(p,"id"),false));p.remove("created_by");p.remove("source_organization_id");return p;}
- @Transactional public ResidentCaseService.CaseView link(String caseId,OperationsRequests.Link r,String user){var c=cases.get(caseId,user);if(!c.fullAccess()||c.isAuthor()||!access.coordinator(caseId,c.houseId(),user))throw missing();if(c.kind()==CaseKind.PAYMENT||c.status()==CaseStatus.CLOSED)throw invalid("Личное финансовое или закрытое обращение нельзя объединить с общей проблемой");if(c.revision()!=r.caseRevision())throw conflict();var p=row("house_mass_problems",r.problemId());current(p);if(!c.houseId().equals(s(p,"house_id"))||!"ACTIVE".equals(s(p,"state")))throw invalid("Выберите активную общую проблему этого дома");if(access.exists("SELECT count(*) FROM case_mass_links WHERE case_id=?",caseId))throw invalid("Обращение уже связано с общей проблемой. Сначала снимите связь с пояснением");db.update("INSERT INTO case_mass_links(case_id,problem_id,linked_by,created_at) VALUES (?,?,?,?)",caseId,r.problemId(),user,now());cases.workflowEvent(caseId,user,r.caseRevision(),"Обращение связано с общей проблемой: "+s(p,"title")+". Личные сообщения другим жителям не показываются.","Следим за общей работой. Ваш результат проверяется отдельно");history(c.houseId(),caseId,r.problemId(),Action.MASS_LINKED,r.reason(),null,user,Map.of("caseId",caseId));return cases.get(caseId,user);}
- @Transactional public ResidentCaseService.CaseView unlink(String caseId,OperationsRequests.Unlink r,String user){var c=cases.get(caseId,user);if(c.isAuthor()||!access.coordinator(caseId,c.houseId(),user))throw missing();if(c.revision()!=r.caseRevision())throw conflict();db.update("DELETE FROM case_mass_links WHERE case_id=?",caseId);cases.workflowEvent(caseId,user,r.caseRevision(),"Связь с общей проблемой снята: "+r.reason(),"Сотрудник рассматривает ваше обращение отдельно");return cases.get(caseId,user);}
- @Transactional public ResidentCaseService.CaseView join(String problem,OperationsRequests.Join r,String user){var p=row("house_mass_problems",problem);current(p);String house=s(p,"house_id");if(!notifications.resident(house,user))throw missing();if(!"ACTIVE".equals(s(p,"state")))throw invalid("Общая проблема уже завершена. Сообщите об оставшемся вопросе отдельным обращением");var previous=db.queryForList("SELECT c.id FROM case_mass_links l JOIN resident_cases c ON c.id=l.case_id WHERE l.problem_id=? AND c.author_id=? AND c.status<>'CLOSED'",problem,user);if(!previous.isEmpty())return cases.get(s(previous.getFirst(),"id"),user);
- String description="У меня тоже: "+s(p,"title")+(r.description()==null||r.description().isBlank()?"":". "+r.description());var groups=db.query("SELECT DISTINCT m.request_id FROM case_mass_links l JOIN shared_request_members m ON m.case_id=l.case_id JOIN shared_requests s ON s.id=m.request_id WHERE l.problem_id=? AND s.merged_into IS NULL AND s.status<>'CLOSED' AND EXISTS(SELECT 1 FROM shared_request_members a WHERE a.request_id=s.id AND a.withdrawn_at IS NULL)",(rs,n)->rs.getString(1),problem);
- var c=groups.isEmpty()?cases.create(house,CaseKind.PROBLEM,description,r.location(),r.clientRequestId(),user):shared.join(groups.getFirst(),new ProblemIntakeService.Input(house,description,ReportCategory.OTHER,r.location(),null),r.clientRequestId(),user);if(access.exists("SELECT count(*) FROM case_mass_links WHERE case_id=? AND problem_id<>?",c.id(),problem))throw conflict();db.update("INSERT OR IGNORE INTO case_mass_links(case_id,problem_id,linked_by,created_at) VALUES (?,?,?,?)",c.id(),problem,user,now());db.update("UPDATE resident_cases SET next_step=?,revision=revision+1,updated_at=? WHERE id=?","Сотрудник проверит связь с общей проблемой. Общий ход работы уже доступен в карточке",now(),c.id());history(house,c.id(),problem,Action.MASS_LINKED,"Житель сообщил о той же проблеме",null,user,Map.of("caseId",c.id()));return cases.get(c.id(),user);}
- private boolean qualified(String house,String user){return access.dispatcher(house,user)||access.manager(house,user)||access.staff(house,user);}
- private List<Map<String,Object>> works(String problem,String user,boolean staff){var rows=db.queryForList("SELECT w.*,u.display_name AS worker_name FROM mass_work_orders w JOIN users u ON u.id=w.worker_id WHERE w.problem_id=? ORDER BY w.rowid",problem);for(var w:rows){w.put("canReport",user.equals(s(w,"worker_id")));if(!staff&&!user.equals(s(w,"worker_id"))){w.remove("worker_id");w.remove("worker_name");w.remove("report");w.remove("reviewed_by");}}return rows;}
- @Transactional public Feed assignWork(String problem,OperationsRequests.SharedWork r,String user){var p=row("house_mass_problems",problem);current(p);String house=s(p,"house_id");manage(house,user);if(!"ACTIVE".equals(s(p,"state")))throw invalid("Общие работы назначают по активной проблеме");if(rev(p)!=r.revision())throw conflict();if(!qualified(house,r.workerId()))throw invalid("Выберите действующего сотрудника дома");String work=id();db.update("INSERT INTO mass_work_orders(id,problem_id,title,scope,worker_id,due_at,due_basis,state,created_at,updated_at) VALUES (?,?,?,?,?,?,?,'ASSIGNED',?,?)",work,problem,r.title(),r.scope(),r.workerId(),r.dueAt(),r.dueBasis(),now(),now());db.update("UPDATE house_mass_problems SET revision=revision+1,updated_at=? WHERE id=?",now(),problem);history(house,null,problem,Action.WORK_ASSIGNED,"Назначена общая работа", "Назначена работа: "+r.title(),user,row("mass_work_orders",work));return feed(house,user);}
- @Transactional public Feed work(String key,OperationsRequests.WorkDecision r,String user){var w=row("mass_work_orders",key);var p=row("house_mass_problems",s(w,"problem_id"));current(p);String house=s(p,"house_id");if(!"ACTIVE".equals(s(p,"state")))throw invalid("Общая проблема уже завершена");boolean coordinator=canManage(house,user),worker=user.equals(s(w,"worker_id"))&&qualified(house,user);if(!coordinator&&!worker)throw missing();if(rev(w)!=r.revision())throw conflict();var before=WorkState.valueOf(s(w,"state"));boolean ok=switch(before){case ASSIGNED,REWORK->worker&&(r.state()==WorkState.IN_PROGRESS||r.state()==WorkState.BLOCKED);case IN_PROGRESS,BLOCKED->worker&&(r.state()==WorkState.IN_PROGRESS||r.state()==WorkState.BLOCKED||r.state()==WorkState.REPORTED);case REPORTED->coordinator&&!worker&&(r.state()==WorkState.ACCEPTED||r.state()==WorkState.REWORK);default->false;};if(coordinator&&r.state()==WorkState.CANCELLED&&before!=WorkState.ACCEPTED&&before!=WorkState.CANCELLED)ok=true;if(!ok)throw invalid("Недопустимый шаг. Приёмку выполняет другой координатор после отчёта");db.update("UPDATE mass_work_orders SET state=?,report=?,reviewed_by=?,revision=revision+1,updated_at=? WHERE id=?",r.state().name(),r.note(),r.state()==WorkState.ACCEPTED?user:null,now(),key);db.update("UPDATE house_mass_problems SET revision=revision+1,updated_at=? WHERE id=?",now(),p.get("id"));history(house,null,s(p,"id"),Action.WORK_UPDATED,r.note(),r.state()==WorkState.ACCEPTED?"Общая работа проверена координатором: "+s(w,"title"):"Изменён ход общей работы: "+s(w,"title"),user,row("mass_work_orders",key));return feed(house,user);}
- @Transactional public Feed notice(String house,String key,OperationsRequests.Notice r,String user){manage(house,user);if(r.endsAt()!=null&&!r.endsAt().isAfter(r.startsAt()))throw invalid("Окончание должно быть позже начала");if(r.kind()==NoticeKind.PLANNED_WORK&&r.endsAt()==null)throw invalid("Для плановой работы укажите ожидаемое окончание");String target=key==null?id():key;String published=null;if(key!=null){var old=row("house_operations_notices",key);if(!house.equals(s(old,"house_id")))throw missing();current(old);if(rev(old)!=r.revision())throw conflict();if(List.of("COMPLETED","CANCELLED","WITHDRAWN").contains(s(old,"state")))throw invalid("Завершённую публикацию нельзя переписать");if("DRAFT".equals(s(old,"state"))&&!List.of(NoticeState.DRAFT,NoticeState.PUBLISHED,NoticeState.CANCELLED).contains(r.state()))throw invalid("Сначала опубликуйте уведомление");if("IN_PROGRESS".equals(s(old,"state"))&&r.state()==NoticeState.PUBLISHED)throw invalid("Начатую работу нельзя вернуть в план");published=s(old,"published_at");if(published!=null&&r.state()==NoticeState.DRAFT)throw invalid("Опубликованное уведомление нельзя скрыть черновиком");}else if(r.revision()!=0||r.state()!=NoticeState.DRAFT&&r.state()!=NoticeState.PUBLISHED)throw invalid("Начните с черновика или публикации");if(r.state()!=NoticeState.DRAFT&&published==null)published=now();
- if(key==null)db.update("INSERT INTO house_operations_notices(id,house_id,source_organization_id,title,kind,resource,scope,summary,advice,contact,source_reference,starts_at,ends_at,end_basis,state,published_at,created_by,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",target,house,org(house),r.title(),r.kind().name(),r.resource().name(),r.scope(),r.summary(),r.advice(),r.contact(),r.sourceReference(),r.startsAt(),r.endsAt(),r.endBasis(),r.state().name(),published,user,now(),now());else db.update("UPDATE house_operations_notices SET title=?,kind=?,resource=?,scope=?,summary=?,advice=?,contact=?,source_reference=?,starts_at=?,ends_at=?,end_basis=?,state=?,published_at=?,revision=revision+1,updated_at=? WHERE id=?",r.title(),r.kind().name(),r.resource().name(),r.scope(),r.summary(),r.advice(),r.contact(),r.sourceReference(),r.startsAt(),r.endsAt(),r.endBasis(),r.state().name(),published,now(),target);
- var n=row("house_operations_notices",target);history(house,null,target,Action.NOTICE_SAVED,r.reason(),r.state()==NoticeState.DRAFT?null:r.summary()+". "+r.endBasis(),user,n);if(published!=null)notifications.broadcast(house,NotificationKind.NOTICE,target,rev(n),"Обновление по работам и отключениям: "+r.title()+". Время и подробности — в разделе вашего дома.",s(n,"source_organization_id"));return feed(house,user);}
+    private final JdbcTemplate db;
+    private final CaseWorkAccess access;
+    private final ResidentCaseService cases;
+    private final OperationsNotifications notifications;
+    private final ObjectMapper mapper;
+    private final CaseBotNotifications bot;
+    private final SharedRequestService shared;
+
+    public HouseOperationsService(
+            JdbcTemplate db,
+            CaseWorkAccess access,
+            ResidentCaseService cases,
+            OperationsNotifications notifications,
+            ObjectMapper mapper,
+            CaseBotNotifications bot,
+            SharedRequestService shared) {
+        this.db = db;
+        this.access = access;
+        this.cases = cases;
+        this.notifications = notifications;
+        this.mapper = mapper;
+        this.bot = bot;
+        this.shared = shared;
+    }
+
+    public boolean canManage(String house, String user) {
+        return access.manager(house, user)
+                || access.dispatcher(house, user)
+                || access.staffFunction(house, user, CaseFunction.COORDINATOR);
+    }
+
+    private void member(String house, String user) {
+        if (!access.member(house, user) && !canManage(house, user) && !access.staff(house, user))
+            throw missing();
+    }
+
+    private void manage(String house, String user) {
+        if (!canManage(house, user)) throw missing();
+    }
+
+    private String org(String h) {
+        return db.queryForObject(
+                "SELECT organization_id FROM organization_houses WHERE house_id=? AND status='ACTIVE' ORDER BY organization_id LIMIT 1",
+                String.class,
+                h);
+    }
+
+    private Map<String, Object> row(String table, String key) {
+        var rows = db.queryForList("SELECT * FROM " + table + " WHERE id=?", key);
+        if (rows.isEmpty()) throw missing();
+        return rows.getFirst();
+    }
+
+    private void current(Map<String, Object> p) {
+        if (!access.exists(
+                "SELECT count(*) FROM organization_houses WHERE house_id=? AND organization_id=? AND status='ACTIVE'",
+                p.get("house_id"),
+                p.get("source_organization_id"))) throw missing();
+    }
+
+    private void history(
+            String house,
+            String caseId,
+            String entity,
+            Action action,
+            String note,
+            String publicNote,
+            String user,
+            Object data) {
+        try {
+            db.update(
+                    "INSERT INTO operations_history(id,house_id,case_id,entity_id,action,note,public_note,snapshot_json,actor_id,created_at) VALUES (?,?,?,?,?,?,?,?,?,?)",
+                    id(),
+                    house,
+                    caseId,
+                    entity,
+                    action.name(),
+                    note,
+                    publicNote,
+                    mapper.writeValueAsString(data),
+                    user,
+                    now());
+        } catch (com.fasterxml.jackson.core.JsonProcessingException e) {
+            throw new IllegalStateException(e);
+        }
+    }
+
+    private List<Map<String, Object>> history(String entity, boolean staff) {
+        return db.queryForList(
+                "SELECT "
+                        + (staff ? "note,action,actor_id," : "")
+                        + "public_note,created_at FROM operations_history WHERE entity_id=? "
+                        + (staff ? "" : "AND public_note IS NOT NULL ")
+                        + "ORDER BY rowid",
+                entity);
+    }
+
+    public record Feed(
+            boolean canManage,
+            List<Map<String, Object>> problems,
+            List<Map<String, Object>> notices,
+            Map<String, Object> subscription,
+            List<ResidentCaseService.Staff> workers) {}
+
+    public Feed feed(String house, String user) {
+        member(house, user);
+        boolean staff = canManage(house, user);
+        var problems =
+                db.queryForList(
+                        "SELECT p.* FROM house_mass_problems p JOIN organization_houses h ON h.house_id=p.house_id AND h.organization_id=p.source_organization_id WHERE p.house_id=? AND h.status='ACTIVE' "
+                                + (staff ? "" : "AND p.state<>'DRAFT' ")
+                                + "ORDER BY p.rowid DESC",
+                        house);
+        for (var p : problems) {
+            p.put("history", history(s(p, "id"), staff));
+            p.put("works", works(s(p, "id"), user, staff));
+            if (staff)
+                p.put(
+                        "linked_count",
+                        db.queryForObject(
+                                "SELECT count(*) FROM case_mass_links WHERE problem_id=?",
+                                Integer.class,
+                                p.get("id")));
+            else {
+                p.remove("created_by");
+                p.remove("source_organization_id");
+            }
+        }
+        var notices =
+                db.queryForList(
+                        "SELECT n.* FROM house_operations_notices n JOIN organization_houses h ON h.house_id=n.house_id AND h.organization_id=n.source_organization_id WHERE n.house_id=? AND h.status='ACTIVE' "
+                                + (staff ? "" : "AND n.published_at IS NOT NULL ")
+                                + "ORDER BY n.starts_at DESC",
+                        house);
+        for (var n : notices) {
+            n.put("history", history(s(n, "id"), staff));
+            if (!staff) {
+                n.remove("created_by");
+                n.remove("source_organization_id");
+            }
+        }
+        var subs =
+                db.queryForList(
+                        "SELECT notices,payments,mass_problems FROM house_update_subscriptions WHERE house_id=? AND user_id=?",
+                        house,
+                        user);
+        return new Feed(
+                staff,
+                problems,
+                notices,
+                subs.isEmpty() ? Map.of() : subs.getFirst(),
+                staff ? access.candidates(house) : List.of());
+    }
+
+    @Transactional
+    public Feed subscribe(String house, OperationsRequests.Subscription r, String user) {
+        if (!notifications.resident(house, user)) throw missing();
+        db.update(
+                "INSERT INTO house_update_subscriptions(house_id,user_id,notices,payments,mass_problems,updated_at) VALUES (?,?,?,?,?,?) ON CONFLICT(house_id,user_id) DO UPDATE SET notices=excluded.notices,payments=excluded.payments,mass_problems=excluded.mass_problems,updated_at=excluded.updated_at",
+                house,
+                user,
+                r.notices() ? 1 : 0,
+                r.payments() ? 1 : 0,
+                r.massProblems() ? 1 : 0,
+                now());
+        history(
+                house,
+                null,
+                house,
+                Action.SUBSCRIPTION_CHANGED,
+                "Изменены личные подписки",
+                null,
+                user,
+                r);
+        return feed(house, user);
+    }
+
+    @Transactional
+    public Feed mass(String house, String key, OperationsRequests.Mass r, String user) {
+        manage(house, user);
+        String target = key == null ? id() : key;
+        Map<String, Object> old = null;
+        if (key != null) {
+            old = row("house_mass_problems", key);
+            if (!house.equals(s(old, "house_id"))) throw missing();
+            current(old);
+            if (rev(old) != r.revision()) throw conflict();
+            var state = MassState.valueOf(s(old, "state"));
+            if (state == MassState.CANCELLED || state == MassState.RESOLVED)
+                throw invalid("Завершённую общую проблему нельзя переписать. Создайте новую");
+            if (state == MassState.DRAFT && r.state() == MassState.RESOLVED)
+                throw invalid("Сначала опубликуйте общую проблему");
+            if (state != MassState.DRAFT && r.state() == MassState.DRAFT)
+                throw invalid("Опубликованную проблему нельзя скрыть черновиком");
+        } else if (r.revision() != 0
+                || r.state() != MassState.DRAFT && r.state() != MassState.ACTIVE)
+            throw invalid("Начните с черновика или активной общей проблемы");
+        if (r.state() == MassState.RESOLVED
+                && access.exists(
+                        "SELECT count(*) FROM mass_work_orders WHERE problem_id=? AND state NOT IN ('ACCEPTED','CANCELLED')",
+                        target))
+            throw invalid("Сначала примите общие работы или обоснованно отмените их");
+        if (key == null)
+            db.update(
+                    "INSERT INTO house_mass_problems(id,house_id,source_organization_id,title,scope,summary,next_step,state,due_at,due_basis,created_by,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                    target,
+                    house,
+                    org(house),
+                    r.title(),
+                    r.scope(),
+                    r.summary(),
+                    r.nextStep(),
+                    r.state().name(),
+                    r.dueAt(),
+                    r.dueBasis(),
+                    user,
+                    now(),
+                    now());
+        else
+            db.update(
+                    "UPDATE house_mass_problems SET title=?,scope=?,summary=?,next_step=?,state=?,due_at=?,due_basis=?,revision=revision+1,updated_at=? WHERE id=?",
+                    r.title(),
+                    r.scope(),
+                    r.summary(),
+                    r.nextStep(),
+                    r.state().name(),
+                    r.dueAt(),
+                    r.dueBasis(),
+                    now(),
+                    target);
+        var p = row("house_mass_problems", target);
+        String publicText =
+                r.state() == MassState.DRAFT
+                        ? null
+                        : r.summary() + " Следующий шаг: " + r.nextStep();
+        history(house, null, target, Action.MASS_SAVED, r.reason(), publicText, user, p);
+        if (publicText != null) {
+            notifications.broadcast(
+                    house,
+                    NotificationKind.MASS,
+                    target,
+                    rev(p),
+                    "Обновление по общей проблеме: "
+                            + r.title()
+                            + ". Подробности — в разделе вашего дома.",
+                    s(p, "source_organization_id"));
+            for (var link :
+                    db.queryForList(
+                            "SELECT c.id FROM case_mass_links l JOIN resident_cases c ON c.id=l.case_id WHERE l.problem_id=? AND c.status<>'CLOSED'",
+                            target)) {
+                String c = s(link, "id");
+                db.update(
+                        "UPDATE resident_cases SET revision=revision+1,updated_at=? WHERE id=?",
+                        now(),
+                        c);
+                db.update(
+                        "INSERT INTO case_events(id,case_id,actor_id,type,text,created_at) VALUES (?,?,?,'UPDATED',?,?)",
+                        id(),
+                        c,
+                        user,
+                        "Общая проблема дома: "
+                                + publicText
+                                + ". Результат вашего обращения подтверждается отдельно.",
+                        now());
+                bot.enqueue(c, user, CaseEventType.UPDATED);
+            }
+        }
+        return feed(house, user);
+    }
+
+    public Map<String, Object> linked(String caseId, String user) {
+        var c = cases.get(caseId, user);
+        if (!c.fullAccess()) throw missing();
+        var rows =
+                db.queryForList(
+                        "SELECT p.* FROM case_mass_links l JOIN house_mass_problems p ON p.id=l.problem_id WHERE l.case_id=?",
+                        caseId);
+        if (rows.isEmpty()) return Map.of();
+        var p = rows.getFirst();
+        current(p);
+        p.put("history", history(s(p, "id"), false));
+        p.remove("created_by");
+        p.remove("source_organization_id");
+        return p;
+    }
+
+    @Transactional
+    public ResidentCaseService.CaseView link(
+            String caseId, OperationsRequests.Link r, String user) {
+        var c = cases.get(caseId, user);
+        if (!c.fullAccess() || c.isAuthor() || !access.coordinator(caseId, c.houseId(), user))
+            throw missing();
+        if (c.kind() == CaseKind.PAYMENT || c.status() == CaseStatus.CLOSED)
+            throw invalid(
+                    "Личное финансовое или закрытое обращение нельзя объединить с общей проблемой");
+        if (c.revision() != r.caseRevision()) throw conflict();
+        var p = row("house_mass_problems", r.problemId());
+        current(p);
+        if (!c.houseId().equals(s(p, "house_id")) || !"ACTIVE".equals(s(p, "state")))
+            throw invalid("Выберите активную общую проблему этого дома");
+        if (access.exists("SELECT count(*) FROM case_mass_links WHERE case_id=?", caseId))
+            throw invalid(
+                    "Обращение уже связано с общей проблемой. Сначала снимите связь с пояснением");
+        db.update(
+                "INSERT INTO case_mass_links(case_id,problem_id,linked_by,created_at) VALUES (?,?,?,?)",
+                caseId,
+                r.problemId(),
+                user,
+                now());
+        cases.workflowEvent(
+                caseId,
+                user,
+                r.caseRevision(),
+                "Обращение связано с общей проблемой: "
+                        + s(p, "title")
+                        + ". Личные сообщения другим жителям не показываются.",
+                "Следим за общей работой. Ваш результат проверяется отдельно");
+        history(
+                c.houseId(),
+                caseId,
+                r.problemId(),
+                Action.MASS_LINKED,
+                r.reason(),
+                null,
+                user,
+                Map.of("caseId", caseId));
+        return cases.get(caseId, user);
+    }
+
+    @Transactional
+    public ResidentCaseService.CaseView unlink(
+            String caseId, OperationsRequests.Unlink r, String user) {
+        var c = cases.get(caseId, user);
+        if (c.isAuthor() || !access.coordinator(caseId, c.houseId(), user)) throw missing();
+        if (c.revision() != r.caseRevision()) throw conflict();
+        db.update("DELETE FROM case_mass_links WHERE case_id=?", caseId);
+        cases.workflowEvent(
+                caseId,
+                user,
+                r.caseRevision(),
+                "Связь с общей проблемой снята: " + r.reason(),
+                "Сотрудник рассматривает ваше обращение отдельно");
+        return cases.get(caseId, user);
+    }
+
+    @Transactional
+    public ResidentCaseService.CaseView join(
+            String problem, OperationsRequests.Join r, String user) {
+        var p = row("house_mass_problems", problem);
+        current(p);
+        String house = s(p, "house_id");
+        if (!notifications.resident(house, user)) throw missing();
+        if (!"ACTIVE".equals(s(p, "state")))
+            throw invalid(
+                    "Общая проблема уже завершена. Сообщите об оставшемся вопросе отдельным обращением");
+        var previous =
+                db.queryForList(
+                        "SELECT c.id FROM case_mass_links l JOIN resident_cases c ON c.id=l.case_id WHERE l.problem_id=? AND c.author_id=? AND c.status<>'CLOSED'",
+                        problem,
+                        user);
+        if (!previous.isEmpty()) return cases.get(s(previous.getFirst(), "id"), user);
+        String description =
+                "У меня тоже: "
+                        + s(p, "title")
+                        + (r.description() == null || r.description().isBlank()
+                                ? ""
+                                : ". " + r.description());
+        var groups =
+                db.query(
+                        "SELECT DISTINCT m.request_id FROM case_mass_links l JOIN shared_request_members m ON m.case_id=l.case_id JOIN shared_requests s ON s.id=m.request_id WHERE l.problem_id=? AND s.merged_into IS NULL AND s.status<>'CLOSED' AND EXISTS(SELECT 1 FROM shared_request_members a WHERE a.request_id=s.id AND a.withdrawn_at IS NULL)",
+                        (rs, n) -> rs.getString(1),
+                        problem);
+        var c =
+                groups.isEmpty()
+                        ? cases.create(
+                                house,
+                                CaseKind.PROBLEM,
+                                description,
+                                r.location(),
+                                r.clientRequestId(),
+                                user)
+                        : shared.join(
+                                groups.getFirst(),
+                                new ProblemIntakeService.Input(
+                                        house,
+                                        description,
+                                        ReportCategory.OTHER,
+                                        r.location(),
+                                        null),
+                                r.clientRequestId(),
+                                user);
+        if (access.exists(
+                "SELECT count(*) FROM case_mass_links WHERE case_id=? AND problem_id<>?",
+                c.id(),
+                problem)) throw conflict();
+        db.update(
+                "INSERT OR IGNORE INTO case_mass_links(case_id,problem_id,linked_by,created_at) VALUES (?,?,?,?)",
+                c.id(),
+                problem,
+                user,
+                now());
+        db.update(
+                "UPDATE resident_cases SET next_step=?,revision=revision+1,updated_at=? WHERE id=?",
+                "Сотрудник проверит связь с общей проблемой. Общий ход работы уже доступен в карточке",
+                now(),
+                c.id());
+        history(
+                house,
+                c.id(),
+                problem,
+                Action.MASS_LINKED,
+                "Житель сообщил о той же проблеме",
+                null,
+                user,
+                Map.of("caseId", c.id()));
+        return cases.get(c.id(), user);
+    }
+
+    private boolean qualified(String house, String user) {
+        return access.dispatcher(house, user)
+                || access.manager(house, user)
+                || access.staff(house, user);
+    }
+
+    private List<Map<String, Object>> works(String problem, String user, boolean staff) {
+        var rows =
+                db.queryForList(
+                        "SELECT w.*,u.display_name AS worker_name FROM mass_work_orders w JOIN users u ON u.id=w.worker_id WHERE w.problem_id=? ORDER BY w.rowid",
+                        problem);
+        for (var w : rows) {
+            w.put("canReport", user.equals(s(w, "worker_id")));
+            if (!staff && !user.equals(s(w, "worker_id"))) {
+                w.remove("worker_id");
+                w.remove("worker_name");
+                w.remove("report");
+                w.remove("reviewed_by");
+            }
+        }
+        return rows;
+    }
+
+    @Transactional
+    public Feed assignWork(String problem, OperationsRequests.SharedWork r, String user) {
+        var p = row("house_mass_problems", problem);
+        current(p);
+        String house = s(p, "house_id");
+        manage(house, user);
+        if (!"ACTIVE".equals(s(p, "state")))
+            throw invalid("Общие работы назначают по активной проблеме");
+        if (rev(p) != r.revision()) throw conflict();
+        if (!qualified(house, r.workerId())) throw invalid("Выберите действующего сотрудника дома");
+        String work = id();
+        db.update(
+                "INSERT INTO mass_work_orders(id,problem_id,title,scope,worker_id,due_at,due_basis,state,created_at,updated_at) VALUES (?,?,?,?,?,?,?,'ASSIGNED',?,?)",
+                work,
+                problem,
+                r.title(),
+                r.scope(),
+                r.workerId(),
+                r.dueAt(),
+                r.dueBasis(),
+                now(),
+                now());
+        db.update(
+                "UPDATE house_mass_problems SET revision=revision+1,updated_at=? WHERE id=?",
+                now(),
+                problem);
+        history(
+                house,
+                null,
+                problem,
+                Action.WORK_ASSIGNED,
+                "Назначена общая работа",
+                "Назначена работа: " + r.title(),
+                user,
+                row("mass_work_orders", work));
+        return feed(house, user);
+    }
+
+    @Transactional
+    public Feed work(String key, OperationsRequests.WorkDecision r, String user) {
+        var w = row("mass_work_orders", key);
+        var p = row("house_mass_problems", s(w, "problem_id"));
+        current(p);
+        String house = s(p, "house_id");
+        if (!"ACTIVE".equals(s(p, "state"))) throw invalid("Общая проблема уже завершена");
+        boolean coordinator = canManage(house, user),
+                worker = user.equals(s(w, "worker_id")) && qualified(house, user);
+        if (!coordinator && !worker) throw missing();
+        if (rev(w) != r.revision()) throw conflict();
+        var before = WorkState.valueOf(s(w, "state"));
+        boolean ok =
+                switch (before) {
+                    case ASSIGNED, REWORK ->
+                            worker
+                                    && (r.state() == WorkState.IN_PROGRESS
+                                            || r.state() == WorkState.BLOCKED);
+                    case IN_PROGRESS, BLOCKED ->
+                            worker
+                                    && (r.state() == WorkState.IN_PROGRESS
+                                            || r.state() == WorkState.BLOCKED
+                                            || r.state() == WorkState.REPORTED);
+                    case REPORTED ->
+                            coordinator
+                                    && !worker
+                                    && (r.state() == WorkState.ACCEPTED
+                                            || r.state() == WorkState.REWORK);
+                    default -> false;
+                };
+        if (coordinator
+                && r.state() == WorkState.CANCELLED
+                && before != WorkState.ACCEPTED
+                && before != WorkState.CANCELLED) ok = true;
+        if (!ok)
+            throw invalid("Недопустимый шаг. Приёмку выполняет другой координатор после отчёта");
+        db.update(
+                "UPDATE mass_work_orders SET state=?,report=?,reviewed_by=?,revision=revision+1,updated_at=? WHERE id=?",
+                r.state().name(),
+                r.note(),
+                r.state() == WorkState.ACCEPTED ? user : null,
+                now(),
+                key);
+        db.update(
+                "UPDATE house_mass_problems SET revision=revision+1,updated_at=? WHERE id=?",
+                now(),
+                p.get("id"));
+        history(
+                house,
+                null,
+                s(p, "id"),
+                Action.WORK_UPDATED,
+                r.note(),
+                r.state() == WorkState.ACCEPTED
+                        ? "Общая работа проверена координатором: " + s(w, "title")
+                        : "Изменён ход общей работы: " + s(w, "title"),
+                user,
+                row("mass_work_orders", key));
+        return feed(house, user);
+    }
+
+    @Transactional
+    public Feed notice(String house, String key, OperationsRequests.Notice r, String user) {
+        manage(house, user);
+        if (r.endsAt() != null && !r.endsAt().isAfter(r.startsAt()))
+            throw invalid("Окончание должно быть позже начала");
+        if (r.kind() == NoticeKind.PLANNED_WORK && r.endsAt() == null)
+            throw invalid("Для плановой работы укажите ожидаемое окончание");
+        String target = key == null ? id() : key;
+        String published = null;
+        if (key != null) {
+            var old = row("house_operations_notices", key);
+            if (!house.equals(s(old, "house_id"))) throw missing();
+            current(old);
+            if (rev(old) != r.revision()) throw conflict();
+            if (List.of("COMPLETED", "CANCELLED", "WITHDRAWN").contains(s(old, "state")))
+                throw invalid("Завершённую публикацию нельзя переписать");
+            if ("DRAFT".equals(s(old, "state"))
+                    && !List.of(NoticeState.DRAFT, NoticeState.PUBLISHED, NoticeState.CANCELLED)
+                            .contains(r.state())) throw invalid("Сначала опубликуйте уведомление");
+            if ("IN_PROGRESS".equals(s(old, "state")) && r.state() == NoticeState.PUBLISHED)
+                throw invalid("Начатую работу нельзя вернуть в план");
+            published = s(old, "published_at");
+            if (published != null && r.state() == NoticeState.DRAFT)
+                throw invalid("Опубликованное уведомление нельзя скрыть черновиком");
+        } else if (r.revision() != 0
+                || r.state() != NoticeState.DRAFT && r.state() != NoticeState.PUBLISHED)
+            throw invalid("Начните с черновика или публикации");
+        if (r.state() != NoticeState.DRAFT && published == null) published = now();
+        if (key == null)
+            db.update(
+                    "INSERT INTO house_operations_notices(id,house_id,source_organization_id,title,kind,resource,scope,summary,advice,contact,source_reference,starts_at,ends_at,end_basis,state,published_at,created_by,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                    target,
+                    house,
+                    org(house),
+                    r.title(),
+                    r.kind().name(),
+                    r.resource().name(),
+                    r.scope(),
+                    r.summary(),
+                    r.advice(),
+                    r.contact(),
+                    r.sourceReference(),
+                    r.startsAt(),
+                    r.endsAt(),
+                    r.endBasis(),
+                    r.state().name(),
+                    published,
+                    user,
+                    now(),
+                    now());
+        else
+            db.update(
+                    "UPDATE house_operations_notices SET title=?,kind=?,resource=?,scope=?,summary=?,advice=?,contact=?,source_reference=?,starts_at=?,ends_at=?,end_basis=?,state=?,published_at=?,revision=revision+1,updated_at=? WHERE id=?",
+                    r.title(),
+                    r.kind().name(),
+                    r.resource().name(),
+                    r.scope(),
+                    r.summary(),
+                    r.advice(),
+                    r.contact(),
+                    r.sourceReference(),
+                    r.startsAt(),
+                    r.endsAt(),
+                    r.endBasis(),
+                    r.state().name(),
+                    published,
+                    now(),
+                    target);
+        var n = row("house_operations_notices", target);
+        history(
+                house,
+                null,
+                target,
+                Action.NOTICE_SAVED,
+                r.reason(),
+                r.state() == NoticeState.DRAFT ? null : r.summary() + ". " + r.endBasis(),
+                user,
+                n);
+        if (published != null)
+            notifications.broadcast(
+                    house,
+                    NotificationKind.NOTICE,
+                    target,
+                    rev(n),
+                    "Обновление по работам и отключениям: "
+                            + r.title()
+                            + ". Время и подробности — в разделе вашего дома.",
+                    s(n, "source_organization_id"));
+        return feed(house, user);
+    }
 }

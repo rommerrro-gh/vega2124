@@ -7,7 +7,6 @@ import jakarta.persistence.Table;
 @Entity
 @Table(name = "houses")
 public class House {
-    @Id
-    public String id;
+    @Id public String id;
     public String address;
 }

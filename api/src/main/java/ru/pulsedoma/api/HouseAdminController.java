@@ -34,60 +34,86 @@ public class HouseAdminController {
     }
 
     @GetMapping("/contacts")
-    public List<HouseAdminService.ContactView> contacts(@PathVariable @NotBlank String houseId,
-                                                        Principal principal) {
+    public List<HouseAdminService.ContactView> contacts(
+            @PathVariable @NotBlank String houseId, Principal principal) {
         return service.contacts(houseId, principal.getName());
     }
 
     @PostMapping("/contacts")
-    public ResponseEntity<HouseAdminService.ContactView> createContact(@PathVariable @NotBlank String houseId,
-                                                                         @Valid @RequestBody ContactRequest request,
-                                                                         Principal principal) {
-        return ResponseEntity.status(HttpStatus.CREATED).body(service.createContact(houseId,
-                principal.getName(), request.type(), request.title(), request.phone(), request.details()));
+    public ResponseEntity<HouseAdminService.ContactView> createContact(
+            @PathVariable @NotBlank String houseId,
+            @Valid @RequestBody ContactRequest request,
+            Principal principal) {
+        return ResponseEntity.status(HttpStatus.CREATED)
+                .body(
+                        service.createContact(
+                                houseId,
+                                principal.getName(),
+                                request.type(),
+                                request.title(),
+                                request.phone(),
+                                request.details()));
     }
 
     @PutMapping("/contacts/{contactId}")
-    public HouseAdminService.ContactView updateContact(@PathVariable @NotBlank String houseId,
-                                                       @PathVariable @NotBlank String contactId,
-                                                       @Valid @RequestBody ContactRequest request,
-                                                       Principal principal) {
-        return service.updateContact(houseId, contactId, principal.getName(), request.type(),
-                request.title(), request.phone(), request.details());
+    public HouseAdminService.ContactView updateContact(
+            @PathVariable @NotBlank String houseId,
+            @PathVariable @NotBlank String contactId,
+            @Valid @RequestBody ContactRequest request,
+            Principal principal) {
+        return service.updateContact(
+                houseId,
+                contactId,
+                principal.getName(),
+                request.type(),
+                request.title(),
+                request.phone(),
+                request.details());
     }
 
     @DeleteMapping("/contacts/{contactId}")
-    public ResponseEntity<Void> deleteContact(@PathVariable @NotBlank String houseId,
-                                              @PathVariable @NotBlank String contactId,
-                                              Principal principal) {
+    public ResponseEntity<Void> deleteContact(
+            @PathVariable @NotBlank String houseId,
+            @PathVariable @NotBlank String contactId,
+            Principal principal) {
         service.deleteContact(houseId, contactId, principal.getName());
         return ResponseEntity.noContent().build();
     }
 
     @GetMapping("/invitations")
-    public List<HouseAdminService.InvitationView> invitations(@PathVariable @NotBlank String houseId,
-                                                               Principal principal) {
+    public List<HouseAdminService.InvitationView> invitations(
+            @PathVariable @NotBlank String houseId, Principal principal) {
         return service.invitations(houseId, principal.getName());
     }
 
     @PostMapping("/invitations")
     public ResponseEntity<HouseAdminService.CreatedInvitation> createInvitation(
-            @PathVariable @NotBlank String houseId, @Valid @RequestBody CreateInvitationRequest request,
+            @PathVariable @NotBlank String houseId,
+            @Valid @RequestBody CreateInvitationRequest request,
             Principal principal) {
-        return ResponseEntity.status(HttpStatus.CREATED).body(service.createInvitation(houseId,
-                principal.getName(), request.days(), request.activationLimit()));
+        return ResponseEntity.status(HttpStatus.CREATED)
+                .body(
+                        service.createInvitation(
+                                houseId,
+                                principal.getName(),
+                                request.days(),
+                                request.activationLimit()));
     }
 
     @PostMapping("/invitations/{invitationId}/revoke")
-    public HouseAdminService.InvitationView revokeInvitation(@PathVariable @NotBlank String houseId,
-                                                              @PathVariable @NotBlank String invitationId,
-                                                              Principal principal) {
+    public HouseAdminService.InvitationView revokeInvitation(
+            @PathVariable @NotBlank String houseId,
+            @PathVariable @NotBlank String invitationId,
+            Principal principal) {
         return service.revokeInvitation(houseId, invitationId, principal.getName());
     }
 
-    public record ContactRequest(@NotNull HouseContactType type, @NotBlank @Size(max = 120) String title,
-                                 @NotBlank @Pattern(regexp = "[+0-9() .-]{2,40}") String phone,
-                                 @Size(max = 500) String details) {}
-    public record CreateInvitationRequest(@Min(1) @Max(30) int days,
-                                          @Min(1) @Max(100) int activationLimit) {}
+    public record ContactRequest(
+            @NotNull HouseContactType type,
+            @NotBlank @Size(max = 120) String title,
+            @NotBlank @Pattern(regexp = "[+0-9() .-]{2,40}") String phone,
+            @Size(max = 500) String details) {}
+
+    public record CreateInvitationRequest(
+            @Min(1) @Max(30) int days, @Min(1) @Max(100) int activationLimit) {}
 }

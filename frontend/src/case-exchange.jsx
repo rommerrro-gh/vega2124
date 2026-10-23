@@ -1,54 +1,1263 @@
-import React,{useEffect,useState} from "react";
-const dates=v=>v?new Date(v).toLocaleString("ru-RU"):"Срок уточняется";
-const states={DRAFT:"Готовим материалы",READY:"Состав проверен · ещё не отправлено",SENT:"Ожидаем подтверждение получения",RECEIVED:"Получено · ожидаем ответ",ANSWERED:"Ответ получен · сотрудник проверяет",REVIEWED:"Ответ рассмотрен",CANCELLED:"Передача отменена"};
-const participants={UK:"Управляющая компания",WARRANTY:"Гарантийная служба",CONTRACTOR:"Подрядчик",BILLING:"Расчётная служба",OTHER:"Другая организация"};
-const alerts={UNASSIGNED:"Нет ответственного",OVERDUE:"Прошёл срок",OWNER_UNAVAILABLE:"Ответственный недоступен",NO_DEPUTY:"Нужен заместитель",WAITING_RESIDENT:"Ожидаем жителя",WAITING_RECEIPT:"Ожидаем получение",WAITING_ANSWER:"Ожидаем ответ",NEEDS_REVIEW:"Нужно разобрать ответ",WORK_OVERDUE:"Просрочено задание",ESCALATED:"Требуется решение руководителя"};
-const f=(name,label,type="text",options={})=>({name,label,type,...options});
-const select=(name,label,values,extra={})=>f(name,label,"select",{options:values,...extra});
-const note=f("note","Пояснение к действию","textarea");
-const iso=value=>value?new Date(value).toISOString():null;
-const local=value=>value?new Date(new Date(value).getTime()-new Date(value).getTimezoneOffset()*60000).toISOString().slice(0,16):"";
-function Form({fields,initial={},busy,onSubmit,label="Сохранить"}){const [data,setData]=useState(()=>Object.fromEntries(fields.map(x=>[x.name,initial[x.name]??x.value??""])));return <form className="workflow-form" onSubmit={e=>{e.preventDefault();onSubmit(data);}}>{fields.map(x=><label key={x.name}>{x.label}{x.type==="select"?<select required={!x.optional} value={data[x.name]} onChange={e=>setData({...data,[x.name]:e.target.value})}><option value="">{x.optional?"Не указан":"Выберите"}</option>{x.options.map(o=><option key={o.value} value={o.value}>{o.label}</option>)}</select>:x.type==="textarea"?<textarea required={!x.optional} maxLength={x.max||2000} value={data[x.name]} onChange={e=>setData({...data,[x.name]:e.target.value})}/>:<input type={x.type} required={!x.optional} min={x.type==="number"?1:undefined} max={x.type==="number"?14:undefined} maxLength={x.max||250} value={data[x.name]} onChange={e=>setData({...data,[x.name]:e.target.value})}/>}</label>)}<button disabled={busy}>{label}</button></form>;}
-async function download(path,role,headers){const r=await fetch(path,{headers:headers(role)});if(!r.ok)throw new Error("Документ недоступен. Обновите страницу и проверьте доступ.");const a=document.createElement("a"),url=URL.createObjectURL(await r.blob());a.href=url;a.download=path.endsWith("/print")?"exchange-manifest.html":"document";a.click();setTimeout(()=>URL.revokeObjectURL(url),30000);}
-function Files({files,packet,reply=false,role,headers,onError}){return <div>{files?.map(v=><button type="button" className="case-link" key={v.id} onClick={()=>download(`/v1/exchange-packets/${packet}/files/${v.id}?reply=${reply}`,role,headers).catch(e=>onError(e.message))}>{v.title} · {Math.ceil(v.size_bytes/1024)} КБ</button>)}</div>;}
-function RecipientLabel({packet,channels}){const channel=packet.channel_snapshot?JSON.parse(packet.channel_snapshot):channels.find(c=>c.id===packet.channel_id);return channel?<p><strong>{participants[channel.participant_type]} · {channel.organization_name}</strong><br/>{channel.mode==="PORTAL"?"Ответ в кабинете получателя":"Ручной обмен с документами"}</p>:null;}
-function Draft({item,channels,packet,onSubmit,busy}){const [versions,setVersions]=useState(packet?.files?.map(v=>v.version_id)||[]),[address,setAddress]=useState(!!packet?.include_address);return <><p>Выберите только материалы, необходимые получателю. Автор, история переписки и остальные документы автоматически не передаются. Проверьте содержимое самих файлов.</p><fieldset><legend>Документы для передачи</legend>{item.documents.flatMap(d=>d.versions.map(v=><label key={v.id}><input type="checkbox" checked={versions.includes(v.id)} onChange={e=>setVersions(e.target.checked?[...versions,v.id]:versions.filter(i=>i!==v.id))}/>{d.title} · версия {v.version}</label>))}{!item.documents.length&&<p>Документов нет. Можно подготовить текстовое обращение.</p>}</fieldset><label><input type="checkbox" checked={address} onChange={e=>setAddress(e.target.checked)}/>Передать адрес дома</label><Form initial={packet?{channelId:packet.channel_id,subject:packet.subject,statement:packet.statement,disclosureBasis:packet.disclosure_basis,authority:packet.authority,materialsNote:packet.materials_note,dueBasis:packet.due_basis,dueAt:local(packet.due_at)}:{} } fields={[select("channelId","Проверенный получатель",channels.filter(c=>c.state==="VERIFIED").map(c=>({value:c.id,label:`${participants[c.participant_type]} · ${c.organization_name} · ${c.mode==="PORTAL"?"Кабинет получателя":"Ручной обмен"}`}))),f("subject","Тема", "text",{max:200}),f("statement","Текст для организации","textarea",{max:5000}),f("disclosureBasis","Основание передачи выбранных сведений","textarea",{max:3000}),f("authority","Полномочия отправителя","textarea"),f("materialsNote","Почему выбран именно этот состав материалов","textarea",{max:1000}),f("dueAt","Срок ответа, если установлен","datetime-local",{optional:true}),f("dueBasis","Основание срока или причина его отсутствия","textarea",{max:1000}),f("reason","Причина подготовки версии","textarea",{max:1000})]} busy={busy} label="Сохранить черновик пакета" onSubmit={d=>onSubmit({...d,versionIds:versions,includeAddress:address,dueAt:iso(d.dueAt)})}/></>;}
-export function CaseExchange({item,role,api,headers,onChange}){
- const [data,setData]=useState(null),[channels,setChannels]=useState([]),[notice,setNotice]=useState(""),[busy,setBusy]=useState(false),[action,setAction]=useState(null),[token,setToken]=useState(""),[username,setUsername]=useState("");
- useEffect(()=>{let active=true;api(role,`/v1/cases/${item.id}/exchange`).then(w=>{if(active){setData(w);if(w.canWork)api(role,`/v1/houses/${item.houseId}/exchange-channels`).then(c=>{if(active)setChannels(c);}).catch(e=>{if(active)setNotice(e.message);});}}).catch(e=>{if(active)setNotice(e.message);});return()=>{active=false;};},[item.id,item.revision,role]);
- async function run(path,body,method="POST"){setBusy(true);setNotice("");try{const result=await api(role,path,{method,body:JSON.stringify({...body,caseRevision:item.revision})});if(result.packets)setData(result);if(result.token)setToken(username?`https://max.ru/${username}?startapp=${result.token}`:`${location.origin}/exchange/index.html?invite=${encodeURIComponent(result.token)}`);setAction(null);onChange(await api(role,`/v1/cases/${item.id}`));}catch(e){setNotice(e.message);}finally{setBusy(false);}}
- useEffect(()=>{api(role,"/v1/access/config").then(c=>setUsername(c.botUsername||"")).catch(()=>{});},[role]);
- const docOptions=item.documents.flatMap(d=>d.versions.map(v=>({value:v.id,label:`${d.title} · версия ${v.version}`})));
- const proof=select("evidenceVersionId","Подтверждающий документ этого обращения",docOptions);
- const doAction=(p,mode,fields,label)=>setAction({p,mode,fields,label});
- return <section className="case-workflow"><h3>{data?.canWork?"Передача материалов организации":"Ответы организаций"}</h3><p className="muted">{data?.canWork?"Получение и ответ — отдельные шаги. После ответа нужен разбор сотрудником. Перерасчёт проверяется отдельно в разделе начислений.":"Мы сами свяжемся с нужной организацией. Если понадобится что-то уточнить у вас, напишем в обращении."}</p>{notice&&<p className="case-notice" role="status">{notice}</p>}{token&&<div className="case-next"><strong>Ссылка получателя — покажите только согласованному участнику</strong><p>Скопируйте сейчас. Полный секрет ссылки повторно не показывается. Получателю нужно открыть её в MAX под своим аккаунтом.</p><textarea readOnly aria-label="Ссылка получателя" value={token}/><button type="button" className="case-secondary" onClick={()=>navigator.clipboard.writeText(token).catch(()=>setNotice("Выделите и скопируйте ссылку вручную"))}>Скопировать ссылку</button></div>}
- {data?.packets.map(p=><article className="workflow-card" key={p.id}><h4>{states[p.state]}</h4>{data.canWork&&<><RecipientLabel packet={p} channels={channels}/><strong>{p.subject}</strong><p>{p.statement}</p><p>{p.address_snapshot||"Адрес дома в пакет не включён"}</p><Files files={p.files} packet={p.id} role={role} headers={headers} onError={setNotice}/></>}<p>Ответ: {dates(p.due_at)} · {p.due_basis}</p>{p.answers?.map(a=><div key={a.id||a.reviewed_at} className="case-next"><strong>{a.state==="RETURNED"?"Ответ возвращён на уточнение":a.state==="ACCEPTED"?"Проверенный ответ":"Получен ответ"}</strong><p>{data.canWork?a.answer:a.resident_summary}</p>{data.canWork&&<><p>{a.review_note}</p><Files files={a.files} packet={p.id} reply role={role} headers={headers} onError={setNotice}/></>}</div>)}
- {data.canWork&&<><div className="case-actions">{p.state!=="DRAFT"&&<button type="button" className="case-link" onClick={()=>download(`/v1/exchange-packets/${p.id}/print`,role,headers).catch(e=>setNotice(e.message))}>Скачать состав и текст пакета</button>}{p.state==="DRAFT"&&<><button type="button" onClick={()=>doAction(p,"edit",[],"Изменить состав")}>Изменить черновик</button><button type="button" onClick={()=>doAction(p,"seal",[note],"Зафиксировать состав")}>Проверить и зафиксировать состав</button></>}{p.state==="READY"&&<button type="button" onClick={()=>doAction(p,"send",[note,proof],"Зафиксировать фактическую отправку")}>Зафиксировать отправку</button>}{p.state==="SENT"&&JSON.parse(p.channel_snapshot||"{}").mode==="MANUAL"&&<button type="button" onClick={()=>doAction(p,"receive",[note,proof],"Подтвердить получение документом")}>Подтвердить получение</button>}{p.state==="RECEIVED"&&JSON.parse(p.channel_snapshot||"{}").mode==="MANUAL"&&<button type="button" onClick={()=>doAction(p,"answer",[f("answer","Полученный ответ","textarea",{max:6000}),proof],"Зафиксировать ответ из документа")}>Внести полученный ответ</button>}{p.state==="ANSWERED"&&<button type="button" onClick={()=>doAction(p,"review",[select("decision","Решение",[{value:"ACCEPT",label:"Рассмотрен, сохранить результат"},{value:"CLARIFY",label:"Нужно уточнение организации"}]),f("note","Что проверено и почему принято решение","textarea",{max:3000}),f("residentSummary","Понятный итог для жителя","textarea",{max:3000})],"Сохранить разбор ответа")}>Рассмотреть ответ</button>}{["SENT","RECEIVED"].includes(p.state)&&JSON.parse(p.channel_snapshot||"{}").mode==="PORTAL"&&<button type="button" onClick={()=>doAction(p,"invitations",[f("recipientName","Проверенный получатель"),f("participationBasis","Основание его участия и способ проверки","textarea"),f("days","Срок доступа в днях (1–14)","number")],"Создать ссылку получателя")}>Доступ получателю</button>}{!["DRAFT","REVIEWED","CANCELLED"].includes(p.state)&&<button className="case-secondary" type="button" onClick={()=>doAction(p,"schedule",[f("dueAt","Новый срок, если установлен","datetime-local",{optional:true}),f("dueBasis","Основание срока","textarea",{max:1000}),f("reason","Причина изменения","textarea",{max:1000})],"Сохранить срок")}>Уточнить срок</button>}{!["REVIEWED","CANCELLED"].includes(p.state)&&<button type="button" className="case-link" onClick={()=>doAction(p,"cancel",[note],"Отменить с пояснением")}>Отменить передачу</button>}</div>{p.invitations?.map(i=><p key={i.id}>{i.recipient_name} · до {dates(i.expires_at)} · {i.revoked_at?"Доступ отозван":i.accepted_by?"Доступ принят":"Ожидает принятия"}{!i.revoked_at&&<button type="button" className="case-link" disabled={busy} onClick={()=>run(`/v1/exchange-invitations/${i.id}/revoke`,{revision:p.revision,note:"Доступ получателя отозван сотрудником"})}>Отозвать доступ</button>}</p>)}<details><summary>История передачи</summary>{p.history?.map((h,n)=><p key={n}>{dates(h.created_at)} · {h.note}</p>)}</details></>}
- </article>)}
- {action&&<div className="case-panel"><h4>{action.label}</h4>{action.mode==="edit"||action.mode==="new"?<Draft key={action.p?.id||"new"} item={item} channels={channels} packet={action.p} busy={busy} onSubmit={d=>run(`/v1/cases/${item.id}/exchange${action.p?`/${action.p.id}`:""}`,{...d,revision:action.p?.revision||0},action.p?"PUT":"POST")}/>:<Form key={`${action.p.id}:${action.mode}`} fields={action.fields} initial={action.mode==="schedule"?{dueAt:local(action.p.due_at),dueBasis:action.p.due_basis}:action.mode==="invitations"?{days:"7"}:{}} busy={busy} label={action.label} onSubmit={d=>run(`/v1/exchange-packets/${action.p.id}/${action.mode}`,{...d,revision:action.p.revision,...(action.mode==="schedule"?{dueAt:iso(d.dueAt)}:{}),...(action.mode==="invitations"?{days:Number(d.days)}:{})})}/>}<button type="button" className="case-link" disabled={busy} onClick={()=>setAction(null)}>Закрыть форму</button></div>}
- {data?.canWork&&!action&&<button type="button" className="case-secondary" onClick={()=>setAction({mode:"new",label:"Новая передача материалов"})}>Подготовить пакет организации</button>}
- </section>;
+import React, { useEffect, useState } from "react";
+const dates = (v) => (v ? new Date(v).toLocaleString("ru-RU") : "Срок уточняется");
+const states = {
+  DRAFT: "Готовим материалы",
+  READY: "Состав проверен · ещё не отправлено",
+  SENT: "Ожидаем подтверждение получения",
+  RECEIVED: "Получено · ожидаем ответ",
+  ANSWERED: "Ответ получен · сотрудник проверяет",
+  REVIEWED: "Ответ рассмотрен",
+  CANCELLED: "Передача отменена",
+};
+const participants = {
+  UK: "Управляющая компания",
+  WARRANTY: "Гарантийная служба",
+  CONTRACTOR: "Подрядчик",
+  BILLING: "Расчётная служба",
+  OTHER: "Другая организация",
+};
+const alerts = {
+  UNASSIGNED: "Нет ответственного",
+  OVERDUE: "Прошёл срок",
+  OWNER_UNAVAILABLE: "Ответственный недоступен",
+  NO_DEPUTY: "Нужен заместитель",
+  WAITING_RESIDENT: "Ожидаем жителя",
+  WAITING_RECEIPT: "Ожидаем получение",
+  WAITING_ANSWER: "Ожидаем ответ",
+  NEEDS_REVIEW: "Нужно разобрать ответ",
+  WORK_OVERDUE: "Просрочено задание",
+  ESCALATED: "Требуется решение руководителя",
+};
+const f = (name, label, type = "text", options = {}) => ({ name, label, type, ...options });
+const select = (name, label, values, extra = {}) =>
+  f(name, label, "select", { options: values, ...extra });
+const note = f("note", "Пояснение к действию", "textarea");
+const iso = (value) => (value ? new Date(value).toISOString() : null);
+const local = (value) =>
+  value
+    ? new Date(new Date(value).getTime() - new Date(value).getTimezoneOffset() * 60000)
+        .toISOString()
+        .slice(0, 16)
+    : "";
+function Form({ fields, initial = {}, busy, onSubmit, label = "Сохранить" }) {
+  const [data, setData] = useState(() =>
+    Object.fromEntries(fields.map((x) => [x.name, initial[x.name] ?? x.value ?? ""])),
+  );
+  return (
+    <form
+      className="workflow-form"
+      onSubmit={(e) => {
+        e.preventDefault();
+        onSubmit(data);
+      }}
+    >
+      {fields.map((x) => (
+        <label key={x.name}>
+          {x.label}
+          {x.type === "select" ? (
+            <select
+              required={!x.optional}
+              value={data[x.name]}
+              onChange={(e) => setData({ ...data, [x.name]: e.target.value })}
+            >
+              <option value="">{x.optional ? "Не указан" : "Выберите"}</option>
+              {x.options.map((o) => (
+                <option key={o.value} value={o.value}>
+                  {o.label}
+                </option>
+              ))}
+            </select>
+          ) : x.type === "textarea" ? (
+            <textarea
+              required={!x.optional}
+              maxLength={x.max || 2000}
+              value={data[x.name]}
+              onChange={(e) => setData({ ...data, [x.name]: e.target.value })}
+            />
+          ) : (
+            <input
+              type={x.type}
+              required={!x.optional}
+              min={x.type === "number" ? 1 : undefined}
+              max={x.type === "number" ? 14 : undefined}
+              maxLength={x.max || 250}
+              value={data[x.name]}
+              onChange={(e) => setData({ ...data, [x.name]: e.target.value })}
+            />
+          )}
+        </label>
+      ))}
+      <button disabled={busy}>{label}</button>
+    </form>
+  );
 }
-export function ExchangeRegistry({houseId,role,api,canManage=false}){const [items,setItems]=useState([]),[notice,setNotice]=useState(""),[busy,setBusy]=useState(false),[edit,setEdit]=useState(null),[open,setOpen]=useState(false);
- useEffect(()=>{let active=true;api(role,`/v1/houses/${houseId}/exchange-channels`).then(v=>{if(active)setItems(v);}).catch(e=>{if(active&&e.status!==404)setNotice(e.message);});return()=>{active=false;};},[houseId,role]);
- async function save(d){setBusy(true);try{setItems(await api(role,`/v1/houses/${houseId}/exchange-channels${edit?`/${edit.id}`:""}`,{method:edit?"PUT":"POST",body:JSON.stringify({...d,revision:edit?.revision||0})}));setOpen(false);setNotice("Канал сохранён. Внешняя отправка не выполнялась.");}catch(e){setNotice(e.message);}finally{setBusy(false);}}
- return <details className="case-panel"><summary>Каналы организаций · {items.length}</summary><p>УК проверяет адресата, контакт и основание обмена до первой передачи. Кабинет открывается только по отдельному приглашению к выбранному пакету.</p>{notice&&<p role="status">{notice}</p>}{items.map(c=><div className="workflow-card" key={c.id}><strong>{participants[c.participant_type]} · {c.organization_name}</strong><p>{c.contact} · {c.mode==="PORTAL"?"Кабинет получателя":"Ручной обмен с подтверждающими документами"}</p><p>{c.state==="VERIFIED"?"Проверен":c.state==="RETIRED"?"Выведен из использования":"Требует проверки"} · {c.source_reference}</p>{canManage&&<button type="button" className="case-link" onClick={()=>{setEdit(c);setOpen(true);}}>Изменить канал</button>}</div>)}{canManage&&!open&&<button type="button" onClick={()=>{setEdit(null);setOpen(true);}}>Добавить канал организации</button>}{open&&<><Form key={edit?.id||"new"} initial={edit?{organizationName:edit.organization_name,participantType:edit.participant_type,mode:edit.mode,contact:edit.contact,sourceReference:edit.source_reference,disclosureScope:edit.disclosure_scope,state:edit.state}:{} } fields={[f("organizationName","Название организации"),select("participantType","Участник",Object.entries(participants).map(([value,label])=>({value,label}))),select("mode","Способ обмена",[{value:"MANUAL",label:"Сотрудник фиксирует обмен по документам"},{value:"PORTAL",label:"Получатель отвечает в отдельном кабинете"}]),f("contact","Проверенный контакт или адрес кабинета","textarea",{max:1000}),f("sourceReference","Как и на основании чего проверен канал","textarea"),f("disclosureScope","Допустимый состав передаваемых сведений","textarea"),select("state","Проверка канала",[{value:"DRAFT",label:"Ещё проверяем"},{value:"VERIFIED",label:"Канал проверен"},{value:"RETIRED",label:"Не использовать для новых передач"}]),f("reason","Причина изменения","textarea",{max:1000})]} busy={busy} onSubmit={save}/><button type="button" className="case-link" onClick={()=>setOpen(false)}>Закрыть форму</button></>}</details>;
+async function download(path, role, headers) {
+  const r = await fetch(path, { headers: headers(role) });
+  if (!r.ok) throw new Error("Документ недоступен. Обновите страницу и проверьте доступ.");
+  const a = document.createElement("a"),
+    url = URL.createObjectURL(await r.blob());
+  a.href = url;
+  a.download = path.endsWith("/print") ? "exchange-manifest.html" : "document";
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(url), 30000);
 }
-export function ControlPanel({houseId,role,api,renderCase}){const [data,setData]=useState(null),[notice,setNotice]=useState(""),[busy,setBusy]=useState(false),[filter,setFilter]=useState("ALL"),[detail,setDetail]=useState(null),[ctx,setCtx]=useState(null),[action,setAction]=useState(null),[pilot,setPilot]=useState(null),[overview,setOverview]=useState([]);
- async function load(){const [w,c]=await Promise.all([api(role,`/v1/houses/${houseId}/case-control`),api(role,`/v1/houses/${houseId}/case-context`)]);setData(w);setCtx(c);setOverview(await api(role,"/v1/case-control"));if(w.canManage)setPilot(await api(role,`/v1/houses/${houseId}/pilot`));}
- useEffect(()=>{setData(null);setDetail(null);setAction(null);setPilot(null);load().catch(e=>{if(e.status!==404)setNotice(e.message);});},[houseId,role]);
- async function run(path,body,method="POST"){setBusy(true);setNotice("");try{setData(await api(role,path,{method,body:JSON.stringify(body)}));setAction(null);await load();}catch(e){setNotice(e.message);}finally{setBusy(false);}}
- if(!data)return notice?<p role="status">{notice}</p>:null;
- const options=data.candidates.map(c=>({value:c.id,label:c.name}));
- return <details className="case-panel"><summary>Контроль обращений и замещение · {data.items.filter(i=>i.alerts.length).length} требуют внимания</summary><p>Срок следующего шага, задания и ответа организации проверяются отдельно. Финансовые материалы доступны только сотрудникам с отдельным допуском.</p>{notice&&<p role="status" className="case-notice">{notice}</p>}<div className="case-list">{overview.map(h=><div className="workflow-card" key={h.id}><strong>{h.address}</strong><p>В работе: {h.active} · Требуют внимания: {h.attention} · Просрочено: {h.overdue} · Без ответственного: {h.unassigned}</p></div>)}</div><label>Показать<select value={filter} onChange={e=>setFilter(e.target.value)}><option value="ALL">Все обращения</option>{Object.entries(alerts).map(([v,label])=><option key={v} value={v}>{label} · {data.items.filter(i=>i.alerts.includes(v)).length}</option>)}</select></label>{detail?renderCase({item:detail,context:ctx,role,onChange:c=>{setDetail(c);load().catch(e=>setNotice(e.message));},onClose:()=>setDetail(null)}):data.items.filter(i=>filter==="ALL"||i.alerts.includes(filter)).map(({item:c,deputyId,deputyName,alerts:a})=><article className="workflow-card" key={c.id}><strong>№ {c.number} · {c.description}</strong><p>Ответственный: {c.responsibleName} · Заместитель: {deputyName||"не назначен"}</p><p>{a.map(v=>alerts[v]).join(" · ")||"Открытых сигналов нет"}</p><div className="case-actions">{c.fullAccess&&<button type="button" className="case-link" onClick={()=>setDetail(c)}>Открыть обращение</button>}{c.status!=="CLOSED"&&(data.canManage||c.canManage)&&<button type="button" onClick={()=>setAction({case:c,mode:"assign",deputyId})}>Назначить ответственного и заместителя</button>}{deputyId===ctx?.actorId&&c.status!=="CLOSED"&&<button type="button" onClick={()=>setAction({case:c,mode:"takeover"})}>Подхватить как заместитель</button>}{c.status!=="CLOSED"&&(data.canManage||c.canManage)&&<button type="button" className="case-secondary" onClick={()=>setAction({case:c,mode:"escalate"})}>Передать вопрос руководителю</button>}</div></article>)}
- {!data.items.length&&<p>Обращений для контроля пока нет.</p>}{action&&<section className="workflow-card"><h4>Обращение № {action.case.number}</h4><Form key={`${action.case.id}:${action.mode}`} initial={action.mode==="assign"?{ownerId:action.case.responsibleUserId||"",deputyId:action.deputyId||""}:{}} fields={action.mode==="assign"?[select("ownerId","Ответственный",options.filter(o=>action.case.kind!=="PAYMENT"||data.candidates.find(c=>c.id===o.value)?.billingAccess)),select("deputyId","Заместитель",options.filter(o=>action.case.kind!=="PAYMENT"||data.candidates.find(c=>c.id===o.value)?.billingAccess),{optional:true}),f("reason","Основание назначения","textarea",{max:1000})]:action.mode==="takeover"?[note]:[select("targetId","Руководитель УК",options),f("reason","Что требует решения руководителя","textarea")]} busy={busy} onSubmit={d=>run(`/v1/cases/${action.case.id}/${action.mode==="assign"?"followup":action.mode==="takeover"?"takeover":"escalations"}`,{...d,revision:action.case.revision},action.mode==="assign"?"PUT":"POST")}/><button type="button" className="case-link" onClick={()=>setAction(null)}>Закрыть форму</button></section>}
- {data.escalations.map(e=><article className="workflow-card" key={e.id}><strong>Эскалация · {e.state==="OPEN"?"Ожидает руководителя":e.state==="ACKNOWLEDGED"?"Принята руководителем":"Решение зафиксировано"}</strong><p>{e.reason||"Материалы доступны сотруднику с допуском к обращению"}</p><p>{e.resolution}</p>{e.target_id===ctx?.actorId&&e.state!=="CLOSED"&&<Form fields={[note]} busy={busy} label={e.state==="OPEN"?"Принять в работу":"Зафиксировать решение"} onSubmit={d=>run(`/v1/case-escalations/${e.id}`,{...d,state:e.state==="OPEN"?"ACKNOWLEDGED":"CLOSED",revision:data.items.find(i=>i.item.id===e.case_id)?.item.revision},"PATCH")}/>}</article>)}
- {pilot&&<details className="workflow-card"><summary>Подготовка пилота для всех участников</summary><p>{pilot.ready?"Условия для сквозной приёмки отмечены. Пилот ещё не проводился.":"Подготовка продолжается. Сквозная приёмка — перед запуском пилота."}</p>{Object.entries(pilot.checks).map(([k,ok])=><p key={k}>{ok?"✓":"○"} {k.startsWith("CHANNEL_")?`Проверен канал: ${participants[k.slice(8)]}`:k==="TWO_COORDINATORS"?"Есть два сотрудника сопровождения":k==="TWO_BILLING_STAFF"?"Есть два сотрудника с финансовым допуском":"Зафиксирован план приёмки и восстановления"}</p>)}<Form initial={pilot.plan?{state:pilot.plan.state,scope:pilot.plan.scope,acceptanceReference:pilot.plan.acceptance_reference,restoreReference:pilot.plan.restore_reference,contactReference:pilot.plan.contact_reference,trainingReference:pilot.plan.training_reference,rollbackPlan:pilot.plan.rollback_plan}:{} } fields={[select("state","Состояние подготовки",[{value:"PREPARING",label:"Готовим"},{value:"READY_FOR_ACCEPTANCE",label:"Готово к сквозной приёмке"},{value:"PAUSED",label:"Подготовка приостановлена"}]),f("scope","Участники, дом и объём пилота","textarea",{max:3000}),f("acceptanceReference","План и подтверждения сквозной приёмки","textarea"),f("restoreReference","Результат проверки резервной копии и восстановления","textarea"),f("contactReference","Согласованные контакты и ответственные","textarea"),f("trainingReference","Подготовка участников и инструкции","textarea"),f("rollbackPlan","Когда и как остановить пилот и вернуться к прежнему процессу","textarea",{max:3000})]} busy={busy} onSubmit={async d=>{setBusy(true);try{setPilot(await api(role,`/v1/houses/${houseId}/pilot`,{method:"PUT",body:JSON.stringify({...d,revision:pilot.plan?.revision||0})}));setNotice("Подготовка пилота сохранена. Реальных отправок не было.");}catch(e){setNotice(e.message);}finally{setBusy(false);}}}/></details>}
- <details><summary>История контроля</summary>{data.history.map((h,n)=><p key={n}>{dates(h.created_at)} · {h.note}</p>)}</details><button type="button" className="case-link" onClick={()=>load().catch(e=>setNotice(e.message))}>Обновить контроль</button></details>;
+function Files({ files, packet, reply = false, role, headers, onError }) {
+  return (
+    <div>
+      {files?.map((v) => (
+        <button
+          type="button"
+          className="case-link"
+          key={v.id}
+          onClick={() =>
+            download(
+              `/v1/exchange-packets/${packet}/files/${v.id}?reply=${reply}`,
+              role,
+              headers,
+            ).catch((e) => onError(e.message))
+          }
+        >
+          {v.title} · {Math.ceil(v.size_bytes / 1024)} КБ
+        </button>
+      ))}
+    </div>
+  );
 }
-export function ExchangePortal({api,headers,brand,inviteToken=""}){const role=new URLSearchParams(location.search).get("demoSession")||"true";const [items,setItems]=useState([]),[notice,setNotice]=useState(""),[busy,setBusy]=useState(false),[token,setToken]=useState(inviteToken);
- async function load(){setItems(await api(role,"/v1/exchange/inbox"));}
- useEffect(()=>{load().catch(e=>setNotice(e.message));},[role]);
- async function run(path,body,method="POST"){setBusy(true);setNotice("");try{await api(role,path,{method,body:body instanceof FormData?body:JSON.stringify(body)});await load();}catch(e){setNotice(e.message);}finally{setBusy(false);}}
- return <main className="shell">{brand}<section className="hero"><div className="hero-copy"><h1>Кабинет получателя</h1><p>Здесь доступны только материалы, которые направила вам обслуживающая организация.</p></div></section><section className="case-workspace">{notice&&<p className="case-notice" role="status">{notice}</p>}{token&&<section className="case-panel"><h2>Доступ к пакету материалов</h2><p>Принимайте приглашение под своим аккаунтом MAX, если отправитель согласовал с вами участие. Ссылка не заменяет проверку полномочий организации.</p><button type="button" disabled={busy} onClick={async()=>{setBusy(true);try{await api(role,"/v1/exchange/accept",{method:"POST",body:JSON.stringify({token})});setToken("");localStorage.setItem("pulse-last-mode","/exchange/index.html");history.replaceState(null,"",`/exchange/index.html${location.hash}`);await load();}catch(e){setNotice(e.message);}finally{setBusy(false);}}}>Принять доступ</button></section>}{items.map(p=><article className="case-panel" key={p.id}><h2>{p.subject}</h2><strong>{states[p.state]}</strong><p>{p.statement}</p>{p.address_snapshot&&<p>{p.address_snapshot}</p>}<p>Основание передачи: {p.disclosure_basis}</p><p>Полномочия отправителя: {p.authority}</p><p>Состав: {p.materials_note}</p><p>Срок: {dates(p.due_at)} · {p.due_basis}</p><Files files={p.files} packet={p.id} role={role} headers={headers} onError={setNotice}/>{p.state==="SENT"&&<Form fields={[note]} busy={busy} label="Подтвердить получение" onSubmit={d=>run(`/v1/exchange/packets/${p.id}/acknowledge`,{...d,revision:p.revision})}/>} {p.answers.map(a=><div key={a.id} className="workflow-card"><strong>Ответ · версия {a.version} · {a.state==="DRAFT"?"Черновик, отправителю не виден":a.state==="RETURNED"?"Нужно уточнение":"Опубликован"}</strong><p>{a.answer}</p><p>{a.review_note}</p><Files files={a.files} packet={p.id} reply role={role} headers={headers} onError={setNotice}/></div>)}{p.state==="RECEIVED"&&<><Form key={p.revision} fields={[f("answer","Ответ организации","textarea",{max:6000})]} initial={{answer:p.answers.find(a=>a.state==="DRAFT")?.answer||""}} busy={busy} label="Сохранить черновик ответа" onSubmit={d=>run(`/v1/exchange/packets/${p.id}/reply`,{...d,revision:p.revision},"PUT")}/>{p.answers.some(a=>a.state==="DRAFT")&&<><form className="workflow-form" onSubmit={e=>{e.preventDefault();const file=e.target.elements.file.files[0],body=new FormData();body.append("file",file);run(`/v1/exchange/packets/${p.id}/files?${new URLSearchParams({revision:p.revision,title:file.name.slice(0,160)})}`,body);e.target.reset();}}><label>Приложить PDF, JPEG или PNG до 10 МБ<input type="file" name="file" required accept="application/pdf,image/jpeg,image/png"/></label><button disabled={busy}>Добавить файл ответа</button></form><Form fields={[note]} busy={busy} label="Опубликовать ответ для рассмотрения" onSubmit={d=>run(`/v1/exchange/packets/${p.id}/publish`,{...d,revision:p.revision})}/></>}</>}</article>)}{!items.length&&!token&&<section className="case-panel"><h2>Нет действующих пакетов</h2><p>Откройте приглашение от отправителя. При отзыве или истечении срока доступа материалы перестают отображаться.</p></section>}<button type="button" className="case-link" onClick={()=>load().catch(e=>setNotice(e.message))}>Обновить пакеты</button></section></main>;
+function RecipientLabel({ packet, channels }) {
+  const channel = packet.channel_snapshot
+    ? JSON.parse(packet.channel_snapshot)
+    : channels.find((c) => c.id === packet.channel_id);
+  return channel ? (
+    <p>
+      <strong>
+        {participants[channel.participant_type]} · {channel.organization_name}
+      </strong>
+      <br />
+      {channel.mode === "PORTAL" ? "Ответ в кабинете получателя" : "Ручной обмен с документами"}
+    </p>
+  ) : null;
+}
+function Draft({ item, channels, packet, onSubmit, busy }) {
+  const [versions, setVersions] = useState(packet?.files?.map((v) => v.version_id) || []),
+    [address, setAddress] = useState(!!packet?.include_address);
+  return (
+    <>
+      <p>
+        Выберите только материалы, необходимые получателю. Автор, история переписки и остальные
+        документы автоматически не передаются. Проверьте содержимое самих файлов.
+      </p>
+      <fieldset>
+        <legend>Документы для передачи</legend>
+        {item.documents.flatMap((d) =>
+          d.versions.map((v) => (
+            <label key={v.id}>
+              <input
+                type="checkbox"
+                checked={versions.includes(v.id)}
+                onChange={(e) =>
+                  setVersions(
+                    e.target.checked ? [...versions, v.id] : versions.filter((i) => i !== v.id),
+                  )
+                }
+              />
+              {d.title} · версия {v.version}
+            </label>
+          )),
+        )}
+        {!item.documents.length && <p>Документов нет. Можно подготовить текстовое обращение.</p>}
+      </fieldset>
+      <label>
+        <input type="checkbox" checked={address} onChange={(e) => setAddress(e.target.checked)} />
+        Передать адрес дома
+      </label>
+      <Form
+        initial={
+          packet
+            ? {
+                channelId: packet.channel_id,
+                subject: packet.subject,
+                statement: packet.statement,
+                disclosureBasis: packet.disclosure_basis,
+                authority: packet.authority,
+                materialsNote: packet.materials_note,
+                dueBasis: packet.due_basis,
+                dueAt: local(packet.due_at),
+              }
+            : {}
+        }
+        fields={[
+          select(
+            "channelId",
+            "Проверенный получатель",
+            channels
+              .filter((c) => c.state === "VERIFIED")
+              .map((c) => ({
+                value: c.id,
+                label: `${participants[c.participant_type]} · ${c.organization_name} · ${c.mode === "PORTAL" ? "Кабинет получателя" : "Ручной обмен"}`,
+              })),
+          ),
+          f("subject", "Тема", "text", { max: 200 }),
+          f("statement", "Текст для организации", "textarea", { max: 5000 }),
+          f("disclosureBasis", "Основание передачи выбранных сведений", "textarea", { max: 3000 }),
+          f("authority", "Полномочия отправителя", "textarea"),
+          f("materialsNote", "Почему выбран именно этот состав материалов", "textarea", {
+            max: 1000,
+          }),
+          f("dueAt", "Срок ответа, если установлен", "datetime-local", { optional: true }),
+          f("dueBasis", "Основание срока или причина его отсутствия", "textarea", { max: 1000 }),
+          f("reason", "Причина подготовки версии", "textarea", { max: 1000 }),
+        ]}
+        busy={busy}
+        label="Сохранить черновик пакета"
+        onSubmit={(d) =>
+          onSubmit({ ...d, versionIds: versions, includeAddress: address, dueAt: iso(d.dueAt) })
+        }
+      />
+    </>
+  );
+}
+export function CaseExchange({ item, role, api, headers, onChange }) {
+  const [data, setData] = useState(null),
+    [channels, setChannels] = useState([]),
+    [notice, setNotice] = useState(""),
+    [busy, setBusy] = useState(false),
+    [action, setAction] = useState(null),
+    [token, setToken] = useState(""),
+    [username, setUsername] = useState("");
+  useEffect(() => {
+    let active = true;
+    api(role, `/v1/cases/${item.id}/exchange`)
+      .then((w) => {
+        if (active) {
+          setData(w);
+          if (w.canWork)
+            api(role, `/v1/houses/${item.houseId}/exchange-channels`)
+              .then((c) => {
+                if (active) setChannels(c);
+              })
+              .catch((e) => {
+                if (active) setNotice(e.message);
+              });
+        }
+      })
+      .catch((e) => {
+        if (active) setNotice(e.message);
+      });
+    return () => {
+      active = false;
+    };
+  }, [item.id, item.revision, role]);
+  async function run(path, body, method = "POST") {
+    setBusy(true);
+    setNotice("");
+    try {
+      const result = await api(role, path, {
+        method,
+        body: JSON.stringify({ ...body, caseRevision: item.revision }),
+      });
+      if (result.packets) setData(result);
+      if (result.token)
+        setToken(
+          username
+            ? `https://max.ru/${username}?startapp=${result.token}`
+            : `${location.origin}/exchange/index.html?invite=${encodeURIComponent(result.token)}`,
+        );
+      setAction(null);
+      onChange(await api(role, `/v1/cases/${item.id}`));
+    } catch (e) {
+      setNotice(e.message);
+    } finally {
+      setBusy(false);
+    }
+  }
+  useEffect(() => {
+    api(role, "/v1/access/config")
+      .then((c) => setUsername(c.botUsername || ""))
+      .catch(() => {});
+  }, [role]);
+  const docOptions = item.documents.flatMap((d) =>
+    d.versions.map((v) => ({ value: v.id, label: `${d.title} · версия ${v.version}` })),
+  );
+  const proof = select("evidenceVersionId", "Подтверждающий документ этого обращения", docOptions);
+  const doAction = (p, mode, fields, label) => setAction({ p, mode, fields, label });
+  return (
+    <section className="case-workflow">
+      <h3>{data?.canWork ? "Передача материалов организации" : "Ответы организаций"}</h3>
+      <p className="muted">
+        {data?.canWork
+          ? "Получение и ответ — отдельные шаги. После ответа нужен разбор сотрудником. Перерасчёт проверяется отдельно в разделе начислений."
+          : "Мы сами свяжемся с нужной организацией. Если понадобится что-то уточнить у вас, напишем в обращении."}
+      </p>
+      {notice && (
+        <p className="case-notice" role="status">
+          {notice}
+        </p>
+      )}
+      {token && (
+        <div className="case-next">
+          <strong>Ссылка получателя — покажите только согласованному участнику</strong>
+          <p>
+            Скопируйте сейчас. Полный секрет ссылки повторно не показывается. Получателю нужно
+            открыть её в MAX под своим аккаунтом.
+          </p>
+          <textarea readOnly aria-label="Ссылка получателя" value={token} />
+          <button
+            type="button"
+            className="case-secondary"
+            onClick={() =>
+              navigator.clipboard
+                .writeText(token)
+                .catch(() => setNotice("Выделите и скопируйте ссылку вручную"))
+            }
+          >
+            Скопировать ссылку
+          </button>
+        </div>
+      )}
+      {data?.packets.map((p) => (
+        <article className="workflow-card" key={p.id}>
+          <h4>{states[p.state]}</h4>
+          {data.canWork && (
+            <>
+              <RecipientLabel packet={p} channels={channels} />
+              <strong>{p.subject}</strong>
+              <p>{p.statement}</p>
+              <p>{p.address_snapshot || "Адрес дома в пакет не включён"}</p>
+              <Files
+                files={p.files}
+                packet={p.id}
+                role={role}
+                headers={headers}
+                onError={setNotice}
+              />
+            </>
+          )}
+          <p>
+            Ответ: {dates(p.due_at)} · {p.due_basis}
+          </p>
+          {p.answers?.map((a) => (
+            <div key={a.id || a.reviewed_at} className="case-next">
+              <strong>
+                {a.state === "RETURNED"
+                  ? "Ответ возвращён на уточнение"
+                  : a.state === "ACCEPTED"
+                    ? "Проверенный ответ"
+                    : "Получен ответ"}
+              </strong>
+              <p>{data.canWork ? a.answer : a.resident_summary}</p>
+              {data.canWork && (
+                <>
+                  <p>{a.review_note}</p>
+                  <Files
+                    files={a.files}
+                    packet={p.id}
+                    reply
+                    role={role}
+                    headers={headers}
+                    onError={setNotice}
+                  />
+                </>
+              )}
+            </div>
+          ))}
+          {data.canWork && (
+            <>
+              <div className="case-actions">
+                {p.state !== "DRAFT" && (
+                  <button
+                    type="button"
+                    className="case-link"
+                    onClick={() =>
+                      download(`/v1/exchange-packets/${p.id}/print`, role, headers).catch((e) =>
+                        setNotice(e.message),
+                      )
+                    }
+                  >
+                    Скачать состав и текст пакета
+                  </button>
+                )}
+                {p.state === "DRAFT" && (
+                  <>
+                    <button
+                      type="button"
+                      onClick={() => doAction(p, "edit", [], "Изменить состав")}
+                    >
+                      Изменить черновик
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => doAction(p, "seal", [note], "Зафиксировать состав")}
+                    >
+                      Проверить и зафиксировать состав
+                    </button>
+                  </>
+                )}
+                {p.state === "READY" && (
+                  <button
+                    type="button"
+                    onClick={() =>
+                      doAction(p, "send", [note, proof], "Зафиксировать фактическую отправку")
+                    }
+                  >
+                    Зафиксировать отправку
+                  </button>
+                )}
+                {p.state === "SENT" && JSON.parse(p.channel_snapshot || "{}").mode === "MANUAL" && (
+                  <button
+                    type="button"
+                    onClick={() =>
+                      doAction(p, "receive", [note, proof], "Подтвердить получение документом")
+                    }
+                  >
+                    Подтвердить получение
+                  </button>
+                )}
+                {p.state === "RECEIVED" &&
+                  JSON.parse(p.channel_snapshot || "{}").mode === "MANUAL" && (
+                    <button
+                      type="button"
+                      onClick={() =>
+                        doAction(
+                          p,
+                          "answer",
+                          [f("answer", "Полученный ответ", "textarea", { max: 6000 }), proof],
+                          "Зафиксировать ответ из документа",
+                        )
+                      }
+                    >
+                      Внести полученный ответ
+                    </button>
+                  )}
+                {p.state === "ANSWERED" && (
+                  <button
+                    type="button"
+                    onClick={() =>
+                      doAction(
+                        p,
+                        "review",
+                        [
+                          select("decision", "Решение", [
+                            { value: "ACCEPT", label: "Рассмотрен, сохранить результат" },
+                            { value: "CLARIFY", label: "Нужно уточнение организации" },
+                          ]),
+                          f("note", "Что проверено и почему принято решение", "textarea", {
+                            max: 3000,
+                          }),
+                          f("residentSummary", "Понятный итог для жителя", "textarea", {
+                            max: 3000,
+                          }),
+                        ],
+                        "Сохранить разбор ответа",
+                      )
+                    }
+                  >
+                    Рассмотреть ответ
+                  </button>
+                )}
+                {["SENT", "RECEIVED"].includes(p.state) &&
+                  JSON.parse(p.channel_snapshot || "{}").mode === "PORTAL" && (
+                    <button
+                      type="button"
+                      onClick={() =>
+                        doAction(
+                          p,
+                          "invitations",
+                          [
+                            f("recipientName", "Проверенный получатель"),
+                            f(
+                              "participationBasis",
+                              "Основание его участия и способ проверки",
+                              "textarea",
+                            ),
+                            f("days", "Срок доступа в днях (1–14)", "number"),
+                          ],
+                          "Создать ссылку получателя",
+                        )
+                      }
+                    >
+                      Доступ получателю
+                    </button>
+                  )}
+                {!["DRAFT", "REVIEWED", "CANCELLED"].includes(p.state) && (
+                  <button
+                    className="case-secondary"
+                    type="button"
+                    onClick={() =>
+                      doAction(
+                        p,
+                        "schedule",
+                        [
+                          f("dueAt", "Новый срок, если установлен", "datetime-local", {
+                            optional: true,
+                          }),
+                          f("dueBasis", "Основание срока", "textarea", { max: 1000 }),
+                          f("reason", "Причина изменения", "textarea", { max: 1000 }),
+                        ],
+                        "Сохранить срок",
+                      )
+                    }
+                  >
+                    Уточнить срок
+                  </button>
+                )}
+                {!["REVIEWED", "CANCELLED"].includes(p.state) && (
+                  <button
+                    type="button"
+                    className="case-link"
+                    onClick={() => doAction(p, "cancel", [note], "Отменить с пояснением")}
+                  >
+                    Отменить передачу
+                  </button>
+                )}
+              </div>
+              {p.invitations?.map((i) => (
+                <p key={i.id}>
+                  {i.recipient_name} · до {dates(i.expires_at)} ·{" "}
+                  {i.revoked_at
+                    ? "Доступ отозван"
+                    : i.accepted_by
+                      ? "Доступ принят"
+                      : "Ожидает принятия"}
+                  {!i.revoked_at && (
+                    <button
+                      type="button"
+                      className="case-link"
+                      disabled={busy}
+                      onClick={() =>
+                        run(`/v1/exchange-invitations/${i.id}/revoke`, {
+                          revision: p.revision,
+                          note: "Доступ получателя отозван сотрудником",
+                        })
+                      }
+                    >
+                      Отозвать доступ
+                    </button>
+                  )}
+                </p>
+              ))}
+              <details>
+                <summary>История передачи</summary>
+                {p.history?.map((h, n) => (
+                  <p key={n}>
+                    {dates(h.created_at)} · {h.note}
+                  </p>
+                ))}
+              </details>
+            </>
+          )}
+        </article>
+      ))}
+      {action && (
+        <div className="case-panel">
+          <h4>{action.label}</h4>
+          {action.mode === "edit" || action.mode === "new" ? (
+            <Draft
+              key={action.p?.id || "new"}
+              item={item}
+              channels={channels}
+              packet={action.p}
+              busy={busy}
+              onSubmit={(d) =>
+                run(
+                  `/v1/cases/${item.id}/exchange${action.p ? `/${action.p.id}` : ""}`,
+                  { ...d, revision: action.p?.revision || 0 },
+                  action.p ? "PUT" : "POST",
+                )
+              }
+            />
+          ) : (
+            <Form
+              key={`${action.p.id}:${action.mode}`}
+              fields={action.fields}
+              initial={
+                action.mode === "schedule"
+                  ? { dueAt: local(action.p.due_at), dueBasis: action.p.due_basis }
+                  : action.mode === "invitations"
+                    ? { days: "7" }
+                    : {}
+              }
+              busy={busy}
+              label={action.label}
+              onSubmit={(d) =>
+                run(`/v1/exchange-packets/${action.p.id}/${action.mode}`, {
+                  ...d,
+                  revision: action.p.revision,
+                  ...(action.mode === "schedule" ? { dueAt: iso(d.dueAt) } : {}),
+                  ...(action.mode === "invitations" ? { days: Number(d.days) } : {}),
+                })
+              }
+            />
+          )}
+          <button
+            type="button"
+            className="case-link"
+            disabled={busy}
+            onClick={() => setAction(null)}
+          >
+            Закрыть форму
+          </button>
+        </div>
+      )}
+      {data?.canWork && !action && (
+        <button
+          type="button"
+          className="case-secondary"
+          onClick={() => setAction({ mode: "new", label: "Новая передача материалов" })}
+        >
+          Подготовить пакет организации
+        </button>
+      )}
+    </section>
+  );
+}
+export function ExchangeRegistry({ houseId, role, api, canManage = false }) {
+  const [items, setItems] = useState([]),
+    [notice, setNotice] = useState(""),
+    [busy, setBusy] = useState(false),
+    [edit, setEdit] = useState(null),
+    [open, setOpen] = useState(false);
+  useEffect(() => {
+    let active = true;
+    api(role, `/v1/houses/${houseId}/exchange-channels`)
+      .then((v) => {
+        if (active) setItems(v);
+      })
+      .catch((e) => {
+        if (active && e.status !== 404) setNotice(e.message);
+      });
+    return () => {
+      active = false;
+    };
+  }, [houseId, role]);
+  async function save(d) {
+    setBusy(true);
+    try {
+      setItems(
+        await api(role, `/v1/houses/${houseId}/exchange-channels${edit ? `/${edit.id}` : ""}`, {
+          method: edit ? "PUT" : "POST",
+          body: JSON.stringify({ ...d, revision: edit?.revision || 0 }),
+        }),
+      );
+      setOpen(false);
+      setNotice("Канал сохранён. Внешняя отправка не выполнялась.");
+    } catch (e) {
+      setNotice(e.message);
+    } finally {
+      setBusy(false);
+    }
+  }
+  return (
+    <details className="case-panel">
+      <summary>Каналы организаций · {items.length}</summary>
+      <p>
+        УК проверяет адресата, контакт и основание обмена до первой передачи. Кабинет открывается
+        только по отдельному приглашению к выбранному пакету.
+      </p>
+      {notice && <p role="status">{notice}</p>}
+      {items.map((c) => (
+        <div className="workflow-card" key={c.id}>
+          <strong>
+            {participants[c.participant_type]} · {c.organization_name}
+          </strong>
+          <p>
+            {c.contact} ·{" "}
+            {c.mode === "PORTAL"
+              ? "Кабинет получателя"
+              : "Ручной обмен с подтверждающими документами"}
+          </p>
+          <p>
+            {c.state === "VERIFIED"
+              ? "Проверен"
+              : c.state === "RETIRED"
+                ? "Выведен из использования"
+                : "Требует проверки"}{" "}
+            · {c.source_reference}
+          </p>
+          {canManage && (
+            <button
+              type="button"
+              className="case-link"
+              onClick={() => {
+                setEdit(c);
+                setOpen(true);
+              }}
+            >
+              Изменить канал
+            </button>
+          )}
+        </div>
+      ))}
+      {canManage && !open && (
+        <button
+          type="button"
+          onClick={() => {
+            setEdit(null);
+            setOpen(true);
+          }}
+        >
+          Добавить канал организации
+        </button>
+      )}
+      {open && (
+        <>
+          <Form
+            key={edit?.id || "new"}
+            initial={
+              edit
+                ? {
+                    organizationName: edit.organization_name,
+                    participantType: edit.participant_type,
+                    mode: edit.mode,
+                    contact: edit.contact,
+                    sourceReference: edit.source_reference,
+                    disclosureScope: edit.disclosure_scope,
+                    state: edit.state,
+                  }
+                : {}
+            }
+            fields={[
+              f("organizationName", "Название организации"),
+              select(
+                "participantType",
+                "Участник",
+                Object.entries(participants).map(([value, label]) => ({ value, label })),
+              ),
+              select("mode", "Способ обмена", [
+                { value: "MANUAL", label: "Сотрудник фиксирует обмен по документам" },
+                { value: "PORTAL", label: "Получатель отвечает в отдельном кабинете" },
+              ]),
+              f("contact", "Проверенный контакт или адрес кабинета", "textarea", { max: 1000 }),
+              f("sourceReference", "Как и на основании чего проверен канал", "textarea"),
+              f("disclosureScope", "Допустимый состав передаваемых сведений", "textarea"),
+              select("state", "Проверка канала", [
+                { value: "DRAFT", label: "Ещё проверяем" },
+                { value: "VERIFIED", label: "Канал проверен" },
+                { value: "RETIRED", label: "Не использовать для новых передач" },
+              ]),
+              f("reason", "Причина изменения", "textarea", { max: 1000 }),
+            ]}
+            busy={busy}
+            onSubmit={save}
+          />
+          <button type="button" className="case-link" onClick={() => setOpen(false)}>
+            Закрыть форму
+          </button>
+        </>
+      )}
+    </details>
+  );
+}
+export function ControlPanel({ houseId, role, api, renderCase }) {
+  const [data, setData] = useState(null),
+    [notice, setNotice] = useState(""),
+    [busy, setBusy] = useState(false),
+    [filter, setFilter] = useState("ALL"),
+    [detail, setDetail] = useState(null),
+    [ctx, setCtx] = useState(null),
+    [action, setAction] = useState(null),
+    [pilot, setPilot] = useState(null),
+    [overview, setOverview] = useState([]);
+  async function load() {
+    const [w, c] = await Promise.all([
+      api(role, `/v1/houses/${houseId}/case-control`),
+      api(role, `/v1/houses/${houseId}/case-context`),
+    ]);
+    setData(w);
+    setCtx(c);
+    setOverview(await api(role, "/v1/case-control"));
+    if (w.canManage) setPilot(await api(role, `/v1/houses/${houseId}/pilot`));
+  }
+  useEffect(() => {
+    setData(null);
+    setDetail(null);
+    setAction(null);
+    setPilot(null);
+    load().catch((e) => {
+      if (e.status !== 404) setNotice(e.message);
+    });
+  }, [houseId, role]);
+  async function run(path, body, method = "POST") {
+    setBusy(true);
+    setNotice("");
+    try {
+      setData(await api(role, path, { method, body: JSON.stringify(body) }));
+      setAction(null);
+      await load();
+    } catch (e) {
+      setNotice(e.message);
+    } finally {
+      setBusy(false);
+    }
+  }
+  if (!data) return notice ? <p role="status">{notice}</p> : null;
+  const options = data.candidates.map((c) => ({ value: c.id, label: c.name }));
+  return (
+    <details className="case-panel">
+      <summary>
+        Контроль обращений и замещение · {data.items.filter((i) => i.alerts.length).length} требуют
+        внимания
+      </summary>
+      <p>
+        Срок следующего шага, задания и ответа организации проверяются отдельно. Финансовые
+        материалы доступны только сотрудникам с отдельным допуском.
+      </p>
+      {notice && (
+        <p role="status" className="case-notice">
+          {notice}
+        </p>
+      )}
+      <div className="case-list">
+        {overview.map((h) => (
+          <div className="workflow-card" key={h.id}>
+            <strong>{h.address}</strong>
+            <p>
+              В работе: {h.active} · Требуют внимания: {h.attention} · Просрочено: {h.overdue} · Без
+              ответственного: {h.unassigned}
+            </p>
+          </div>
+        ))}
+      </div>
+      <label>
+        Показать
+        <select value={filter} onChange={(e) => setFilter(e.target.value)}>
+          <option value="ALL">Все обращения</option>
+          {Object.entries(alerts).map(([v, label]) => (
+            <option key={v} value={v}>
+              {label} · {data.items.filter((i) => i.alerts.includes(v)).length}
+            </option>
+          ))}
+        </select>
+      </label>
+      {detail
+        ? renderCase({
+            item: detail,
+            context: ctx,
+            role,
+            onChange: (c) => {
+              setDetail(c);
+              load().catch((e) => setNotice(e.message));
+            },
+            onClose: () => setDetail(null),
+          })
+        : data.items
+            .filter((i) => filter === "ALL" || i.alerts.includes(filter))
+            .map(({ item: c, deputyId, deputyName, alerts: a }) => (
+              <article className="workflow-card" key={c.id}>
+                <strong>
+                  № {c.number} · {c.description}
+                </strong>
+                <p>
+                  Ответственный: {c.responsibleName} · Заместитель: {deputyName || "не назначен"}
+                </p>
+                <p>{a.map((v) => alerts[v]).join(" · ") || "Открытых сигналов нет"}</p>
+                <div className="case-actions">
+                  {c.fullAccess && (
+                    <button type="button" className="case-link" onClick={() => setDetail(c)}>
+                      Открыть обращение
+                    </button>
+                  )}
+                  {c.status !== "CLOSED" && (data.canManage || c.canManage) && (
+                    <button
+                      type="button"
+                      onClick={() => setAction({ case: c, mode: "assign", deputyId })}
+                    >
+                      Назначить ответственного и заместителя
+                    </button>
+                  )}
+                  {deputyId === ctx?.actorId && c.status !== "CLOSED" && (
+                    <button type="button" onClick={() => setAction({ case: c, mode: "takeover" })}>
+                      Подхватить как заместитель
+                    </button>
+                  )}
+                  {c.status !== "CLOSED" && (data.canManage || c.canManage) && (
+                    <button
+                      type="button"
+                      className="case-secondary"
+                      onClick={() => setAction({ case: c, mode: "escalate" })}
+                    >
+                      Передать вопрос руководителю
+                    </button>
+                  )}
+                </div>
+              </article>
+            ))}
+      {!data.items.length && <p>Обращений для контроля пока нет.</p>}
+      {action && (
+        <section className="workflow-card">
+          <h4>Обращение № {action.case.number}</h4>
+          <Form
+            key={`${action.case.id}:${action.mode}`}
+            initial={
+              action.mode === "assign"
+                ? { ownerId: action.case.responsibleUserId || "", deputyId: action.deputyId || "" }
+                : {}
+            }
+            fields={
+              action.mode === "assign"
+                ? [
+                    select(
+                      "ownerId",
+                      "Ответственный",
+                      options.filter(
+                        (o) =>
+                          action.case.kind !== "PAYMENT" ||
+                          data.candidates.find((c) => c.id === o.value)?.billingAccess,
+                      ),
+                    ),
+                    select(
+                      "deputyId",
+                      "Заместитель",
+                      options.filter(
+                        (o) =>
+                          action.case.kind !== "PAYMENT" ||
+                          data.candidates.find((c) => c.id === o.value)?.billingAccess,
+                      ),
+                      { optional: true },
+                    ),
+                    f("reason", "Основание назначения", "textarea", { max: 1000 }),
+                  ]
+                : action.mode === "takeover"
+                  ? [note]
+                  : [
+                      select("targetId", "Руководитель УК", options),
+                      f("reason", "Что требует решения руководителя", "textarea"),
+                    ]
+            }
+            busy={busy}
+            onSubmit={(d) =>
+              run(
+                `/v1/cases/${action.case.id}/${action.mode === "assign" ? "followup" : action.mode === "takeover" ? "takeover" : "escalations"}`,
+                { ...d, revision: action.case.revision },
+                action.mode === "assign" ? "PUT" : "POST",
+              )
+            }
+          />
+          <button type="button" className="case-link" onClick={() => setAction(null)}>
+            Закрыть форму
+          </button>
+        </section>
+      )}
+      {data.escalations.map((e) => (
+        <article className="workflow-card" key={e.id}>
+          <strong>
+            Эскалация ·{" "}
+            {e.state === "OPEN"
+              ? "Ожидает руководителя"
+              : e.state === "ACKNOWLEDGED"
+                ? "Принята руководителем"
+                : "Решение зафиксировано"}
+          </strong>
+          <p>{e.reason || "Материалы доступны сотруднику с допуском к обращению"}</p>
+          <p>{e.resolution}</p>
+          {e.target_id === ctx?.actorId && e.state !== "CLOSED" && (
+            <Form
+              fields={[note]}
+              busy={busy}
+              label={e.state === "OPEN" ? "Принять в работу" : "Зафиксировать решение"}
+              onSubmit={(d) =>
+                run(
+                  `/v1/case-escalations/${e.id}`,
+                  {
+                    ...d,
+                    state: e.state === "OPEN" ? "ACKNOWLEDGED" : "CLOSED",
+                    revision: data.items.find((i) => i.item.id === e.case_id)?.item.revision,
+                  },
+                  "PATCH",
+                )
+              }
+            />
+          )}
+        </article>
+      ))}
+      {pilot && (
+        <details className="workflow-card">
+          <summary>Подготовка пилота для всех участников</summary>
+          <p>
+            {pilot.ready
+              ? "Условия для сквозной приёмки отмечены. Пилот ещё не проводился."
+              : "Подготовка продолжается. Сквозная приёмка — перед запуском пилота."}
+          </p>
+          {Object.entries(pilot.checks).map(([k, ok]) => (
+            <p key={k}>
+              {ok ? "✓" : "○"}{" "}
+              {k.startsWith("CHANNEL_")
+                ? `Проверен канал: ${participants[k.slice(8)]}`
+                : k === "TWO_COORDINATORS"
+                  ? "Есть два сотрудника сопровождения"
+                  : k === "TWO_BILLING_STAFF"
+                    ? "Есть два сотрудника с финансовым допуском"
+                    : "Зафиксирован план приёмки и восстановления"}
+            </p>
+          ))}
+          <Form
+            initial={
+              pilot.plan
+                ? {
+                    state: pilot.plan.state,
+                    scope: pilot.plan.scope,
+                    acceptanceReference: pilot.plan.acceptance_reference,
+                    restoreReference: pilot.plan.restore_reference,
+                    contactReference: pilot.plan.contact_reference,
+                    trainingReference: pilot.plan.training_reference,
+                    rollbackPlan: pilot.plan.rollback_plan,
+                  }
+                : {}
+            }
+            fields={[
+              select("state", "Состояние подготовки", [
+                { value: "PREPARING", label: "Готовим" },
+                { value: "READY_FOR_ACCEPTANCE", label: "Готово к сквозной приёмке" },
+                { value: "PAUSED", label: "Подготовка приостановлена" },
+              ]),
+              f("scope", "Участники, дом и объём пилота", "textarea", { max: 3000 }),
+              f("acceptanceReference", "План и подтверждения сквозной приёмки", "textarea"),
+              f(
+                "restoreReference",
+                "Результат проверки резервной копии и восстановления",
+                "textarea",
+              ),
+              f("contactReference", "Согласованные контакты и ответственные", "textarea"),
+              f("trainingReference", "Подготовка участников и инструкции", "textarea"),
+              f(
+                "rollbackPlan",
+                "Когда и как остановить пилот и вернуться к прежнему процессу",
+                "textarea",
+                { max: 3000 },
+              ),
+            ]}
+            busy={busy}
+            onSubmit={async (d) => {
+              setBusy(true);
+              try {
+                setPilot(
+                  await api(role, `/v1/houses/${houseId}/pilot`, {
+                    method: "PUT",
+                    body: JSON.stringify({ ...d, revision: pilot.plan?.revision || 0 }),
+                  }),
+                );
+                setNotice("Подготовка пилота сохранена. Реальных отправок не было.");
+              } catch (e) {
+                setNotice(e.message);
+              } finally {
+                setBusy(false);
+              }
+            }}
+          />
+        </details>
+      )}
+      <details>
+        <summary>История контроля</summary>
+        {data.history.map((h, n) => (
+          <p key={n}>
+            {dates(h.created_at)} · {h.note}
+          </p>
+        ))}
+      </details>
+      <button
+        type="button"
+        className="case-link"
+        onClick={() => load().catch((e) => setNotice(e.message))}
+      >
+        Обновить контроль
+      </button>
+    </details>
+  );
+}
+export function ExchangePortal({ api, headers, brand, inviteToken = "" }) {
+  const role = new URLSearchParams(location.search).get("demoSession") || "true";
+  const [items, setItems] = useState([]),
+    [notice, setNotice] = useState(""),
+    [busy, setBusy] = useState(false),
+    [token, setToken] = useState(inviteToken);
+  async function load() {
+    setItems(await api(role, "/v1/exchange/inbox"));
+  }
+  useEffect(() => {
+    load().catch((e) => setNotice(e.message));
+  }, [role]);
+  async function run(path, body, method = "POST") {
+    setBusy(true);
+    setNotice("");
+    try {
+      await api(role, path, {
+        method,
+        body: body instanceof FormData ? body : JSON.stringify(body),
+      });
+      await load();
+    } catch (e) {
+      setNotice(e.message);
+    } finally {
+      setBusy(false);
+    }
+  }
+  return (
+    <main className="shell">
+      {brand}
+      <section className="hero">
+        <div className="hero-copy">
+          <h1>Кабинет получателя</h1>
+          <p>Здесь доступны только материалы, которые направила вам обслуживающая организация.</p>
+        </div>
+      </section>
+      <section className="case-workspace">
+        {notice && (
+          <p className="case-notice" role="status">
+            {notice}
+          </p>
+        )}
+        {token && (
+          <section className="case-panel">
+            <h2>Доступ к пакету материалов</h2>
+            <p>
+              Принимайте приглашение под своим аккаунтом MAX, если отправитель согласовал с вами
+              участие. Ссылка не заменяет проверку полномочий организации.
+            </p>
+            <button
+              type="button"
+              disabled={busy}
+              onClick={async () => {
+                setBusy(true);
+                try {
+                  await api(role, "/v1/exchange/accept", {
+                    method: "POST",
+                    body: JSON.stringify({ token }),
+                  });
+                  setToken("");
+                  localStorage.setItem("pulse-last-mode", "/exchange/index.html");
+                  history.replaceState(null, "", `/exchange/index.html${location.hash}`);
+                  await load();
+                } catch (e) {
+                  setNotice(e.message);
+                } finally {
+                  setBusy(false);
+                }
+              }}
+            >
+              Принять доступ
+            </button>
+          </section>
+        )}
+        {items.map((p) => (
+          <article className="case-panel" key={p.id}>
+            <h2>{p.subject}</h2>
+            <strong>{states[p.state]}</strong>
+            <p>{p.statement}</p>
+            {p.address_snapshot && <p>{p.address_snapshot}</p>}
+            <p>Основание передачи: {p.disclosure_basis}</p>
+            <p>Полномочия отправителя: {p.authority}</p>
+            <p>Состав: {p.materials_note}</p>
+            <p>
+              Срок: {dates(p.due_at)} · {p.due_basis}
+            </p>
+            <Files
+              files={p.files}
+              packet={p.id}
+              role={role}
+              headers={headers}
+              onError={setNotice}
+            />
+            {p.state === "SENT" && (
+              <Form
+                fields={[note]}
+                busy={busy}
+                label="Подтвердить получение"
+                onSubmit={(d) =>
+                  run(`/v1/exchange/packets/${p.id}/acknowledge`, { ...d, revision: p.revision })
+                }
+              />
+            )}{" "}
+            {p.answers.map((a) => (
+              <div key={a.id} className="workflow-card">
+                <strong>
+                  Ответ · версия {a.version} ·{" "}
+                  {a.state === "DRAFT"
+                    ? "Черновик, отправителю не виден"
+                    : a.state === "RETURNED"
+                      ? "Нужно уточнение"
+                      : "Опубликован"}
+                </strong>
+                <p>{a.answer}</p>
+                <p>{a.review_note}</p>
+                <Files
+                  files={a.files}
+                  packet={p.id}
+                  reply
+                  role={role}
+                  headers={headers}
+                  onError={setNotice}
+                />
+              </div>
+            ))}
+            {p.state === "RECEIVED" && (
+              <>
+                <Form
+                  key={p.revision}
+                  fields={[f("answer", "Ответ организации", "textarea", { max: 6000 })]}
+                  initial={{ answer: p.answers.find((a) => a.state === "DRAFT")?.answer || "" }}
+                  busy={busy}
+                  label="Сохранить черновик ответа"
+                  onSubmit={(d) =>
+                    run(`/v1/exchange/packets/${p.id}/reply`, { ...d, revision: p.revision }, "PUT")
+                  }
+                />
+                {p.answers.some((a) => a.state === "DRAFT") && (
+                  <>
+                    <form
+                      className="workflow-form"
+                      onSubmit={(e) => {
+                        e.preventDefault();
+                        const file = e.target.elements.file.files[0],
+                          body = new FormData();
+                        body.append("file", file);
+                        run(
+                          `/v1/exchange/packets/${p.id}/files?${new URLSearchParams({ revision: p.revision, title: file.name.slice(0, 160) })}`,
+                          body,
+                        );
+                        e.target.reset();
+                      }}
+                    >
+                      <label>
+                        Приложить PDF, JPEG или PNG до 10 МБ
+                        <input
+                          type="file"
+                          name="file"
+                          required
+                          accept="application/pdf,image/jpeg,image/png"
+                        />
+                      </label>
+                      <button disabled={busy}>Добавить файл ответа</button>
+                    </form>
+                    <Form
+                      fields={[note]}
+                      busy={busy}
+                      label="Опубликовать ответ для рассмотрения"
+                      onSubmit={(d) =>
+                        run(`/v1/exchange/packets/${p.id}/publish`, { ...d, revision: p.revision })
+                      }
+                    />
+                  </>
+                )}
+              </>
+            )}
+          </article>
+        ))}
+        {!items.length && !token && (
+          <section className="case-panel">
+            <h2>Нет действующих пакетов</h2>
+            <p>
+              Откройте приглашение от отправителя. При отзыве или истечении срока доступа материалы
+              перестают отображаться.
+            </p>
+          </section>
+        )}
+        <button
+          type="button"
+          className="case-link"
+          onClick={() => load().catch((e) => setNotice(e.message))}
+        >
+          Обновить пакеты
+        </button>
+      </section>
+    </main>
+  );
 }

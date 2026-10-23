@@ -1,4 +1,14 @@
 package ru.pulsedoma;
+
+import static org.junit.jupiter.api.Assertions.*;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
+import static ru.pulsedoma.issues.OperationsTypes.*;
+
+import java.math.BigDecimal;
+import java.nio.file.*;
+import java.time.*;
+import java.util.*;
 import org.junit.jupiter.api.*;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
@@ -9,53 +19,790 @@ import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.transaction.annotation.Transactional;
 import ru.pulsedoma.common.BusinessException;
 import ru.pulsedoma.issues.*;
-import java.nio.file.*;
-import java.time.*;
-import java.util.*;
-import java.math.BigDecimal;
-import static ru.pulsedoma.issues.OperationsTypes.*;
-import static org.junit.jupiter.api.Assertions.*;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
-import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
-@SpringBootTest @AutoConfigureMockMvc @ActiveProfiles("demo") @Transactional
+
+@SpringBootTest
+@AutoConfigureMockMvc
+@ActiveProfiles("demo")
+@Transactional
 class HouseOperationsFlowTest {
- static final Path DB=temp();static Path temp(){try{return Files.createTempFile("house-operations-", ".db");}catch(Exception e){throw new IllegalStateException(e);}}
- @DynamicPropertySource static void props(DynamicPropertyRegistry r){r.add("spring.datasource.url",()->"jdbc:sqlite:"+DB);r.add("storage.demo.path",()->DB+"-files");}
- static final String H="demo-house-1",R="demo-resident-1",A="demo-admin-1",D="demo-dispatcher-1";
- @Autowired ResidentCaseService cases;@Autowired CaseVisitService visits;@Autowired HouseOperationsService ops;@Autowired OperationsMonitoringService monitoring;@Autowired OperationsNotifications notifications;@Autowired HouseTariffService tariffs;@Autowired PaymentComparisonService comparison;@Autowired CaseControlService control;@Autowired CaseCompletionGuard completion;@Autowired JdbcTemplate db;@Autowired MockMvc mvc;
- String c;
- @BeforeEach void setup(){c=cases.create(H,CaseKind.PROBLEM,"Личное описание протечки",null,UUID.randomUUID().toString(),R).id();}
- int rev(){return cases.get(c,R).revision();}
- int vrev(String id){return db.queryForObject("SELECT revision FROM case_visits WHERE id=?",Integer.class,id);}
- String offer(Instant start){return visits.offer(c,new OperationsRequests.Visit("Осмотр примыкания",D,List.of(new OperationsRequests.Slot(start,start.plusSeconds(3600))),rev(),"Согласованы варианты"),D).visits().getFirst().get("id").toString();}
- String slot(String v){return db.queryForObject("SELECT id FROM visit_slots WHERE visit_id=?",String.class,v);}
- OperationsRequests.Mass mr(MassState state,int revision){return new OperationsRequests.Mass("Общая протечка","Подъезд 1","Общедоступное описание","Организуем общую работу",state,null,"Срок уточняется",revision,"Проверенные сведения");}
- String mass(){return ops.mass(H,null,mr(MassState.ACTIVE,0),D).problems().getFirst().get("id").toString();}
- int mrev(String id){return db.queryForObject("SELECT revision FROM house_mass_problems WHERE id=?",Integer.class,id);}
- OperationsRequests.Notice nr(NoticeState state,int revision){return new OperationsRequests.Notice("Проверка лифта",NoticeKind.PLANNED_WORK,Resource.LIFT,"Подъезд 1","Плановый осмотр оборудования","Пользуйтесь другим лифтом при его доступности","Общий телефон службы","Проверенное распоряжение",Instant.now().plusSeconds(3600),Instant.now().plusSeconds(7200),"Плановый интервал",state,revision,"Проверены общедоступность и источник");}
- @Test void residentChoosesTimeAndCanAskForAnotherWithoutTechnicalData(){String v=offer(Instant.now().plusSeconds(7200));assertFalse(visits.workspace(c,R).canPlan());visits.choose(v,new OperationsRequests.VisitChoice(slot(v),vrev(v),rev()),R);assertEquals("CONFIRMED",db.queryForObject("SELECT state FROM case_visits WHERE id=?",String.class,v));assertThrows(BusinessException.class,()->completion.requireComplete(c));visits.decision(v,"change",new OperationsRequests.VisitDecision(vrev(v),rev(),"Не могу в это время, предложите другое"),R);assertEquals("CHANGE_REQUESTED",db.queryForObject("SELECT state FROM case_visits WHERE id=?",String.class,v));assertTrue(cases.get(c,R).nextStep().contains("новые варианты"));}
- @Test void proposalsAreValidatedAndConflictingReservationsCannotBeChosen(){Instant start=Instant.now().plusSeconds(7200);String v=offer(start);visits.choose(v,new OperationsRequests.VisitChoice(slot(v),vrev(v),rev()),R);String original=c;c=cases.create(H,CaseKind.PROBLEM,"Другой осмотр",null,UUID.randomUUID().toString(),R).id();String second=offer(start);assertThrows(BusinessException.class,()->visits.choose(second,new OperationsRequests.VisitChoice(slot(second),vrev(second),rev()),R));assertNotEquals(original,c);assertThrows(BusinessException.class,()->offer(Instant.now().minusSeconds(3600)));assertThrows(BusinessException.class,()->visits.offer(c,new OperationsRequests.Visit("Слишком долго",D,List.of(new OperationsRequests.Slot(start,start.plusSeconds(8*3600+1))),rev(),"Проверка"),D));}
- @Test void replacementPreservesOldVisitAndCannotBeCompletedBeforeStart(){String old=offer(Instant.now().plusSeconds(7200));visits.choose(old,new OperationsRequests.VisitChoice(slot(old),vrev(old),rev()),R);assertThrows(BusinessException.class,()->visits.decision(old,"complete",new OperationsRequests.VisitDecision(vrev(old),rev(),"Ещё не было"),D));String fresh=offer(Instant.now().plusSeconds(14400));assertEquals("CANCELLED",db.queryForObject("SELECT state FROM case_visits WHERE id=?",String.class,old));assertNotEquals(old,fresh);assertEquals(2,visits.workspace(c,R).visits().size());}
- @Test void visitRequiresCurrentCaseAccessAndStaleSelectionsFail(){String v=offer(Instant.now().plusSeconds(7200));assertThrows(BusinessException.class,()->visits.choose(v,new OperationsRequests.VisitChoice(slot(v),0,rev()),D));assertThrows(BusinessException.class,()->visits.choose(v,new OperationsRequests.VisitChoice(slot(v),vrev(v)+1,rev()),R));db.update("UPDATE house_memberships SET access_status='REVOKED' WHERE user_id=? AND role='DISPATCHER'",D);assertThrows(BusinessException.class,()->visits.choose(v,new OperationsRequests.VisitChoice(slot(v),vrev(v),rev()),R));}
- @Test void massProblemHasSeparatePrivateCasesAndJoiningIsIdempotent(){String p=mass();var joined=ops.join(p,new OperationsRequests.Join("join-1","У меня мокнет стена","Этаж 2"),R);var again=ops.join(p,new OperationsRequests.Join("join-2","Другие слова",null),R);assertEquals(joined.id(),again.id());assertEquals(1,db.queryForObject("SELECT count(*) FROM case_mass_links WHERE problem_id=?",Integer.class,p));var publicProblem=ops.feed(H,R).problems().getFirst();assertFalse(publicProblem.containsKey("linked_count"));assertFalse(publicProblem.toString().contains("У меня мокнет"));assertFalse(publicProblem.toString().contains(joined.id()));}
- @Test void financialCasesCannotBecomeMassProblemsAndActiveLinksBlockClosing(){String p=mass();ops.link(c,new OperationsRequests.Link(p,rev(),"Это та же причина"),D);assertThrows(BusinessException.class,()->completion.requireComplete(c));String linked=c;c=cases.create(H,CaseKind.PAYMENT,"Финансовый текст",null,UUID.randomUUID().toString(),R).id();cases.permission(H,D,true,A);assertThrows(BusinessException.class,()->ops.link(c,new OperationsRequests.Link(p,rev(),"Попытка раскрыть"),D));c=linked;ops.unlink(c,new OperationsRequests.Unlink(rev(),"Личная причина оказалась другой"),D);completion.requireComplete(c);}
- @Test void sharedWorkNeedsIndependentAcceptanceAndDoesNotCloseResidentCase(){String p=mass();ops.link(c,new OperationsRequests.Link(p,rev(),"Общая причина"),D);ops.assignWork(p,new OperationsRequests.SharedWork("Герметизация","Устранить и проверить примыкание",A,null,"Согласуется",mrev(p)),D);String w=db.queryForObject("SELECT id FROM mass_work_orders WHERE problem_id=?",String.class,p);int r=0;ops.work(w,new OperationsRequests.WorkDecision(WorkState.IN_PROGRESS,r++,"Приступил"),A);ops.work(w,new OperationsRequests.WorkDecision(WorkState.REPORTED,r++,"Работа выполнена, приложите проверку в личном деле при необходимости"),A);final int current=r;assertThrows(BusinessException.class,()->ops.work(w,new OperationsRequests.WorkDecision(WorkState.ACCEPTED,current,"Самоприёмка"),A));assertThrows(BusinessException.class,()->ops.mass(H,p,mr(MassState.RESOLVED,mrev(p)),D));ops.work(w,new OperationsRequests.WorkDecision(WorkState.ACCEPTED,r,"Проверил результат"),D);ops.mass(H,p,mr(MassState.RESOLVED,mrev(p)),D);assertNotEquals(CaseStatus.CLOSED,cases.get(c,R).status());completion.requireComplete(c);}
- @Test void draftsAndPrivateWorkReportsAreNotPublishedToResidents(){ops.mass(H,null,mr(MassState.DRAFT,0),D);ops.notice(H,null,nr(NoticeState.DRAFT,0),D);assertTrue(ops.feed(H,R).problems().isEmpty());assertTrue(ops.feed(H,R).notices().isEmpty());assertThrows(BusinessException.class,()->ops.mass(H,null,mr(MassState.ACTIVE,0),R));}
- @Test void noticeUpdatesRetainHistoryAndRequireCurrentHouseAuthority(){var feed=ops.notice(H,null,nr(NoticeState.PUBLISHED,0),D);String n=feed.notices().getFirst().get("id").toString();ops.notice(H,n,nr(NoticeState.CANCELLED,0),D);assertEquals("CANCELLED",ops.feed(H,R).notices().getFirst().get("state"));assertEquals(2,((List<?>)ops.feed(H,R).notices().getFirst().get("history")).size());assertThrows(BusinessException.class,()->ops.notice(H,n,nr(NoticeState.PUBLISHED,1),D));db.update("UPDATE organization_houses SET status='SUSPENDED' WHERE house_id=?",H);assertTrue(ops.feed(H,R).notices().isEmpty());}
- @Test void publicSubscriptionsAreOptInRevocableAndMessagesDoNotRevealPersonalDetails(){assertTrue(notifications.inbox(R).isEmpty());ops.notice(H,null,nr(NoticeState.PUBLISHED,0),D);assertEquals(0,db.queryForObject("SELECT count(*) FROM operations_notifications",Integer.class));ops.subscribe(H,new OperationsRequests.Subscription(true,false,false),R);String n=ops.notice(H,null,nr(NoticeState.PUBLISHED,0),D).notices().getFirst().get("id").toString();assertEquals(1,notifications.inbox(R).size());assertFalse(notifications.inbox(R).toString().contains("Личное описание"));var message=notifications.inbox(R).getFirst();notifications.read(message.get("id").toString(),R);assertNotNull(notifications.inbox(R).getFirst().get("read_at"));assertThrows(BusinessException.class,()->notifications.read(message.get("id").toString(),D));ops.subscribe(H,new OperationsRequests.Subscription(false,false,false),R);assertTrue(notifications.inbox(R).isEmpty());}
- @Test void remindersAreDisabledByDefaultDeduplicatedAndStopWhenDeadlineChanges(){control.assign(c,new ExchangeRequests.Assignment(D,A,rev(),"Ведение"),A);cases.update(c,CaseKind.PROBLEM,CaseStatus.IN_PROGRESS,"Проверяем",Instant.now().minusSeconds(7200),D,rev(),"Учебная просрочка",D);monitoring.scan();assertEquals(0,db.queryForObject("SELECT count(*) FROM operations_notifications",Integer.class));monitoring.policy(H,new OperationsRequests.Policy(true,24,24,1,A,0,"Согласованный процесс"),A);monitoring.scan();int count=db.queryForObject("SELECT count(*) FROM operations_notifications",Integer.class);monitoring.scan();assertEquals(count,db.queryForObject("SELECT count(*) FROM operations_notifications",Integer.class));assertEquals(1,db.queryForObject("SELECT count(*) FROM automatic_case_escalations",Integer.class));assertFalse(notifications.inbox(D).isEmpty());cases.update(c,CaseKind.PROBLEM,CaseStatus.IN_PROGRESS,"Срок согласован заново",Instant.now().plusSeconds(86400*4),D,rev(),"Изменились условия",D);assertTrue(notifications.inbox(D).isEmpty());assertTrue(notifications.inbox(R).isEmpty());}
- @Test void financialReminderDoesNotReachWorkerAfterPermissionWithdrawal(){cases.permission(H,D,true,A);c=cases.create(H,CaseKind.PAYMENT,"Секретная квитанция",null,UUID.randomUUID().toString(),R).id();control.assign(c,new ExchangeRequests.Assignment(D,null,rev(),"Финансовое рассмотрение"),A);cases.update(c,CaseKind.PAYMENT,CaseStatus.IN_PROGRESS,"Проверяем",Instant.now().minusSeconds(7200),D,rev(),"Срок проверки",D);monitoring.policy(H,new OperationsRequests.Policy(true,24,24,1,A,0,"Согласовано"),A);monitoring.scan();assertFalse(notifications.inbox(D).toString().contains("Секретная"));assertFalse(notifications.inbox(D).isEmpty());cases.permission(H,D,false,A);assertTrue(notifications.inbox(D).isEmpty());assertFalse(notifications.inbox(A).toString().contains("Секретная"));}
- @Test void confirmedVisitReminderIsSentOnlyToParticipantWithCurrentRights(){String v=offer(Instant.now().plusSeconds(7200));visits.choose(v,new OperationsRequests.VisitChoice(slot(v),vrev(v),rev()),R);monitoring.policy(H,new OperationsRequests.Policy(true,24,24,24,A,0,"Согласовано"),A);monitoring.scan();assertEquals(1,notifications.inbox(R).stream().filter(n->n.get("kind").equals("VISIT")).count());visits.decision(v,"change",new OperationsRequests.VisitDecision(vrev(v),rev(),"Нужно другое время"),R);assertEquals(0,notifications.inbox(R).stream().filter(n->n.get("kind").equals("VISIT")).count());}
- @Test void notificationClaimUsesLeaseAndRetryNeverRepeatsBusinessOperation(){ops.subscribe(H,new OperationsRequests.Subscription(true,false,false),R);ops.notice(H,null,nr(NoticeState.PUBLISHED,0),D);db.update("UPDATE users SET max_user_id='12345678' WHERE id=?",R);var claimed=notifications.claim();assertEquals(1,claimed.size());assertTrue(notifications.claim().isEmpty());var n=claimed.getFirst();notifications.retry(n.get("id").toString(),n.get("lease_token").toString(),1,"NetworkTimeout");assertEquals(1,ops.feed(H,R).notices().size());db.update("UPDATE operations_notifications SET next_attempt_at='2020-01-01T00:00:00Z'");var next=notifications.claim().getFirst();notifications.delivered(next.get("id").toString(),next.get("lease_token").toString());assertTrue(notifications.claim().isEmpty());}
- @Test void analyticsHasAggregatesAndNoPersonalTextsOrDocuments(){cases.permission(H,D,true,A);cases.create(H,CaseKind.PAYMENT,"СЕКРЕТНЫЙ ФИНАНСОВЫЙ ТЕКСТ",null,UUID.randomUUID().toString(),R);var a=monitoring.analytics(H,A);assertEquals(2,((Number)((Map<?,?>)a.get("summary")).get("total")).intValue());assertFalse(a.toString().contains("СЕКРЕТНЫЙ"));assertFalse(a.toString().contains("Личное описание"));assertThrows(BusinessException.class,()->monitoring.analytics(H,R));assertEquals(0,((Number)((Map<?,?>)a.get("resolution")).get("observations")).intValue());assertNull(((Map<?,?>)a.get("resolution")).get("average_hours"));}
- String rate(String amount,LocalDate start,String previous)throws Exception{tariffs.grant(H,D,new TariffRequests.Grant(TariffTypes.Permission.EDITOR,true,"Подготовка"),A);tariffs.grant(H,A,new TariffRequests.Grant(TariffTypes.Permission.PUBLISHER,true,"Проверка"),A);var draft=previous==null?tariffs.save(H,null,new TariffRequests.Draft("Вода",TariffTypes.Category.UTILITY,"Поставщик","Все помещения",TariffTypes.Unit.M3,"м³",new BigDecimal(amount),start,null,"Документ",null,"Пояснение",0,"Подготовка"),D):tariffs.copy(previous,new TariffRequests.Copy(tariffs.listRegistry(H,A).stream().filter(t->t.id().equals(previous)).findFirst().orElseThrow().revision(),start,false,"Новый период"),D);if(previous!=null)draft=tariffs.save(H,draft.id(),new TariffRequests.Draft("Вода",TariffTypes.Category.UTILITY,"Поставщик","Все помещения",TariffTypes.Unit.M3,"м³",new BigDecimal(amount),start,null,"Документ",null,"Пояснение",draft.revision(),"Новая ставка"),D);draft=tariffs.upload(draft.id(),"Основание","%PDF-1.4 test\n%%EOF".getBytes(),"application/pdf",draft.revision(),D);return tariffs.publish(draft.id(),new TariffRequests.Decision(draft.revision(),"Проверил"),A).id();}
- @Test void paymentComparisonUsesPublishedSameSeriesAndDecimalArithmetic()throws Exception{String old=rate("50",LocalDate.of(2026,1,1),null);rate("60",LocalDate.of(2026,7,1),old);var list=comparison.compare(H,new OperationsRequests.Comparison(LocalDate.of(2026,2,1),LocalDate.of(2026,8,1),null,null),R);var line=list.lines().getFirst();assertEquals(0,new BigDecimal("10").compareTo(line.perUnitDifference()));assertEquals(0,new BigDecimal("20").compareTo(line.percent()));var estimate=comparison.compare(H,new OperationsRequests.Comparison(LocalDate.of(2026,2,1),LocalDate.of(2026,8,1),line.seriesId(),new BigDecimal("3.25")),R).lines().getFirst();assertEquals(new BigDecimal("162.50"),estimate.previousEstimate());assertEquals(new BigDecimal("195.00"),estimate.estimate());assertTrue(list.limitation().contains("не расчёт квитанции"));}
- @Test void missingRateDoesNotInventPriorChargeOrExposeDraft()throws Exception{String rate=rate("60",LocalDate.of(2026,7,1),null);var line=comparison.compare(H,new OperationsRequests.Comparison(LocalDate.of(2026,1,1),LocalDate.of(2026,8,1),null,null),R).lines().getFirst();assertFalse(line.comparable());assertNull(line.previous());assertNull(line.perUnitDifference());assertThrows(BusinessException.class,()->comparison.compare(H,new OperationsRequests.Comparison(LocalDate.of(2026,8,1),LocalDate.of(2026,1,1),null,null),R));}
- @Test void sharedWorkRemindersReachWorkerAndManagerWithoutAnyPrivateCase(){String p=mass();ops.assignWork(p,new OperationsRequests.SharedWork("Общая работа","Проверить оборудование",D,Instant.now().minusSeconds(7200),"Учебный срок",mrev(p)),A);monitoring.policy(H,new OperationsRequests.Policy(true,24,24,1,A,0,"Согласовано"),A);monitoring.scan();assertTrue(notifications.inbox(D).stream().anyMatch(n->n.get("kind").equals("REMINDER")&&n.get("case_id")==null));assertTrue(notifications.inbox(A).stream().anyMatch(n->n.get("kind").equals("ESCALATION")&&n.get("case_id")==null));assertTrue(notifications.inbox(R).isEmpty());}
- @Test void disablingPolicyWithdrawsPendingVisitReminders(){String v=offer(Instant.now().plusSeconds(7200));visits.choose(v,new OperationsRequests.VisitChoice(slot(v),vrev(v),rev()),R);monitoring.policy(H,new OperationsRequests.Policy(true,24,24,24,A,0,"Согласовано"),A);monitoring.scan();assertFalse(notifications.inbox(R).isEmpty());monitoring.policy(H,new OperationsRequests.Policy(false,24,24,24,A,1,"Напоминания отключены"),A);assertTrue(notifications.inbox(R).isEmpty());}
- @Test void completedVisitReleasesClosureGuardAndKeepsResidentConfirmationSeparate(){String v=offer(Instant.now().plusSeconds(7200));visits.choose(v,new OperationsRequests.VisitChoice(slot(v),vrev(v),rev()),R);db.update("UPDATE visit_slots SET starts_at=?,ends_at=? WHERE visit_id=?",Instant.now().minusSeconds(7200).toString(),Instant.now().minusSeconds(3600).toString(),v);visits.decision(v,"complete",new OperationsRequests.VisitDecision(vrev(v),rev(),"Осмотр выполнен, результат зафиксирован"),D);completion.requireComplete(c);assertNotEquals(CaseStatus.CLOSED,cases.get(c,R).status());}
- @Test void revokedResidentRoleDoesNotKeepSubscriptionsThroughAnotherHouseRole(){ops.subscribe(H,new OperationsRequests.Subscription(true,false,false),R);ops.notice(H,null,nr(NoticeState.PUBLISHED,0),D);assertFalse(notifications.inbox(R).isEmpty());db.update("INSERT INTO house_memberships(house_id,user_id,role,verification_status,access_status) VALUES (?,?,'HOUSE_ADMIN','VERIFIED','ACTIVE')",H,R);db.update("UPDATE house_memberships SET access_status='REVOKED' WHERE house_id=? AND user_id=? AND role='RESIDENT'",H,R);assertTrue(notifications.inbox(R).isEmpty());assertFalse(notifications.resident(H,R));}
- @Test void nullVisitSlotIsRejectedByHttpValidation()throws Exception{mvc.perform(post("/v1/cases/"+c+"/visits").header("X-Demo-Session","dispatcher").contentType("application/json").content("{\"purpose\":\"Осмотр\",\"workerId\":\"demo-dispatcher-1\",\"slots\":[null],\"caseRevision\":0,\"reason\":\"Проверка\"}")).andExpect(status().isBadRequest());}
- @Test void httpBoundariesAndValidation()throws Exception{mvc.perform(get("/v1/houses/"+H+"/operations-analytics").header("X-Demo-Session","true")).andExpect(status().isNotFound());mvc.perform(post("/v1/cases/"+c+"/visits").header("X-Demo-Session","dispatcher").contentType("application/json").content("{}")).andExpect(status().isBadRequest());mvc.perform(get("/v1/houses/"+H+"/operations").header("X-Demo-Session","true")).andExpect(status().isOk()).andExpect(jsonPath("$.canManage").value(false));}
- @Test void joiningPublishedProblemCreatesOneCommonQueueItemForTwoResidents(){String neighbour="mass-neighbour";db.update("INSERT INTO users(id,display_name,status) VALUES (?,'Сосед','ACTIVE')",neighbour);db.update("INSERT INTO house_memberships(house_id,user_id,role,verification_status,access_status) VALUES (?,?,'RESIDENT','VERIFIED','ACTIVE')",H,neighbour);String p=mass();var first=ops.join(p,new OperationsRequests.Join("mass-first","Та же протечка",null),R);var second=ops.join(p,new OperationsRequests.Join("mass-second","Протечка у соседа",null),neighbour);assertNotEquals(first.id(),second.id());assertEquals(first.sharedRequestId(),second.sharedRequestId());assertEquals(2,second.participants());assertEquals(1,cases.queue(H,D).stream().filter(v->first.sharedRequestId().equals(v.sharedRequestId())).count());assertThrows(RuntimeException.class,()->cases.get(second.id(),R));}
+    static final Path DB = temp();
+
+    static Path temp() {
+        try {
+            return Files.createTempFile("house-operations-", ".db");
+        } catch (Exception e) {
+            throw new IllegalStateException(e);
+        }
+    }
+
+    @DynamicPropertySource
+    static void props(DynamicPropertyRegistry r) {
+        r.add("spring.datasource.url", () -> "jdbc:sqlite:" + DB);
+        r.add("storage.demo.path", () -> DB + "-files");
+    }
+
+    static final String H = "demo-house-1",
+            R = "demo-resident-1",
+            A = "demo-admin-1",
+            D = "demo-dispatcher-1";
+    @Autowired ResidentCaseService cases;
+    @Autowired CaseVisitService visits;
+    @Autowired HouseOperationsService ops;
+    @Autowired OperationsMonitoringService monitoring;
+    @Autowired OperationsNotifications notifications;
+    @Autowired HouseTariffService tariffs;
+    @Autowired PaymentComparisonService comparison;
+    @Autowired CaseControlService control;
+    @Autowired CaseCompletionGuard completion;
+    @Autowired JdbcTemplate db;
+    @Autowired MockMvc mvc;
+    String c;
+
+    @BeforeEach
+    void setup() {
+        c =
+                cases.create(
+                                H,
+                                CaseKind.PROBLEM,
+                                "Личное описание протечки",
+                                null,
+                                UUID.randomUUID().toString(),
+                                R)
+                        .id();
+    }
+
+    int rev() {
+        return cases.get(c, R).revision();
+    }
+
+    int vrev(String id) {
+        return db.queryForObject("SELECT revision FROM case_visits WHERE id=?", Integer.class, id);
+    }
+
+    String offer(Instant start) {
+        return visits.offer(
+                        c,
+                        new OperationsRequests.Visit(
+                                "Осмотр примыкания",
+                                D,
+                                List.of(
+                                        new OperationsRequests.Slot(
+                                                start, start.plusSeconds(3600))),
+                                rev(),
+                                "Согласованы варианты"),
+                        D)
+                .visits()
+                .getFirst()
+                .get("id")
+                .toString();
+    }
+
+    String slot(String v) {
+        return db.queryForObject("SELECT id FROM visit_slots WHERE visit_id=?", String.class, v);
+    }
+
+    OperationsRequests.Mass mr(MassState state, int revision) {
+        return new OperationsRequests.Mass(
+                "Общая протечка",
+                "Подъезд 1",
+                "Общедоступное описание",
+                "Организуем общую работу",
+                state,
+                null,
+                "Срок уточняется",
+                revision,
+                "Проверенные сведения");
+    }
+
+    String mass() {
+        return ops.mass(H, null, mr(MassState.ACTIVE, 0), D)
+                .problems()
+                .getFirst()
+                .get("id")
+                .toString();
+    }
+
+    int mrev(String id) {
+        return db.queryForObject(
+                "SELECT revision FROM house_mass_problems WHERE id=?", Integer.class, id);
+    }
+
+    OperationsRequests.Notice nr(NoticeState state, int revision) {
+        return new OperationsRequests.Notice(
+                "Проверка лифта",
+                NoticeKind.PLANNED_WORK,
+                Resource.LIFT,
+                "Подъезд 1",
+                "Плановый осмотр оборудования",
+                "Пользуйтесь другим лифтом при его доступности",
+                "Общий телефон службы",
+                "Проверенное распоряжение",
+                Instant.now().plusSeconds(3600),
+                Instant.now().plusSeconds(7200),
+                "Плановый интервал",
+                state,
+                revision,
+                "Проверены общедоступность и источник");
+    }
+
+    @Test
+    void residentChoosesTimeAndCanAskForAnotherWithoutTechnicalData() {
+        String v = offer(Instant.now().plusSeconds(7200));
+        assertFalse(visits.workspace(c, R).canPlan());
+        visits.choose(v, new OperationsRequests.VisitChoice(slot(v), vrev(v), rev()), R);
+        assertEquals(
+                "CONFIRMED",
+                db.queryForObject("SELECT state FROM case_visits WHERE id=?", String.class, v));
+        assertThrows(BusinessException.class, () -> completion.requireComplete(c));
+        visits.decision(
+                v,
+                "change",
+                new OperationsRequests.VisitDecision(
+                        vrev(v), rev(), "Не могу в это время, предложите другое"),
+                R);
+        assertEquals(
+                "CHANGE_REQUESTED",
+                db.queryForObject("SELECT state FROM case_visits WHERE id=?", String.class, v));
+        assertTrue(cases.get(c, R).nextStep().contains("новые варианты"));
+    }
+
+    @Test
+    void proposalsAreValidatedAndConflictingReservationsCannotBeChosen() {
+        Instant start = Instant.now().plusSeconds(7200);
+        String v = offer(start);
+        visits.choose(v, new OperationsRequests.VisitChoice(slot(v), vrev(v), rev()), R);
+        String original = c;
+        c =
+                cases.create(
+                                H,
+                                CaseKind.PROBLEM,
+                                "Другой осмотр",
+                                null,
+                                UUID.randomUUID().toString(),
+                                R)
+                        .id();
+        String second = offer(start);
+        assertThrows(
+                BusinessException.class,
+                () ->
+                        visits.choose(
+                                second,
+                                new OperationsRequests.VisitChoice(
+                                        slot(second), vrev(second), rev()),
+                                R));
+        assertNotEquals(original, c);
+        assertThrows(BusinessException.class, () -> offer(Instant.now().minusSeconds(3600)));
+        assertThrows(
+                BusinessException.class,
+                () ->
+                        visits.offer(
+                                c,
+                                new OperationsRequests.Visit(
+                                        "Слишком долго",
+                                        D,
+                                        List.of(
+                                                new OperationsRequests.Slot(
+                                                        start, start.plusSeconds(8 * 3600 + 1))),
+                                        rev(),
+                                        "Проверка"),
+                                D));
+    }
+
+    @Test
+    void replacementPreservesOldVisitAndCannotBeCompletedBeforeStart() {
+        String old = offer(Instant.now().plusSeconds(7200));
+        visits.choose(old, new OperationsRequests.VisitChoice(slot(old), vrev(old), rev()), R);
+        assertThrows(
+                BusinessException.class,
+                () ->
+                        visits.decision(
+                                old,
+                                "complete",
+                                new OperationsRequests.VisitDecision(
+                                        vrev(old), rev(), "Ещё не было"),
+                                D));
+        String fresh = offer(Instant.now().plusSeconds(14400));
+        assertEquals(
+                "CANCELLED",
+                db.queryForObject("SELECT state FROM case_visits WHERE id=?", String.class, old));
+        assertNotEquals(old, fresh);
+        assertEquals(2, visits.workspace(c, R).visits().size());
+    }
+
+    @Test
+    void visitRequiresCurrentCaseAccessAndStaleSelectionsFail() {
+        String v = offer(Instant.now().plusSeconds(7200));
+        assertThrows(
+                BusinessException.class,
+                () -> visits.choose(v, new OperationsRequests.VisitChoice(slot(v), 0, rev()), D));
+        assertThrows(
+                BusinessException.class,
+                () ->
+                        visits.choose(
+                                v,
+                                new OperationsRequests.VisitChoice(slot(v), vrev(v) + 1, rev()),
+                                R));
+        db.update(
+                "UPDATE house_memberships SET access_status='REVOKED' WHERE user_id=? AND role='DISPATCHER'",
+                D);
+        assertThrows(
+                BusinessException.class,
+                () ->
+                        visits.choose(
+                                v, new OperationsRequests.VisitChoice(slot(v), vrev(v), rev()), R));
+    }
+
+    @Test
+    void massProblemHasSeparatePrivateCasesAndJoiningIsIdempotent() {
+        String p = mass();
+        var joined =
+                ops.join(
+                        p,
+                        new OperationsRequests.Join("join-1", "У меня мокнет стена", "Этаж 2"),
+                        R);
+        var again = ops.join(p, new OperationsRequests.Join("join-2", "Другие слова", null), R);
+        assertEquals(joined.id(), again.id());
+        assertEquals(
+                1,
+                db.queryForObject(
+                        "SELECT count(*) FROM case_mass_links WHERE problem_id=?",
+                        Integer.class,
+                        p));
+        var publicProblem = ops.feed(H, R).problems().getFirst();
+        assertFalse(publicProblem.containsKey("linked_count"));
+        assertFalse(publicProblem.toString().contains("У меня мокнет"));
+        assertFalse(publicProblem.toString().contains(joined.id()));
+    }
+
+    @Test
+    void financialCasesCannotBecomeMassProblemsAndActiveLinksBlockClosing() {
+        String p = mass();
+        ops.link(c, new OperationsRequests.Link(p, rev(), "Это та же причина"), D);
+        assertThrows(BusinessException.class, () -> completion.requireComplete(c));
+        String linked = c;
+        c =
+                cases.create(
+                                H,
+                                CaseKind.PAYMENT,
+                                "Финансовый текст",
+                                null,
+                                UUID.randomUUID().toString(),
+                                R)
+                        .id();
+        cases.permission(H, D, true, A);
+        assertThrows(
+                BusinessException.class,
+                () -> ops.link(c, new OperationsRequests.Link(p, rev(), "Попытка раскрыть"), D));
+        c = linked;
+        ops.unlink(c, new OperationsRequests.Unlink(rev(), "Личная причина оказалась другой"), D);
+        completion.requireComplete(c);
+    }
+
+    @Test
+    void sharedWorkNeedsIndependentAcceptanceAndDoesNotCloseResidentCase() {
+        String p = mass();
+        ops.link(c, new OperationsRequests.Link(p, rev(), "Общая причина"), D);
+        ops.assignWork(
+                p,
+                new OperationsRequests.SharedWork(
+                        "Герметизация",
+                        "Устранить и проверить примыкание",
+                        A,
+                        null,
+                        "Согласуется",
+                        mrev(p)),
+                D);
+        String w =
+                db.queryForObject(
+                        "SELECT id FROM mass_work_orders WHERE problem_id=?", String.class, p);
+        int r = 0;
+        ops.work(
+                w, new OperationsRequests.WorkDecision(WorkState.IN_PROGRESS, r++, "Приступил"), A);
+        ops.work(
+                w,
+                new OperationsRequests.WorkDecision(
+                        WorkState.REPORTED,
+                        r++,
+                        "Работа выполнена, приложите проверку в личном деле при необходимости"),
+                A);
+        final int current = r;
+        assertThrows(
+                BusinessException.class,
+                () ->
+                        ops.work(
+                                w,
+                                new OperationsRequests.WorkDecision(
+                                        WorkState.ACCEPTED, current, "Самоприёмка"),
+                                A));
+        assertThrows(
+                BusinessException.class, () -> ops.mass(H, p, mr(MassState.RESOLVED, mrev(p)), D));
+        ops.work(
+                w,
+                new OperationsRequests.WorkDecision(WorkState.ACCEPTED, r, "Проверил результат"),
+                D);
+        ops.mass(H, p, mr(MassState.RESOLVED, mrev(p)), D);
+        assertNotEquals(CaseStatus.CLOSED, cases.get(c, R).status());
+        completion.requireComplete(c);
+    }
+
+    @Test
+    void draftsAndPrivateWorkReportsAreNotPublishedToResidents() {
+        ops.mass(H, null, mr(MassState.DRAFT, 0), D);
+        ops.notice(H, null, nr(NoticeState.DRAFT, 0), D);
+        assertTrue(ops.feed(H, R).problems().isEmpty());
+        assertTrue(ops.feed(H, R).notices().isEmpty());
+        assertThrows(BusinessException.class, () -> ops.mass(H, null, mr(MassState.ACTIVE, 0), R));
+    }
+
+    @Test
+    void noticeUpdatesRetainHistoryAndRequireCurrentHouseAuthority() {
+        var feed = ops.notice(H, null, nr(NoticeState.PUBLISHED, 0), D);
+        String n = feed.notices().getFirst().get("id").toString();
+        ops.notice(H, n, nr(NoticeState.CANCELLED, 0), D);
+        assertEquals("CANCELLED", ops.feed(H, R).notices().getFirst().get("state"));
+        assertEquals(2, ((List<?>) ops.feed(H, R).notices().getFirst().get("history")).size());
+        assertThrows(
+                BusinessException.class, () -> ops.notice(H, n, nr(NoticeState.PUBLISHED, 1), D));
+        db.update("UPDATE organization_houses SET status='SUSPENDED' WHERE house_id=?", H);
+        assertTrue(ops.feed(H, R).notices().isEmpty());
+    }
+
+    @Test
+    void publicSubscriptionsAreOptInRevocableAndMessagesDoNotRevealPersonalDetails() {
+        assertTrue(notifications.inbox(R).isEmpty());
+        ops.notice(H, null, nr(NoticeState.PUBLISHED, 0), D);
+        assertEquals(
+                0,
+                db.queryForObject("SELECT count(*) FROM operations_notifications", Integer.class));
+        ops.subscribe(H, new OperationsRequests.Subscription(true, false, false), R);
+        String n =
+                ops.notice(H, null, nr(NoticeState.PUBLISHED, 0), D)
+                        .notices()
+                        .getFirst()
+                        .get("id")
+                        .toString();
+        assertEquals(1, notifications.inbox(R).size());
+        assertFalse(notifications.inbox(R).toString().contains("Личное описание"));
+        var message = notifications.inbox(R).getFirst();
+        notifications.read(message.get("id").toString(), R);
+        assertNotNull(notifications.inbox(R).getFirst().get("read_at"));
+        assertThrows(
+                BusinessException.class, () -> notifications.read(message.get("id").toString(), D));
+        ops.subscribe(H, new OperationsRequests.Subscription(false, false, false), R);
+        assertTrue(notifications.inbox(R).isEmpty());
+    }
+
+    @Test
+    void remindersAreDisabledByDefaultDeduplicatedAndStopWhenDeadlineChanges() {
+        control.assign(c, new ExchangeRequests.Assignment(D, A, rev(), "Ведение"), A);
+        cases.update(
+                c,
+                CaseKind.PROBLEM,
+                CaseStatus.IN_PROGRESS,
+                "Проверяем",
+                Instant.now().minusSeconds(7200),
+                D,
+                rev(),
+                "Учебная просрочка",
+                D);
+        monitoring.scan();
+        assertEquals(
+                0,
+                db.queryForObject("SELECT count(*) FROM operations_notifications", Integer.class));
+        monitoring.policy(
+                H,
+                new OperationsRequests.Policy(true, 24, 24, 1, A, 0, "Согласованный процесс"),
+                A);
+        monitoring.scan();
+        int count =
+                db.queryForObject("SELECT count(*) FROM operations_notifications", Integer.class);
+        monitoring.scan();
+        assertEquals(
+                count,
+                db.queryForObject("SELECT count(*) FROM operations_notifications", Integer.class));
+        assertEquals(
+                1,
+                db.queryForObject(
+                        "SELECT count(*) FROM automatic_case_escalations", Integer.class));
+        assertFalse(notifications.inbox(D).isEmpty());
+        cases.update(
+                c,
+                CaseKind.PROBLEM,
+                CaseStatus.IN_PROGRESS,
+                "Срок согласован заново",
+                Instant.now().plusSeconds(86400 * 4),
+                D,
+                rev(),
+                "Изменились условия",
+                D);
+        assertTrue(notifications.inbox(D).isEmpty());
+        assertTrue(notifications.inbox(R).isEmpty());
+    }
+
+    @Test
+    void financialReminderDoesNotReachWorkerAfterPermissionWithdrawal() {
+        cases.permission(H, D, true, A);
+        c =
+                cases.create(
+                                H,
+                                CaseKind.PAYMENT,
+                                "Секретная квитанция",
+                                null,
+                                UUID.randomUUID().toString(),
+                                R)
+                        .id();
+        control.assign(
+                c, new ExchangeRequests.Assignment(D, null, rev(), "Финансовое рассмотрение"), A);
+        cases.update(
+                c,
+                CaseKind.PAYMENT,
+                CaseStatus.IN_PROGRESS,
+                "Проверяем",
+                Instant.now().minusSeconds(7200),
+                D,
+                rev(),
+                "Срок проверки",
+                D);
+        monitoring.policy(
+                H, new OperationsRequests.Policy(true, 24, 24, 1, A, 0, "Согласовано"), A);
+        monitoring.scan();
+        assertFalse(notifications.inbox(D).toString().contains("Секретная"));
+        assertFalse(notifications.inbox(D).isEmpty());
+        cases.permission(H, D, false, A);
+        assertTrue(notifications.inbox(D).isEmpty());
+        assertFalse(notifications.inbox(A).toString().contains("Секретная"));
+    }
+
+    @Test
+    void confirmedVisitReminderIsSentOnlyToParticipantWithCurrentRights() {
+        String v = offer(Instant.now().plusSeconds(7200));
+        visits.choose(v, new OperationsRequests.VisitChoice(slot(v), vrev(v), rev()), R);
+        monitoring.policy(
+                H, new OperationsRequests.Policy(true, 24, 24, 24, A, 0, "Согласовано"), A);
+        monitoring.scan();
+        assertEquals(
+                1,
+                notifications.inbox(R).stream().filter(n -> n.get("kind").equals("VISIT")).count());
+        visits.decision(
+                v,
+                "change",
+                new OperationsRequests.VisitDecision(vrev(v), rev(), "Нужно другое время"),
+                R);
+        assertEquals(
+                0,
+                notifications.inbox(R).stream().filter(n -> n.get("kind").equals("VISIT")).count());
+    }
+
+    @Test
+    void notificationClaimUsesLeaseAndRetryNeverRepeatsBusinessOperation() {
+        ops.subscribe(H, new OperationsRequests.Subscription(true, false, false), R);
+        ops.notice(H, null, nr(NoticeState.PUBLISHED, 0), D);
+        db.update("UPDATE users SET max_user_id='12345678' WHERE id=?", R);
+        var claimed = notifications.claim();
+        assertEquals(1, claimed.size());
+        assertTrue(notifications.claim().isEmpty());
+        var n = claimed.getFirst();
+        notifications.retry(
+                n.get("id").toString(), n.get("lease_token").toString(), 1, "NetworkTimeout");
+        assertEquals(1, ops.feed(H, R).notices().size());
+        db.update("UPDATE operations_notifications SET next_attempt_at='2020-01-01T00:00:00Z'");
+        var next = notifications.claim().getFirst();
+        notifications.delivered(next.get("id").toString(), next.get("lease_token").toString());
+        assertTrue(notifications.claim().isEmpty());
+    }
+
+    @Test
+    void analyticsHasAggregatesAndNoPersonalTextsOrDocuments() {
+        cases.permission(H, D, true, A);
+        cases.create(
+                H,
+                CaseKind.PAYMENT,
+                "СЕКРЕТНЫЙ ФИНАНСОВЫЙ ТЕКСТ",
+                null,
+                UUID.randomUUID().toString(),
+                R);
+        var a = monitoring.analytics(H, A);
+        assertEquals(2, ((Number) ((Map<?, ?>) a.get("summary")).get("total")).intValue());
+        assertFalse(a.toString().contains("СЕКРЕТНЫЙ"));
+        assertFalse(a.toString().contains("Личное описание"));
+        assertThrows(BusinessException.class, () -> monitoring.analytics(H, R));
+        assertEquals(
+                0, ((Number) ((Map<?, ?>) a.get("resolution")).get("observations")).intValue());
+        assertNull(((Map<?, ?>) a.get("resolution")).get("average_hours"));
+    }
+
+    String rate(String amount, LocalDate start, String previous) throws Exception {
+        tariffs.grant(
+                H,
+                D,
+                new TariffRequests.Grant(TariffTypes.Permission.EDITOR, true, "Подготовка"),
+                A);
+        tariffs.grant(
+                H,
+                A,
+                new TariffRequests.Grant(TariffTypes.Permission.PUBLISHER, true, "Проверка"),
+                A);
+        var draft =
+                previous == null
+                        ? tariffs.save(
+                                H,
+                                null,
+                                new TariffRequests.Draft(
+                                        "Вода",
+                                        TariffTypes.Category.UTILITY,
+                                        "Поставщик",
+                                        "Все помещения",
+                                        TariffTypes.Unit.M3,
+                                        "м³",
+                                        new BigDecimal(amount),
+                                        start,
+                                        null,
+                                        "Документ",
+                                        null,
+                                        "Пояснение",
+                                        0,
+                                        "Подготовка"),
+                                D)
+                        : tariffs.copy(
+                                previous,
+                                new TariffRequests.Copy(
+                                        tariffs.listRegistry(H, A).stream()
+                                                .filter(t -> t.id().equals(previous))
+                                                .findFirst()
+                                                .orElseThrow()
+                                                .revision(),
+                                        start,
+                                        false,
+                                        "Новый период"),
+                                D);
+        if (previous != null)
+            draft =
+                    tariffs.save(
+                            H,
+                            draft.id(),
+                            new TariffRequests.Draft(
+                                    "Вода",
+                                    TariffTypes.Category.UTILITY,
+                                    "Поставщик",
+                                    "Все помещения",
+                                    TariffTypes.Unit.M3,
+                                    "м³",
+                                    new BigDecimal(amount),
+                                    start,
+                                    null,
+                                    "Документ",
+                                    null,
+                                    "Пояснение",
+                                    draft.revision(),
+                                    "Новая ставка"),
+                            D);
+        draft =
+                tariffs.upload(
+                        draft.id(),
+                        "Основание",
+                        "%PDF-1.4 test\n%%EOF".getBytes(),
+                        "application/pdf",
+                        draft.revision(),
+                        D);
+        return tariffs.publish(
+                        draft.id(), new TariffRequests.Decision(draft.revision(), "Проверил"), A)
+                .id();
+    }
+
+    @Test
+    void paymentComparisonUsesPublishedSameSeriesAndDecimalArithmetic() throws Exception {
+        String old = rate("50", LocalDate.of(2026, 1, 1), null);
+        rate("60", LocalDate.of(2026, 7, 1), old);
+        var list =
+                comparison.compare(
+                        H,
+                        new OperationsRequests.Comparison(
+                                LocalDate.of(2026, 2, 1), LocalDate.of(2026, 8, 1), null, null),
+                        R);
+        var line = list.lines().getFirst();
+        assertEquals(0, new BigDecimal("10").compareTo(line.perUnitDifference()));
+        assertEquals(0, new BigDecimal("20").compareTo(line.percent()));
+        var estimate =
+                comparison
+                        .compare(
+                                H,
+                                new OperationsRequests.Comparison(
+                                        LocalDate.of(2026, 2, 1),
+                                        LocalDate.of(2026, 8, 1),
+                                        line.seriesId(),
+                                        new BigDecimal("3.25")),
+                                R)
+                        .lines()
+                        .getFirst();
+        assertEquals(new BigDecimal("162.50"), estimate.previousEstimate());
+        assertEquals(new BigDecimal("195.00"), estimate.estimate());
+        assertTrue(list.limitation().contains("не расчёт квитанции"));
+    }
+
+    @Test
+    void missingRateDoesNotInventPriorChargeOrExposeDraft() throws Exception {
+        String rate = rate("60", LocalDate.of(2026, 7, 1), null);
+        var line =
+                comparison
+                        .compare(
+                                H,
+                                new OperationsRequests.Comparison(
+                                        LocalDate.of(2026, 1, 1),
+                                        LocalDate.of(2026, 8, 1),
+                                        null,
+                                        null),
+                                R)
+                        .lines()
+                        .getFirst();
+        assertFalse(line.comparable());
+        assertNull(line.previous());
+        assertNull(line.perUnitDifference());
+        assertThrows(
+                BusinessException.class,
+                () ->
+                        comparison.compare(
+                                H,
+                                new OperationsRequests.Comparison(
+                                        LocalDate.of(2026, 8, 1),
+                                        LocalDate.of(2026, 1, 1),
+                                        null,
+                                        null),
+                                R));
+    }
+
+    @Test
+    void sharedWorkRemindersReachWorkerAndManagerWithoutAnyPrivateCase() {
+        String p = mass();
+        ops.assignWork(
+                p,
+                new OperationsRequests.SharedWork(
+                        "Общая работа",
+                        "Проверить оборудование",
+                        D,
+                        Instant.now().minusSeconds(7200),
+                        "Учебный срок",
+                        mrev(p)),
+                A);
+        monitoring.policy(
+                H, new OperationsRequests.Policy(true, 24, 24, 1, A, 0, "Согласовано"), A);
+        monitoring.scan();
+        assertTrue(
+                notifications.inbox(D).stream()
+                        .anyMatch(
+                                n -> n.get("kind").equals("REMINDER") && n.get("case_id") == null));
+        assertTrue(
+                notifications.inbox(A).stream()
+                        .anyMatch(
+                                n ->
+                                        n.get("kind").equals("ESCALATION")
+                                                && n.get("case_id") == null));
+        assertTrue(notifications.inbox(R).isEmpty());
+    }
+
+    @Test
+    void disablingPolicyWithdrawsPendingVisitReminders() {
+        String v = offer(Instant.now().plusSeconds(7200));
+        visits.choose(v, new OperationsRequests.VisitChoice(slot(v), vrev(v), rev()), R);
+        monitoring.policy(
+                H, new OperationsRequests.Policy(true, 24, 24, 24, A, 0, "Согласовано"), A);
+        monitoring.scan();
+        assertFalse(notifications.inbox(R).isEmpty());
+        monitoring.policy(
+                H,
+                new OperationsRequests.Policy(false, 24, 24, 24, A, 1, "Напоминания отключены"),
+                A);
+        assertTrue(notifications.inbox(R).isEmpty());
+    }
+
+    @Test
+    void completedVisitReleasesClosureGuardAndKeepsResidentConfirmationSeparate() {
+        String v = offer(Instant.now().plusSeconds(7200));
+        visits.choose(v, new OperationsRequests.VisitChoice(slot(v), vrev(v), rev()), R);
+        db.update(
+                "UPDATE visit_slots SET starts_at=?,ends_at=? WHERE visit_id=?",
+                Instant.now().minusSeconds(7200).toString(),
+                Instant.now().minusSeconds(3600).toString(),
+                v);
+        visits.decision(
+                v,
+                "complete",
+                new OperationsRequests.VisitDecision(
+                        vrev(v), rev(), "Осмотр выполнен, результат зафиксирован"),
+                D);
+        completion.requireComplete(c);
+        assertNotEquals(CaseStatus.CLOSED, cases.get(c, R).status());
+    }
+
+    @Test
+    void revokedResidentRoleDoesNotKeepSubscriptionsThroughAnotherHouseRole() {
+        ops.subscribe(H, new OperationsRequests.Subscription(true, false, false), R);
+        ops.notice(H, null, nr(NoticeState.PUBLISHED, 0), D);
+        assertFalse(notifications.inbox(R).isEmpty());
+        db.update(
+                "INSERT INTO house_memberships(house_id,user_id,role,verification_status,access_status) VALUES (?,?,'HOUSE_ADMIN','VERIFIED','ACTIVE')",
+                H,
+                R);
+        db.update(
+                "UPDATE house_memberships SET access_status='REVOKED' WHERE house_id=? AND user_id=? AND role='RESIDENT'",
+                H,
+                R);
+        assertTrue(notifications.inbox(R).isEmpty());
+        assertFalse(notifications.resident(H, R));
+    }
+
+    @Test
+    void nullVisitSlotIsRejectedByHttpValidation() throws Exception {
+        mvc.perform(
+                        post("/v1/cases/" + c + "/visits")
+                                .header("X-Demo-Session", "dispatcher")
+                                .contentType("application/json")
+                                .content(
+                                        "{\"purpose\":\"Осмотр\",\"workerId\":\"demo-dispatcher-1\",\"slots\":[null],\"caseRevision\":0,\"reason\":\"Проверка\"}"))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void httpBoundariesAndValidation() throws Exception {
+        mvc.perform(
+                        get("/v1/houses/" + H + "/operations-analytics")
+                                .header("X-Demo-Session", "true"))
+                .andExpect(status().isNotFound());
+        mvc.perform(
+                        post("/v1/cases/" + c + "/visits")
+                                .header("X-Demo-Session", "dispatcher")
+                                .contentType("application/json")
+                                .content("{}"))
+                .andExpect(status().isBadRequest());
+        mvc.perform(get("/v1/houses/" + H + "/operations").header("X-Demo-Session", "true"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.canManage").value(false));
+    }
+
+    @Test
+    void joiningPublishedProblemCreatesOneCommonQueueItemForTwoResidents() {
+        String neighbour = "mass-neighbour";
+        db.update(
+                "INSERT INTO users(id,display_name,status) VALUES (?,'Сосед','ACTIVE')", neighbour);
+        db.update(
+                "INSERT INTO house_memberships(house_id,user_id,role,verification_status,access_status) VALUES (?,?,'RESIDENT','VERIFIED','ACTIVE')",
+                H,
+                neighbour);
+        String p = mass();
+        var first =
+                ops.join(p, new OperationsRequests.Join("mass-first", "Та же протечка", null), R);
+        var second =
+                ops.join(
+                        p,
+                        new OperationsRequests.Join("mass-second", "Протечка у соседа", null),
+                        neighbour);
+        assertNotEquals(first.id(), second.id());
+        assertEquals(first.sharedRequestId(), second.sharedRequestId());
+        assertEquals(2, second.participants());
+        assertEquals(
+                1,
+                cases.queue(H, D).stream()
+                        .filter(v -> first.sharedRequestId().equals(v.sharedRequestId()))
+                        .count());
+        assertThrows(RuntimeException.class, () -> cases.get(second.id(), R));
+    }
 }

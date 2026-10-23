@@ -7,6 +7,7 @@ final class PendingOperation {
     private PendingOperation() {}
 
     static ResponseStatusException notImplemented() {
-        return new ResponseStatusException(HttpStatus.NOT_IMPLEMENTED, "Workflow is not implemented");
+        return new ResponseStatusException(
+                HttpStatus.NOT_IMPLEMENTED, "Workflow is not implemented");
     }
 }

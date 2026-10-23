@@ -16,6 +16,11 @@ public final class ConnectorsController {
         throw PendingOperation.notImplemented();
     }
 
-    public enum ConnectorType { FIAS, GIS, UK }
+    public enum ConnectorType {
+        FIAS,
+        GIS,
+        UK
+    }
+
     public record SyncRequest(@NotBlank String houseId) {}
 }

@@ -1,17 +1,17 @@
 package ru.pulsedoma.bootstrap;
 
 import com.zaxxer.hikari.HikariDataSource;
-import org.sqlite.SQLiteConfig;
-import org.sqlite.SQLiteDataSource;
+import javax.sql.DataSource;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
-
-import javax.sql.DataSource;
+import org.sqlite.SQLiteConfig;
+import org.sqlite.SQLiteDataSource;
 
 @Configuration
 public class SqliteDataSourceConfig {
-    // SQLite still serializes writes; allow concurrent readers and avoid queuing all HTTP requests behind one connection.
+    // SQLite still serializes writes; allow concurrent readers and avoid queuing all HTTP requests
+    // behind one connection.
     @Bean
     public DataSource dataSource(@Value("${spring.datasource.url}") String url) {
         SQLiteConfig sqlite = new SQLiteConfig();

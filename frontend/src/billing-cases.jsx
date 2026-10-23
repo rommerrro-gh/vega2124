@@ -1,52 +1,1066 @@
-import React,{useEffect,useState} from "react";
+import React, { useEffect, useState } from "react";
 import "./billing.css";
-const outcomes={EXPLAINED:"Подготовлено объяснение",DISCREPANCY:"Найдено расхождение",NEED_INFORMATION:"Для вывода недостаточно сведений"};
-const correctionStates={DRAFT:"Готовим запрос · ещё не отправлен",SENT:"Отправка зафиксирована сотрудником",ACKNOWLEDGED:"Получение подтверждено",APPLIED:"Получена новая сумма · ожидает проверки",REWORK:"Требуется уточнение результата",VERIFIED:"Исправление подтверждено другим специалистом",REFUSAL_RECEIVED:"Получен отказ · ожидает проверки",REFUSAL_REVIEWED:"Отказ рассмотрен · исправление не выполнено",CANCELLED:"Подготовка отменена · исправление не выполнено"};
-const reviewStates={DRAFT:"Черновик · жителю не виден",PUBLISHED:"Опубликованная проверка",SUPERSEDED:"Предыдущая проверка",CANCELLED:"Черновик отменён"};
-const money=v=>v==null?"не указано":Number(v).toLocaleString("ru-RU",{minimumFractionDigits:2,maximumFractionDigits:6})+" ₽";
-const date=v=>v?new Date(v).toLocaleString("ru-RU",{timeZone:"Europe/Moscow"}):"срок уточняется";
-const month=()=>new Intl.DateTimeFormat("sv-SE",{timeZone:"Europe/Moscow"}).format(new Date()).slice(0,7);
-const local=v=>v?new Date(new Date(v).getTime()-new Date(v).getTimezoneOffset()*60000).toISOString().slice(0,16):"";
-const field=(name,label,type="text",more={})=>({name,label,type,...more});
-function Form({fields,initial={},onSubmit,label="Сохранить",busy}){const [data,setData]=useState(()=>Object.fromEntries(fields.map(f=>[f.name,initial[f.name]??f.value??(f.type==="select"?(f.options?.[0]?.value||""):"")])));return <form className="workflow-form" onSubmit={e=>{e.preventDefault();onSubmit(data);}}>{fields.map(f=><label key={f.name}>{f.label}{f.type==="select"?<select required={f.required!==false} value={data[f.name]} onChange={e=>setData({...data,[f.name]:e.target.value})}>{(f.required===false||f.value==="")&&<option value="">Не выбран</option>}{f.options.map(o=><option key={o.value} value={o.value}>{o.label}</option>)}</select>:f.type==="textarea"?<textarea rows={3} required={f.required!==false} maxLength={f.max||2000} value={data[f.name]} onChange={e=>setData({...data,[f.name]:e.target.value})}/>:<input type={f.type} required={f.required!==false} maxLength={f.max||250} min={f.min} step={f.type==="number"?"0.01":undefined} value={data[f.name]} onChange={e=>setData({...data,[f.name]:e.target.value})}/>}</label>)}<button disabled={busy}>{label}</button></form>;}
-const docOptions=item=>item.documents.flatMap(d=>d.versions.map(v=>({value:v.id,label:`${d.title} · версия ${v.version}`})));
-const proofField=item=>field("evidenceVersionId","Документ из материалов обращения","select",{required:false,value:"",options:docOptions(item)});
-async function download(path,filename,role,headers){const r=await fetch(path,{headers:headers(role)});if(!r.ok)throw new Error("Материал недоступен. Обновите обращение.");const url=URL.createObjectURL(await r.blob()),a=document.createElement("a");a.href=url;const mime=r.headers.get("Content-Type")||"";a.download=filename.endsWith(".pdf")?filename.slice(0,-4)+(mime.startsWith("image/png")?".png":mime.startsWith("image/jpeg")?".jpg":".pdf"):filename;a.click();setTimeout(()=>URL.revokeObjectURL(url),30000);}
-const newLine=()=>({title:"",period:month(),unit:"",mode:"MANUAL",charged:"",quantity:"",rate:"",adjustment:"0",sourceReference:"",evidenceVersionId:"",tariffId:""});
-function LineEditor({value,onChange,onRemove,item,role,api,notice}){const [rates,setRates]=useState([]);useEffect(()=>setRates([]),[value.period]);const set=(key,v)=>onChange({...value,[key]:v});const input=(key,label,type="text",required=true)=><label>{label}<input type={type} required={required} min={type==="number"&&["quantity","rate"].includes(key)?"0":undefined} step={type==="number"?["quantity","rate"].includes(key)?"0.000001":"0.01":undefined} maxLength={key==="title"?200:60} value={value[key]??""} onChange={e=>set(key,e.target.value)}/></label>;
- return <fieldset className="billing-line-editor"><legend>Строка для проверки</legend>{input("title","Услуга / строка квитанции")}{input("period","Расчётный месяц строки","month")}{input("unit","Единица измерения")}{input("charged","Начислено в документе, ₽","number")}<label>Способ проверки<select value={value.mode} onChange={e=>onChange({...value,mode:e.target.value,quantity:"",rate:"",adjustment:"0",tariffId:""})}><option value="MANUAL">Ручной разбор — без расчёта формулы</option><option value="SIMPLE_PRODUCT">Только объём × ставка + поправка</option></select></label>
- {value.mode==="SIMPLE_PRODUCT"&&<>{input("quantity","Объём из источника","number")}{input("rate","Ставка из источника, ₽","number")}{input("adjustment","Явная поправка к строке, ₽","number")}<p className="muted">Округление результата до копеек: половина копейки вверх по модулю. Это арифметическая проверка указанной формулы, а не заключение о законности начисления.</p><button type="button" className="case-secondary" onClick={async()=>{try{const c=await api(role,`/v1/houses/${item.houseId}/tariffs?date=${value.period}-01`);setRates(c.rates);}catch(e){notice(e.message);}}}>Показать ставки дома на этот месяц</button>{rates.length>0&&<label>Проверенная ставка дома — по желанию<select value={value.tariffId} onChange={e=>{const t=rates.find(r=>r.id===e.target.value);onChange({...value,tariffId:t?.id||"",...(t?{rate:String(t.amount),unit:t.unitLabel}:{})});}}><option value="">Без ссылки на реестр</option>{rates.map(t=><option key={t.id} value={t.id}>{t.title} · {money(t.amount)} / {t.unitLabel} · {t.provider} · {t.applicability}</option>)}</select></label>}{value.tariffId&&<p>Выбрана публикация реестра. Перед сохранением проверьте поставщика и применимость. <button type="button" className="case-link" onClick={()=>set("tariffId","")}>Убрать связь</button></p>}</>}
- <label>Откуда взяты значения и что проверено<textarea required rows={3} maxLength={2000} value={value.sourceReference} onChange={e=>set("sourceReference",e.target.value)}/></label><label>Исходный документ — если есть<select value={value.evidenceVersionId} onChange={e=>set("evidenceVersionId",e.target.value)}><option value="">Документа нет / ссылка описана выше</option>{docOptions(item).map(o=><option key={o.value} value={o.value}>{o.label}</option>)}</select></label><button type="button" className="case-link" onClick={onRemove}>Убрать строку из черновика</button></fieldset>;
+const outcomes = {
+  EXPLAINED: "Подготовлено объяснение",
+  DISCREPANCY: "Найдено расхождение",
+  NEED_INFORMATION: "Для вывода недостаточно сведений",
+};
+const correctionStates = {
+  DRAFT: "Готовим запрос · ещё не отправлен",
+  SENT: "Отправка зафиксирована сотрудником",
+  ACKNOWLEDGED: "Получение подтверждено",
+  APPLIED: "Получена новая сумма · ожидает проверки",
+  REWORK: "Требуется уточнение результата",
+  VERIFIED: "Исправление подтверждено другим специалистом",
+  REFUSAL_RECEIVED: "Получен отказ · ожидает проверки",
+  REFUSAL_REVIEWED: "Отказ рассмотрен · исправление не выполнено",
+  CANCELLED: "Подготовка отменена · исправление не выполнено",
+};
+const reviewStates = {
+  DRAFT: "Черновик · жителю не виден",
+  PUBLISHED: "Опубликованная проверка",
+  SUPERSEDED: "Предыдущая проверка",
+  CANCELLED: "Черновик отменён",
+};
+const money = (v) =>
+  v == null
+    ? "не указано"
+    : Number(v).toLocaleString("ru-RU", { minimumFractionDigits: 2, maximumFractionDigits: 6 }) +
+      " ₽";
+const date = (v) =>
+  v ? new Date(v).toLocaleString("ru-RU", { timeZone: "Europe/Moscow" }) : "срок уточняется";
+const month = () =>
+  new Intl.DateTimeFormat("sv-SE", { timeZone: "Europe/Moscow" }).format(new Date()).slice(0, 7);
+const local = (v) =>
+  v
+    ? new Date(new Date(v).getTime() - new Date(v).getTimezoneOffset() * 60000)
+        .toISOString()
+        .slice(0, 16)
+    : "";
+const field = (name, label, type = "text", more = {}) => ({ name, label, type, ...more });
+function Form({ fields, initial = {}, onSubmit, label = "Сохранить", busy }) {
+  const [data, setData] = useState(() =>
+    Object.fromEntries(
+      fields.map((f) => [
+        f.name,
+        initial[f.name] ?? f.value ?? (f.type === "select" ? f.options?.[0]?.value || "" : ""),
+      ]),
+    ),
+  );
+  return (
+    <form
+      className="workflow-form"
+      onSubmit={(e) => {
+        e.preventDefault();
+        onSubmit(data);
+      }}
+    >
+      {fields.map((f) => (
+        <label key={f.name}>
+          {f.label}
+          {f.type === "select" ? (
+            <select
+              required={f.required !== false}
+              value={data[f.name]}
+              onChange={(e) => setData({ ...data, [f.name]: e.target.value })}
+            >
+              {(f.required === false || f.value === "") && <option value="">Не выбран</option>}
+              {f.options.map((o) => (
+                <option key={o.value} value={o.value}>
+                  {o.label}
+                </option>
+              ))}
+            </select>
+          ) : f.type === "textarea" ? (
+            <textarea
+              rows={3}
+              required={f.required !== false}
+              maxLength={f.max || 2000}
+              value={data[f.name]}
+              onChange={(e) => setData({ ...data, [f.name]: e.target.value })}
+            />
+          ) : (
+            <input
+              type={f.type}
+              required={f.required !== false}
+              maxLength={f.max || 250}
+              min={f.min}
+              step={f.type === "number" ? "0.01" : undefined}
+              value={data[f.name]}
+              onChange={(e) => setData({ ...data, [f.name]: e.target.value })}
+            />
+          )}
+        </label>
+      ))}
+      <button disabled={busy}>{label}</button>
+    </form>
+  );
 }
-function ReviewEditor({initial,item,busy,onSubmit,onCancel,role,api,notice}){const [data,setData]=useState(()=>({period:initial?.period||month(),outcome:initial?.outcome||"EXPLAINED",findings:initial?.findings||"",explanation:initial?.explanation||"",limitations:initial?.limitations||"",sourceReference:initial?.source_reference||"",evidenceVersionId:initial?.evidence_version_id||"",reason:""}));const [lines,setLines]=useState(()=>initial?.lines?.map(l=>({...l,charged:l.charged,quantity:l.quantity??"",rate:l.rate??"",sourceReference:l.source_reference,evidenceVersionId:l.evidence_version_id||"",tariffId:l.tariff_id||""}))||[]);
- return <form className="workflow-form billing-review-editor" onSubmit={e=>{e.preventDefault();onSubmit({...data,evidenceVersionId:data.evidenceVersionId||null,lines:lines.map(l=>({title:l.title,period:l.period,unit:l.unit,mode:l.mode,charged:l.charged,quantity:l.quantity===""?null:l.quantity,rate:l.rate===""?null:l.rate,adjustment:l.adjustment,sourceReference:l.sourceReference,evidenceVersionId:l.evidenceVersionId||null,tariffId:l.tariffId||null}))});}}><h3>Подготовить объяснение проверки</h3><label>Расчётный месяц<input type="month" required value={data.period} onChange={e=>setData({...data,period:e.target.value})}/></label><label>Вывод<select value={data.outcome} onChange={e=>setData({...data,outcome:e.target.value})}>{Object.entries(outcomes).map(([k,v])=><option key={k} value={k}>{v}</option>)}</select></label>{[["findings","Что проверено и какие сведения установлены",3000],["explanation","Понятное объяснение для жителя",3000],["limitations","Что проверить не удалось / границы вывода",2000],["sourceReference","Основания и источники проверки",2000]].map(([key,label,max])=><label key={key}>{label}<textarea required rows={3} maxLength={max} value={data[key]} onChange={e=>setData({...data,[key]:e.target.value})}/></label>)}<label>Основной документ — по желанию<select value={data.evidenceVersionId} onChange={e=>setData({...data,evidenceVersionId:e.target.value})}><option value="">Нет / указан в пояснении</option>{docOptions(item).map(o=><option key={o.value} value={o.value}>{o.label}</option>)}</select></label>
- <p>Добавляйте только строки, которые нужны для ответа. Без квитанции можно подготовить справочное объяснение или запросить сведения. Данные вводит сотрудник, не житель.</p>{lines.map((line,i)=><LineEditor key={i} value={line} item={item} role={role} api={api} notice={notice} onChange={v=>setLines(lines.map((l,n)=>n===i?v:l))} onRemove={()=>setLines(lines.filter((l,n)=>n!==i))}/>)}<button type="button" className="case-secondary" disabled={lines.length>=50} onClick={()=>setLines([...lines,newLine()])}>Добавить строку для проверки</button><label>Причина подготовки версии<textarea required maxLength={1000} value={data.reason} onChange={e=>setData({...data,reason:e.target.value})}/></label><div className="case-actions"><button disabled={busy}>Сохранить черновик проверки</button><button className="case-secondary" type="button" onClick={onCancel}>Отмена</button></div></form>;
+const docOptions = (item) =>
+  item.documents.flatMap((d) =>
+    d.versions.map((v) => ({ value: v.id, label: `${d.title} · версия ${v.version}` })),
+  );
+const proofField = (item) =>
+  field("evidenceVersionId", "Документ из материалов обращения", "select", {
+    required: false,
+    value: "",
+    options: docOptions(item),
+  });
+async function download(path, filename, role, headers) {
+  const r = await fetch(path, { headers: headers(role) });
+  if (!r.ok) throw new Error("Материал недоступен. Обновите обращение.");
+  const url = URL.createObjectURL(await r.blob()),
+    a = document.createElement("a");
+  a.href = url;
+  const mime = r.headers.get("Content-Type") || "";
+  a.download = filename.endsWith(".pdf")
+    ? filename.slice(0, -4) +
+      (mime.startsWith("image/png") ? ".png" : mime.startsWith("image/jpeg") ? ".jpg" : ".pdf")
+    : filename;
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(url), 30000);
 }
-export function BillingCase({item,role,api,headers,onChange}){
- const [data,setData]=useState(null),[notice,setNotice]=useState(""),[busy,setBusy]=useState(false),[edit,setEdit]=useState(null),[action,setAction]=useState(null);
- useEffect(()=>{let active=true;setNotice("");api(role,`/v1/cases/${item.id}/billing`).then(w=>{if(active)setData(w);}).catch(e=>{if(active)setNotice(e.message);});return()=>{active=false;};},[item.id,item.revision,role]);
- async function run(path,body,method="POST"){setBusy(true);setNotice("");try{const result=await api(role,path,{method,body:JSON.stringify({...body,revision:item.revision})});if(result.reviews)setData(result);setEdit(null);setAction(null);onChange(await api(role,`/v1/cases/${item.id}`));}catch(e){setNotice(e.message);}finally{setBusy(false);}}
- const decide=(path,mode)=>setAction({path,mode});
- const current=data?.reviews.find(r=>r.state==="PUBLISHED");
- const correctionFields=[field("reviewId","Опубликованное расхождение","select",{options:data?.reviews.filter(r=>r.state==="PUBLISHED"&&r.outcome==="DISCREPANCY").map(r=>({value:r.id,label:`${r.period} · ${r.explanation.slice(0,100)}`}))||[]}),field("period","Расчётный месяц","month",{value:current?.period||month()}),field("scope","Какая услуга или итог документа исправляется","textarea",{max:1000}),field("beforeAmount","Сумма до исправления, ₽","number"),field("afterAmount","Ожидаемая сумма после исправления, ₽","number"),field("basis","Обоснование и источники","textarea",{max:3000}),field("recipient","Кому направляется запрос"),field("channel","Фактический канал передачи", "text",{max:500}),field("authority","Основание полномочий сотрудника на передачу","textarea"),field("dueAt","Срок ответа, если известен","datetime-local",{required:false}),field("dueBasis","Основание срока или почему он пока неизвестен","textarea",{max:1000})];
- const moveFields=state=>[field("note",["VERIFIED","REFUSAL_REVIEWED"].includes(state)?"Что независимо проверено и какой вывод":"Что произошло — пояснение для жителя","textarea"),...(["SENT","ACKNOWLEDGED","APPLIED","REFUSAL_RECEIVED"].includes(state)?[{...proofField(item),required:true}]:[]),...(state==="APPLIED"?[field("actualAfter","Фактическая сумма из полученного документа, ₽","number")]:[])];
- const transitions={DRAFT:["SENT","CANCELLED"],SENT:["ACKNOWLEDGED","APPLIED","REFUSAL_RECEIVED"],ACKNOWLEDGED:["APPLIED","REFUSAL_RECEIVED"],REWORK:["SENT","APPLIED","REFUSAL_RECEIVED"],APPLIED:["VERIFIED","REWORK"],REFUSAL_RECEIVED:["REFUSAL_REVIEWED","REWORK"]};
- const moveLabels={SENT:"Зафиксировать отправку",CANCELLED:"Отменить подготовку",ACKNOWLEDGED:"Подтвердить получение",APPLIED:"Внести полученную новую сумму",REFUSAL_RECEIVED:"Зафиксировать полученный отказ",VERIFIED:"Независимо подтвердить исправление",REFUSAL_REVIEWED:"Независимо проверить отказ",REWORK:"Вернуть на уточнение"};
- return <section className="case-workflow billing-workspace"><h3>Проверка начисления и исправление</h3><p className="muted">Документы рассматривает специалист. Отправка запроса и получение новой суммы ещё не означают, что перерасчёт подтверждён.</p>{notice&&<p role="status" className="case-notice">{notice}</p>}{!data&&<p>Загружаем ход проверки…</p>}
- {data?.questions.map(q=><article className="workflow-card" key={q.id}><strong>{q.state==="OPEN"?"Нужны сведения":q.state==="ANSWERED"?"Ответ получен":"Уточнение отменено"}</strong><h4>{q.question}</h4><p>Зачем: {q.purpose}</p>{q.response&&<p>Ответ / пояснение: {q.response}</p>}{q.state==="OPEN"&&data.isAuthor&&item.status!=="CLOSED"&&<><p>Можно не знать ответ и не иметь документа. Повторно подавать обращение не нужно.</p><div className="case-actions"><button type="button" disabled={busy} onClick={()=>run(`/v1/billing-questions/${q.id}/answer`,{response:"Не знаю",evidenceVersionId:null})}>Не знаю</button><button type="button" disabled={busy} className="case-secondary" onClick={()=>run(`/v1/billing-questions/${q.id}/answer`,{response:"Документа нет",evidenceVersionId:null})}>Документа нет</button></div><Form fields={[field("response","Ответ своими словами","textarea"),proofField(item)]} busy={busy} label="Ответить на уточнение" onSubmit={d=>run(`/v1/billing-questions/${q.id}/answer`,{...d,evidenceVersionId:d.evidenceVersionId||null})}/></>}{q.state==="OPEN"&&data.canWork&&<button type="button" className="case-link" onClick={()=>decide(`/v1/billing-questions/${q.id}/cancel`,"decision")}>Закрыть ненужное уточнение с пояснением</button>}</article>)}
- {data?.reviews.map(r=><article className="workflow-card" key={r.id}><small>{reviewStates[r.state]} · {r.period}</small><h4>{outcomes[r.outcome]}</h4><p><strong>Что проверено:</strong> {r.findings}</p><p><strong>Объяснение:</strong> {r.explanation}</p><p><strong>Ограничения:</strong> {r.limitations}</p><p><strong>Основания:</strong> {r.source_reference}</p>{r.evidence_version_id&&<button type="button" className="case-link" onClick={()=>download(`/v1/case-document-versions/${r.evidence_version_id}`,"billing-source.pdf",role,headers).catch(e=>setNotice(e.message))}>Скачать основной источник проверки</button>}
- {r.lines.map((l,i)=><div className="billing-line-result" key={i}><strong>{l.title} · {l.period}</strong><p>В документе: {money(l.charged)}{l.mode==="SIMPLE_PRODUCT"?<> · Объём: {l.quantity} {l.unit}<br/>Простая проверка: {l.quantity} × {l.rate} + ({l.adjustment}) = {money(l.expected)}<br/>Разница «расчёт − начислено»: {money(l.difference)}<br/>Это результат указанной арифметики. Применимость формулы оценил специалист.</>:<> · Формула разобрана вручную, автоматического вычисления нет.</>}</p><p>Источник: {l.source_reference}</p>{l.tariff_snapshot&&<p>Использована публикация реестра на момент проверки: {JSON.parse(l.tariff_snapshot).title} · {money(JSON.parse(l.tariff_snapshot).amount)} / {JSON.parse(l.tariff_snapshot).unitLabel}. {JSON.parse(l.tariff_snapshot).applicability}</p>}{l.evidence_version_id&&<button type="button" className="case-link" onClick={()=>download(`/v1/case-document-versions/${l.evidence_version_id}`,"billing-line-source.pdf",role,headers).catch(e=>setNotice(e.message))}>Скачать источник строки</button>}</div>)}
- {data.canWork&&r.state==="DRAFT"&&<div className="case-actions"><button type="button" disabled={busy} onClick={()=>{setAction(null);setEdit(r);}}>Продолжить черновик</button><button type="button" disabled={busy} onClick={()=>decide(`/v1/billing-reviews/${r.id}/publish`,"decision")}>Опубликовать объяснение</button><button className="case-link" type="button" onClick={()=>decide(`/v1/billing-reviews/${r.id}/cancel`,"decision")}>Отменить черновик</button></div>}</article>)}
- {data?.corrections.map(c=><article className="workflow-card" key={c.id}><strong>{correctionStates[c.state]}</strong><h4>{c.scope} · {c.period}</h4><p>До: {money(c.before_amount)} · Ожидается: {money(c.after_amount)}<br/>Изменение «после − до»: {money(c.delta)}{c.actual_after!=null&&<><br/>В полученном документе: {money(c.actual_after)}</>}</p><p>Основание: {c.basis}</p><p>Адресат: {c.recipient}<br/>Канал: {c.channel}<br/>Срок: {date(c.due_at)} · {c.due_basis}</p>{c.evidence_version_id&&<button className="case-link" type="button" onClick={()=>download(`/v1/case-document-versions/${c.evidence_version_id}`,"billing-correction-source.pdf",role,headers).catch(e=>setNotice(e.message))}>Скачать подтверждающий документ</button>}<div className="case-actions"><button className="case-secondary" type="button" onClick={()=>download(`/v1/billing-corrections/${c.id}/print`,"billing-correction.html",role,headers).catch(e=>setNotice(e.message))}>Материалы запроса для печати</button>{data.canWork&&transitions[c.state]?.map(state=><button key={state} type="button" disabled={busy} className="case-secondary" onClick={()=>setAction({path:`/v1/billing-corrections/${c.id}`,mode:"move",state})}>{moveLabels[state]}</button>)}{data.canWork&&!['VERIFIED','REFUSAL_REVIEWED','CANCELLED'].includes(c.state)&&<button type="button" className="case-link" onClick={()=>setAction({path:`/v1/billing-corrections/${c.id}/schedule`,mode:"schedule",value:c})}>Уточнить срок</button>}</div></article>)}
- {data?.canWork&&<details className="workflow-section" open={edit!=null||action!=null}><summary>Действия специалиста по начислениям</summary><p>Новые и исправленные квитанции добавляются через «Документы» ниже. Проверку собственного обращения выполняет другой сотрудник.</p><div className="case-actions"><button type="button" disabled={busy} onClick={()=>{setAction(null);setEdit({});}}>Подготовить новую проверку</button><button type="button" disabled={busy} className="case-secondary" onClick={()=>{setEdit(null);decide(`/v1/cases/${item.id}/billing/questions`,"question");}}>Запросить сведения</button>{current?.outcome==="DISCREPANCY"&&<button type="button" disabled={busy} className="case-secondary" onClick={()=>{setEdit(null);decide(`/v1/cases/${item.id}/billing/corrections`,"correction");}}>Подготовить исправление</button>}<button type="button" disabled={busy} className="case-secondary" onClick={()=>decide(`/v1/cases/${item.id}/billing/propose`,"decision")}>Предложить результат жителю</button></div>
- {edit&&<ReviewEditor key={edit.id||"new"} initial={edit} item={item} role={role} api={api} busy={busy} notice={setNotice} onCancel={()=>setEdit(null)} onSubmit={d=>run(`/v1/cases/${item.id}/billing/reviews${edit.id?`/${edit.id}`:""}`,d,edit.id?"PUT":"POST")}/>}
- {action&&<div className="billing-action"><h4>{action.mode==="move"?moveLabels[action.state]:action.mode==="correction"?"Запрос на исправление":action.mode==="question"?"Какие сведения нужны":action.mode==="schedule"?"Уточнение срока":"Подтвердить действие с пояснением"}</h4><Form key={`${action.path}:${action.mode}:${action.state||""}`} fields={action.mode==="move"?moveFields(action.state):action.mode==="correction"?correctionFields:action.mode==="question"?[field("question","Что нужно уточнить","textarea",{max:1500}),field("purpose","Зачем нужны сведения и что делать, если их нет","textarea",{max:1500})]:action.mode==="schedule"?[field("dueAt","Новый срок, если известен","datetime-local",{value:local(action.value.due_at),required:false}),field("dueBasis","Основание срока или почему он неизвестен","textarea",{value:action.value.due_basis,max:1000}),field("note","Причина изменения","textarea",{max:1000})]:[field("note","Пояснение / что проверено","textarea")]} busy={busy} label={action.mode==="move"?moveLabels[action.state]:"Подтвердить"} onSubmit={d=>run(action.path,{...d,...(action.mode==="move"?{state:action.state,evidenceVersionId:d.evidenceVersionId||null,actualAfter:d.actualAfter||null}:{}),...(['correction','schedule'].includes(action.mode)?{dueAt:d.dueAt?new Date(d.dueAt).toISOString():null}:{})},action.mode==="move"?"PATCH":"POST")}/><button type="button" className="case-link" onClick={()=>setAction(null)}>Отмена действия</button></div>}
- <details><summary>Служебная история финансовой проверки · {data.history.length}</summary>{data.history.map(h=><div className="billing-history" key={h.id}><small>{date(h.created_at)} · {h.actor}</small><p>{h.note}</p>{h.action==="CORRECTION_RESCHEDULED"&&<p>Ранее: {date(JSON.parse(h.snapshot_json).before.due_at)} · {JSON.parse(h.snapshot_json).before.due_basis}<br/>Теперь: {date(JSON.parse(h.snapshot_json).after.due_at)} · {JSON.parse(h.snapshot_json).after.due_basis}</p>}</div>)}</details></details>}
- {!data?.canWork&&data?.reviews.length===0&&<p>Сотрудник ещё не опубликовал результат проверки. Если понадобятся сведения, здесь появится понятный вопрос.</p>}
- </section>;
+const newLine = () => ({
+  title: "",
+  period: month(),
+  unit: "",
+  mode: "MANUAL",
+  charged: "",
+  quantity: "",
+  rate: "",
+  adjustment: "0",
+  sourceReference: "",
+  evidenceVersionId: "",
+  tariffId: "",
+});
+function LineEditor({ value, onChange, onRemove, item, role, api, notice }) {
+  const [rates, setRates] = useState([]);
+  useEffect(() => setRates([]), [value.period]);
+  const set = (key, v) => onChange({ ...value, [key]: v });
+  const input = (key, label, type = "text", required = true) => (
+    <label>
+      {label}
+      <input
+        type={type}
+        required={required}
+        min={type === "number" && ["quantity", "rate"].includes(key) ? "0" : undefined}
+        step={
+          type === "number" ? (["quantity", "rate"].includes(key) ? "0.000001" : "0.01") : undefined
+        }
+        maxLength={key === "title" ? 200 : 60}
+        value={value[key] ?? ""}
+        onChange={(e) => set(key, e.target.value)}
+      />
+    </label>
+  );
+  return (
+    <fieldset className="billing-line-editor">
+      <legend>Строка для проверки</legend>
+      {input("title", "Услуга / строка квитанции")}
+      {input("period", "Расчётный месяц строки", "month")}
+      {input("unit", "Единица измерения")}
+      {input("charged", "Начислено в документе, ₽", "number")}
+      <label>
+        Способ проверки
+        <select
+          value={value.mode}
+          onChange={(e) =>
+            onChange({
+              ...value,
+              mode: e.target.value,
+              quantity: "",
+              rate: "",
+              adjustment: "0",
+              tariffId: "",
+            })
+          }
+        >
+          <option value="MANUAL">Ручной разбор — без расчёта формулы</option>
+          <option value="SIMPLE_PRODUCT">Только объём × ставка + поправка</option>
+        </select>
+      </label>
+      {value.mode === "SIMPLE_PRODUCT" && (
+        <>
+          {input("quantity", "Объём из источника", "number")}
+          {input("rate", "Ставка из источника, ₽", "number")}
+          {input("adjustment", "Явная поправка к строке, ₽", "number")}
+          <p className="muted">
+            Округление результата до копеек: половина копейки вверх по модулю. Это арифметическая
+            проверка указанной формулы, а не заключение о законности начисления.
+          </p>
+          <button
+            type="button"
+            className="case-secondary"
+            onClick={async () => {
+              try {
+                const c = await api(
+                  role,
+                  `/v1/houses/${item.houseId}/tariffs?date=${value.period}-01`,
+                );
+                setRates(c.rates);
+              } catch (e) {
+                notice(e.message);
+              }
+            }}
+          >
+            Показать ставки дома на этот месяц
+          </button>
+          {rates.length > 0 && (
+            <label>
+              Проверенная ставка дома — по желанию
+              <select
+                value={value.tariffId}
+                onChange={(e) => {
+                  const t = rates.find((r) => r.id === e.target.value);
+                  onChange({
+                    ...value,
+                    tariffId: t?.id || "",
+                    ...(t ? { rate: String(t.amount), unit: t.unitLabel } : {}),
+                  });
+                }}
+              >
+                <option value="">Без ссылки на реестр</option>
+                {rates.map((t) => (
+                  <option key={t.id} value={t.id}>
+                    {t.title} · {money(t.amount)} / {t.unitLabel} · {t.provider} · {t.applicability}
+                  </option>
+                ))}
+              </select>
+            </label>
+          )}
+          {value.tariffId && (
+            <p>
+              Выбрана публикация реестра. Перед сохранением проверьте поставщика и применимость.{" "}
+              <button type="button" className="case-link" onClick={() => set("tariffId", "")}>
+                Убрать связь
+              </button>
+            </p>
+          )}
+        </>
+      )}
+      <label>
+        Откуда взяты значения и что проверено
+        <textarea
+          required
+          rows={3}
+          maxLength={2000}
+          value={value.sourceReference}
+          onChange={(e) => set("sourceReference", e.target.value)}
+        />
+      </label>
+      <label>
+        Исходный документ — если есть
+        <select
+          value={value.evidenceVersionId}
+          onChange={(e) => set("evidenceVersionId", e.target.value)}
+        >
+          <option value="">Документа нет / ссылка описана выше</option>
+          {docOptions(item).map((o) => (
+            <option key={o.value} value={o.value}>
+              {o.label}
+            </option>
+          ))}
+        </select>
+      </label>
+      <button type="button" className="case-link" onClick={onRemove}>
+        Убрать строку из черновика
+      </button>
+    </fieldset>
+  );
 }
-export function BillingQueue({houseId,role,api,renderCase,refreshKey}){const [rows,setRows]=useState(null),[detail,setDetail]=useState(null),[filter,setFilter]=useState("ALL"),[notice,setNotice]=useState("");async function load(){const r=await api(role,`/v1/houses/${houseId}/billing-queue`);setRows(r);return r;}
- useEffect(()=>{let active=true;setRows(null);setDetail(null);setNotice("");api(role,`/v1/houses/${houseId}/billing-queue`).then(r=>{if(active)setRows(r);}).catch(e=>{if(active&&e.status!==404)setNotice(e.message);});return()=>{active=false;};},[houseId,role,refreshKey]);
- if(!rows&&!notice)return null;const visible=(rows||[]).filter(r=>filter==="ALL"||filter==="UNASSIGNED"&&!r.item.responsibleUserId||filter==="WAITING"&&r.openQuestions>0||filter==="CORRECTIONS"&&r.openCorrections>0||filter==="OVERDUE"&&(r.overdueCorrections>0||r.item.dueAt&&new Date(r.item.dueAt)<new Date()&&r.item.status!=="CLOSED"));
- return <details className="case-panel billing-queue"><summary>Вопросы по начислениям · {rows?.length||0}</summary><p>Закрытая очередь финансовых обращений дома. Доступ выдан отдельно от справочных тарифов.</p>{notice&&<p className="case-notice">{notice}</p>}{detail?renderCase({item:detail,onClose:()=>{setDetail(null);load().catch(e=>setNotice(e.message));},onChange:c=>{setDetail(c);load().catch(e=>setNotice(e.message));}}):<><div className="case-actions"><label>Показать<select value={filter} onChange={e=>setFilter(e.target.value)}><option value="ALL">Все финансовые обращения</option><option value="UNASSIGNED">Без ответственного</option><option value="WAITING">Ожидаем сведения</option><option value="CORRECTIONS">Исправления в работе</option><option value="OVERDUE">Прошёл срок</option></select></label><button type="button" className="case-link" onClick={()=>load().catch(e=>setNotice(e.message))}>Обновить финансовую очередь</button></div><div className="case-list">{visible.map(({item:c,openQuestions,openCorrections,overdueCorrections})=><button type="button" className="case-list-item" key={c.id} onClick={()=>setDetail(c)}><small>Обращение №{c.number} · {c.author}</small><strong>{c.description}</strong><span>{c.nextStep}</span><small>{openQuestions>0?`Уточнений: ${openQuestions}. `:""}{openCorrections>0?`Исправлений в работе: ${openCorrections}. `:""}{overdueCorrections>0?`Просроченных запросов: ${overdueCorrections}`:""}</small></button>)}{!visible.length&&<p>В этой очереди обращений пока нет.</p>}</div></>}</details>;
+function ReviewEditor({ initial, item, busy, onSubmit, onCancel, role, api, notice }) {
+  const [data, setData] = useState(() => ({
+    period: initial?.period || month(),
+    outcome: initial?.outcome || "EXPLAINED",
+    findings: initial?.findings || "",
+    explanation: initial?.explanation || "",
+    limitations: initial?.limitations || "",
+    sourceReference: initial?.source_reference || "",
+    evidenceVersionId: initial?.evidence_version_id || "",
+    reason: "",
+  }));
+  const [lines, setLines] = useState(
+    () =>
+      initial?.lines?.map((l) => ({
+        ...l,
+        charged: l.charged,
+        quantity: l.quantity ?? "",
+        rate: l.rate ?? "",
+        sourceReference: l.source_reference,
+        evidenceVersionId: l.evidence_version_id || "",
+        tariffId: l.tariff_id || "",
+      })) || [],
+  );
+  return (
+    <form
+      className="workflow-form billing-review-editor"
+      onSubmit={(e) => {
+        e.preventDefault();
+        onSubmit({
+          ...data,
+          evidenceVersionId: data.evidenceVersionId || null,
+          lines: lines.map((l) => ({
+            title: l.title,
+            period: l.period,
+            unit: l.unit,
+            mode: l.mode,
+            charged: l.charged,
+            quantity: l.quantity === "" ? null : l.quantity,
+            rate: l.rate === "" ? null : l.rate,
+            adjustment: l.adjustment,
+            sourceReference: l.sourceReference,
+            evidenceVersionId: l.evidenceVersionId || null,
+            tariffId: l.tariffId || null,
+          })),
+        });
+      }}
+    >
+      <h3>Подготовить объяснение проверки</h3>
+      <label>
+        Расчётный месяц
+        <input
+          type="month"
+          required
+          value={data.period}
+          onChange={(e) => setData({ ...data, period: e.target.value })}
+        />
+      </label>
+      <label>
+        Вывод
+        <select
+          value={data.outcome}
+          onChange={(e) => setData({ ...data, outcome: e.target.value })}
+        >
+          {Object.entries(outcomes).map(([k, v]) => (
+            <option key={k} value={k}>
+              {v}
+            </option>
+          ))}
+        </select>
+      </label>
+      {[
+        ["findings", "Что проверено и какие сведения установлены", 3000],
+        ["explanation", "Понятное объяснение для жителя", 3000],
+        ["limitations", "Что проверить не удалось / границы вывода", 2000],
+        ["sourceReference", "Основания и источники проверки", 2000],
+      ].map(([key, label, max]) => (
+        <label key={key}>
+          {label}
+          <textarea
+            required
+            rows={3}
+            maxLength={max}
+            value={data[key]}
+            onChange={(e) => setData({ ...data, [key]: e.target.value })}
+          />
+        </label>
+      ))}
+      <label>
+        Основной документ — по желанию
+        <select
+          value={data.evidenceVersionId}
+          onChange={(e) => setData({ ...data, evidenceVersionId: e.target.value })}
+        >
+          <option value="">Нет / указан в пояснении</option>
+          {docOptions(item).map((o) => (
+            <option key={o.value} value={o.value}>
+              {o.label}
+            </option>
+          ))}
+        </select>
+      </label>
+      <p>
+        Добавляйте только строки, которые нужны для ответа. Без квитанции можно подготовить
+        справочное объяснение или запросить сведения. Данные вводит сотрудник, не житель.
+      </p>
+      {lines.map((line, i) => (
+        <LineEditor
+          key={i}
+          value={line}
+          item={item}
+          role={role}
+          api={api}
+          notice={notice}
+          onChange={(v) => setLines(lines.map((l, n) => (n === i ? v : l)))}
+          onRemove={() => setLines(lines.filter((l, n) => n !== i))}
+        />
+      ))}
+      <button
+        type="button"
+        className="case-secondary"
+        disabled={lines.length >= 50}
+        onClick={() => setLines([...lines, newLine()])}
+      >
+        Добавить строку для проверки
+      </button>
+      <label>
+        Причина подготовки версии
+        <textarea
+          required
+          maxLength={1000}
+          value={data.reason}
+          onChange={(e) => setData({ ...data, reason: e.target.value })}
+        />
+      </label>
+      <div className="case-actions">
+        <button disabled={busy}>Сохранить черновик проверки</button>
+        <button className="case-secondary" type="button" onClick={onCancel}>
+          Отмена
+        </button>
+      </div>
+    </form>
+  );
+}
+export function BillingCase({ item, role, api, headers, onChange }) {
+  const [data, setData] = useState(null),
+    [notice, setNotice] = useState(""),
+    [busy, setBusy] = useState(false),
+    [edit, setEdit] = useState(null),
+    [action, setAction] = useState(null);
+  useEffect(() => {
+    let active = true;
+    setNotice("");
+    api(role, `/v1/cases/${item.id}/billing`)
+      .then((w) => {
+        if (active) setData(w);
+      })
+      .catch((e) => {
+        if (active) setNotice(e.message);
+      });
+    return () => {
+      active = false;
+    };
+  }, [item.id, item.revision, role]);
+  async function run(path, body, method = "POST") {
+    setBusy(true);
+    setNotice("");
+    try {
+      const result = await api(role, path, {
+        method,
+        body: JSON.stringify({ ...body, revision: item.revision }),
+      });
+      if (result.reviews) setData(result);
+      setEdit(null);
+      setAction(null);
+      onChange(await api(role, `/v1/cases/${item.id}`));
+    } catch (e) {
+      setNotice(e.message);
+    } finally {
+      setBusy(false);
+    }
+  }
+  const decide = (path, mode) => setAction({ path, mode });
+  const current = data?.reviews.find((r) => r.state === "PUBLISHED");
+  const correctionFields = [
+    field("reviewId", "Опубликованное расхождение", "select", {
+      options:
+        data?.reviews
+          .filter((r) => r.state === "PUBLISHED" && r.outcome === "DISCREPANCY")
+          .map((r) => ({ value: r.id, label: `${r.period} · ${r.explanation.slice(0, 100)}` })) ||
+        [],
+    }),
+    field("period", "Расчётный месяц", "month", { value: current?.period || month() }),
+    field("scope", "Какая услуга или итог документа исправляется", "textarea", { max: 1000 }),
+    field("beforeAmount", "Сумма до исправления, ₽", "number"),
+    field("afterAmount", "Ожидаемая сумма после исправления, ₽", "number"),
+    field("basis", "Обоснование и источники", "textarea", { max: 3000 }),
+    field("recipient", "Кому направляется запрос"),
+    field("channel", "Фактический канал передачи", "text", { max: 500 }),
+    field("authority", "Основание полномочий сотрудника на передачу", "textarea"),
+    field("dueAt", "Срок ответа, если известен", "datetime-local", { required: false }),
+    field("dueBasis", "Основание срока или почему он пока неизвестен", "textarea", { max: 1000 }),
+  ];
+  const moveFields = (state) => [
+    field(
+      "note",
+      ["VERIFIED", "REFUSAL_REVIEWED"].includes(state)
+        ? "Что независимо проверено и какой вывод"
+        : "Что произошло — пояснение для жителя",
+      "textarea",
+    ),
+    ...(["SENT", "ACKNOWLEDGED", "APPLIED", "REFUSAL_RECEIVED"].includes(state)
+      ? [{ ...proofField(item), required: true }]
+      : []),
+    ...(state === "APPLIED"
+      ? [field("actualAfter", "Фактическая сумма из полученного документа, ₽", "number")]
+      : []),
+  ];
+  const transitions = {
+    DRAFT: ["SENT", "CANCELLED"],
+    SENT: ["ACKNOWLEDGED", "APPLIED", "REFUSAL_RECEIVED"],
+    ACKNOWLEDGED: ["APPLIED", "REFUSAL_RECEIVED"],
+    REWORK: ["SENT", "APPLIED", "REFUSAL_RECEIVED"],
+    APPLIED: ["VERIFIED", "REWORK"],
+    REFUSAL_RECEIVED: ["REFUSAL_REVIEWED", "REWORK"],
+  };
+  const moveLabels = {
+    SENT: "Зафиксировать отправку",
+    CANCELLED: "Отменить подготовку",
+    ACKNOWLEDGED: "Подтвердить получение",
+    APPLIED: "Внести полученную новую сумму",
+    REFUSAL_RECEIVED: "Зафиксировать полученный отказ",
+    VERIFIED: "Независимо подтвердить исправление",
+    REFUSAL_REVIEWED: "Независимо проверить отказ",
+    REWORK: "Вернуть на уточнение",
+  };
+  return (
+    <section className="case-workflow billing-workspace">
+      <h3>Проверка начисления и исправление</h3>
+      <p className="muted">
+        Документы рассматривает специалист. Отправка запроса и получение новой суммы ещё не
+        означают, что перерасчёт подтверждён.
+      </p>
+      {notice && (
+        <p role="status" className="case-notice">
+          {notice}
+        </p>
+      )}
+      {!data && <p>Загружаем ход проверки…</p>}
+      {data?.questions.map((q) => (
+        <article className="workflow-card" key={q.id}>
+          <strong>
+            {q.state === "OPEN"
+              ? "Нужны сведения"
+              : q.state === "ANSWERED"
+                ? "Ответ получен"
+                : "Уточнение отменено"}
+          </strong>
+          <h4>{q.question}</h4>
+          <p>Зачем: {q.purpose}</p>
+          {q.response && <p>Ответ / пояснение: {q.response}</p>}
+          {q.state === "OPEN" && data.isAuthor && item.status !== "CLOSED" && (
+            <>
+              <p>
+                Можно не знать ответ и не иметь документа. Повторно подавать обращение не нужно.
+              </p>
+              <div className="case-actions">
+                <button
+                  type="button"
+                  disabled={busy}
+                  onClick={() =>
+                    run(`/v1/billing-questions/${q.id}/answer`, {
+                      response: "Не знаю",
+                      evidenceVersionId: null,
+                    })
+                  }
+                >
+                  Не знаю
+                </button>
+                <button
+                  type="button"
+                  disabled={busy}
+                  className="case-secondary"
+                  onClick={() =>
+                    run(`/v1/billing-questions/${q.id}/answer`, {
+                      response: "Документа нет",
+                      evidenceVersionId: null,
+                    })
+                  }
+                >
+                  Документа нет
+                </button>
+              </div>
+              <Form
+                fields={[field("response", "Ответ своими словами", "textarea"), proofField(item)]}
+                busy={busy}
+                label="Ответить на уточнение"
+                onSubmit={(d) =>
+                  run(`/v1/billing-questions/${q.id}/answer`, {
+                    ...d,
+                    evidenceVersionId: d.evidenceVersionId || null,
+                  })
+                }
+              />
+            </>
+          )}
+          {q.state === "OPEN" && data.canWork && (
+            <button
+              type="button"
+              className="case-link"
+              onClick={() => decide(`/v1/billing-questions/${q.id}/cancel`, "decision")}
+            >
+              Закрыть ненужное уточнение с пояснением
+            </button>
+          )}
+        </article>
+      ))}
+      {data?.reviews.map((r) => (
+        <article className="workflow-card" key={r.id}>
+          <small>
+            {reviewStates[r.state]} · {r.period}
+          </small>
+          <h4>{outcomes[r.outcome]}</h4>
+          <p>
+            <strong>Что проверено:</strong> {r.findings}
+          </p>
+          <p>
+            <strong>Объяснение:</strong> {r.explanation}
+          </p>
+          <p>
+            <strong>Ограничения:</strong> {r.limitations}
+          </p>
+          <p>
+            <strong>Основания:</strong> {r.source_reference}
+          </p>
+          {r.evidence_version_id && (
+            <button
+              type="button"
+              className="case-link"
+              onClick={() =>
+                download(
+                  `/v1/case-document-versions/${r.evidence_version_id}`,
+                  "billing-source.pdf",
+                  role,
+                  headers,
+                ).catch((e) => setNotice(e.message))
+              }
+            >
+              Скачать основной источник проверки
+            </button>
+          )}
+          {r.lines.map((l, i) => (
+            <div className="billing-line-result" key={i}>
+              <strong>
+                {l.title} · {l.period}
+              </strong>
+              <p>
+                В документе: {money(l.charged)}
+                {l.mode === "SIMPLE_PRODUCT" ? (
+                  <>
+                    {" "}
+                    · Объём: {l.quantity} {l.unit}
+                    <br />
+                    Простая проверка: {l.quantity} × {l.rate} + ({l.adjustment}) ={" "}
+                    {money(l.expected)}
+                    <br />
+                    Разница «расчёт − начислено»: {money(l.difference)}
+                    <br />
+                    Это результат указанной арифметики. Применимость формулы оценил специалист.
+                  </>
+                ) : (
+                  <> · Формула разобрана вручную, автоматического вычисления нет.</>
+                )}
+              </p>
+              <p>Источник: {l.source_reference}</p>
+              {l.tariff_snapshot && (
+                <p>
+                  Использована публикация реестра на момент проверки:{" "}
+                  {JSON.parse(l.tariff_snapshot).title} ·{" "}
+                  {money(JSON.parse(l.tariff_snapshot).amount)} /{" "}
+                  {JSON.parse(l.tariff_snapshot).unitLabel}.{" "}
+                  {JSON.parse(l.tariff_snapshot).applicability}
+                </p>
+              )}
+              {l.evidence_version_id && (
+                <button
+                  type="button"
+                  className="case-link"
+                  onClick={() =>
+                    download(
+                      `/v1/case-document-versions/${l.evidence_version_id}`,
+                      "billing-line-source.pdf",
+                      role,
+                      headers,
+                    ).catch((e) => setNotice(e.message))
+                  }
+                >
+                  Скачать источник строки
+                </button>
+              )}
+            </div>
+          ))}
+          {data.canWork && r.state === "DRAFT" && (
+            <div className="case-actions">
+              <button
+                type="button"
+                disabled={busy}
+                onClick={() => {
+                  setAction(null);
+                  setEdit(r);
+                }}
+              >
+                Продолжить черновик
+              </button>
+              <button
+                type="button"
+                disabled={busy}
+                onClick={() => decide(`/v1/billing-reviews/${r.id}/publish`, "decision")}
+              >
+                Опубликовать объяснение
+              </button>
+              <button
+                className="case-link"
+                type="button"
+                onClick={() => decide(`/v1/billing-reviews/${r.id}/cancel`, "decision")}
+              >
+                Отменить черновик
+              </button>
+            </div>
+          )}
+        </article>
+      ))}
+      {data?.corrections.map((c) => (
+        <article className="workflow-card" key={c.id}>
+          <strong>{correctionStates[c.state]}</strong>
+          <h4>
+            {c.scope} · {c.period}
+          </h4>
+          <p>
+            До: {money(c.before_amount)} · Ожидается: {money(c.after_amount)}
+            <br />
+            Изменение «после − до»: {money(c.delta)}
+            {c.actual_after != null && (
+              <>
+                <br />В полученном документе: {money(c.actual_after)}
+              </>
+            )}
+          </p>
+          <p>Основание: {c.basis}</p>
+          <p>
+            Адресат: {c.recipient}
+            <br />
+            Канал: {c.channel}
+            <br />
+            Срок: {date(c.due_at)} · {c.due_basis}
+          </p>
+          {c.evidence_version_id && (
+            <button
+              className="case-link"
+              type="button"
+              onClick={() =>
+                download(
+                  `/v1/case-document-versions/${c.evidence_version_id}`,
+                  "billing-correction-source.pdf",
+                  role,
+                  headers,
+                ).catch((e) => setNotice(e.message))
+              }
+            >
+              Скачать подтверждающий документ
+            </button>
+          )}
+          <div className="case-actions">
+            <button
+              className="case-secondary"
+              type="button"
+              onClick={() =>
+                download(
+                  `/v1/billing-corrections/${c.id}/print`,
+                  "billing-correction.html",
+                  role,
+                  headers,
+                ).catch((e) => setNotice(e.message))
+              }
+            >
+              Материалы запроса для печати
+            </button>
+            {data.canWork &&
+              transitions[c.state]?.map((state) => (
+                <button
+                  key={state}
+                  type="button"
+                  disabled={busy}
+                  className="case-secondary"
+                  onClick={() =>
+                    setAction({ path: `/v1/billing-corrections/${c.id}`, mode: "move", state })
+                  }
+                >
+                  {moveLabels[state]}
+                </button>
+              ))}
+            {data.canWork && !["VERIFIED", "REFUSAL_REVIEWED", "CANCELLED"].includes(c.state) && (
+              <button
+                type="button"
+                className="case-link"
+                onClick={() =>
+                  setAction({
+                    path: `/v1/billing-corrections/${c.id}/schedule`,
+                    mode: "schedule",
+                    value: c,
+                  })
+                }
+              >
+                Уточнить срок
+              </button>
+            )}
+          </div>
+        </article>
+      ))}
+      {data?.canWork && (
+        <details className="workflow-section" open={edit != null || action != null}>
+          <summary>Действия специалиста по начислениям</summary>
+          <p>
+            Новые и исправленные квитанции добавляются через «Документы» ниже. Проверку собственного
+            обращения выполняет другой сотрудник.
+          </p>
+          <div className="case-actions">
+            <button
+              type="button"
+              disabled={busy}
+              onClick={() => {
+                setAction(null);
+                setEdit({});
+              }}
+            >
+              Подготовить новую проверку
+            </button>
+            <button
+              type="button"
+              disabled={busy}
+              className="case-secondary"
+              onClick={() => {
+                setEdit(null);
+                decide(`/v1/cases/${item.id}/billing/questions`, "question");
+              }}
+            >
+              Запросить сведения
+            </button>
+            {current?.outcome === "DISCREPANCY" && (
+              <button
+                type="button"
+                disabled={busy}
+                className="case-secondary"
+                onClick={() => {
+                  setEdit(null);
+                  decide(`/v1/cases/${item.id}/billing/corrections`, "correction");
+                }}
+              >
+                Подготовить исправление
+              </button>
+            )}
+            <button
+              type="button"
+              disabled={busy}
+              className="case-secondary"
+              onClick={() => decide(`/v1/cases/${item.id}/billing/propose`, "decision")}
+            >
+              Предложить результат жителю
+            </button>
+          </div>
+          {edit && (
+            <ReviewEditor
+              key={edit.id || "new"}
+              initial={edit}
+              item={item}
+              role={role}
+              api={api}
+              busy={busy}
+              notice={setNotice}
+              onCancel={() => setEdit(null)}
+              onSubmit={(d) =>
+                run(
+                  `/v1/cases/${item.id}/billing/reviews${edit.id ? `/${edit.id}` : ""}`,
+                  d,
+                  edit.id ? "PUT" : "POST",
+                )
+              }
+            />
+          )}
+          {action && (
+            <div className="billing-action">
+              <h4>
+                {action.mode === "move"
+                  ? moveLabels[action.state]
+                  : action.mode === "correction"
+                    ? "Запрос на исправление"
+                    : action.mode === "question"
+                      ? "Какие сведения нужны"
+                      : action.mode === "schedule"
+                        ? "Уточнение срока"
+                        : "Подтвердить действие с пояснением"}
+              </h4>
+              <Form
+                key={`${action.path}:${action.mode}:${action.state || ""}`}
+                fields={
+                  action.mode === "move"
+                    ? moveFields(action.state)
+                    : action.mode === "correction"
+                      ? correctionFields
+                      : action.mode === "question"
+                        ? [
+                            field("question", "Что нужно уточнить", "textarea", { max: 1500 }),
+                            field(
+                              "purpose",
+                              "Зачем нужны сведения и что делать, если их нет",
+                              "textarea",
+                              { max: 1500 },
+                            ),
+                          ]
+                        : action.mode === "schedule"
+                          ? [
+                              field("dueAt", "Новый срок, если известен", "datetime-local", {
+                                value: local(action.value.due_at),
+                                required: false,
+                              }),
+                              field(
+                                "dueBasis",
+                                "Основание срока или почему он неизвестен",
+                                "textarea",
+                                { value: action.value.due_basis, max: 1000 },
+                              ),
+                              field("note", "Причина изменения", "textarea", { max: 1000 }),
+                            ]
+                          : [field("note", "Пояснение / что проверено", "textarea")]
+                }
+                busy={busy}
+                label={action.mode === "move" ? moveLabels[action.state] : "Подтвердить"}
+                onSubmit={(d) =>
+                  run(
+                    action.path,
+                    {
+                      ...d,
+                      ...(action.mode === "move"
+                        ? {
+                            state: action.state,
+                            evidenceVersionId: d.evidenceVersionId || null,
+                            actualAfter: d.actualAfter || null,
+                          }
+                        : {}),
+                      ...(["correction", "schedule"].includes(action.mode)
+                        ? { dueAt: d.dueAt ? new Date(d.dueAt).toISOString() : null }
+                        : {}),
+                    },
+                    action.mode === "move" ? "PATCH" : "POST",
+                  )
+                }
+              />
+              <button type="button" className="case-link" onClick={() => setAction(null)}>
+                Отмена действия
+              </button>
+            </div>
+          )}
+          <details>
+            <summary>Служебная история финансовой проверки · {data.history.length}</summary>
+            {data.history.map((h) => (
+              <div className="billing-history" key={h.id}>
+                <small>
+                  {date(h.created_at)} · {h.actor}
+                </small>
+                <p>{h.note}</p>
+                {h.action === "CORRECTION_RESCHEDULED" && (
+                  <p>
+                    Ранее: {date(JSON.parse(h.snapshot_json).before.due_at)} ·{" "}
+                    {JSON.parse(h.snapshot_json).before.due_basis}
+                    <br />
+                    Теперь: {date(JSON.parse(h.snapshot_json).after.due_at)} ·{" "}
+                    {JSON.parse(h.snapshot_json).after.due_basis}
+                  </p>
+                )}
+              </div>
+            ))}
+          </details>
+        </details>
+      )}
+      {!data?.canWork && data?.reviews.length === 0 && (
+        <p>
+          Сотрудник ещё не опубликовал результат проверки. Если понадобятся сведения, здесь появится
+          понятный вопрос.
+        </p>
+      )}
+    </section>
+  );
+}
+export function BillingQueue({ houseId, role, api, renderCase, refreshKey }) {
+  const [rows, setRows] = useState(null),
+    [detail, setDetail] = useState(null),
+    [filter, setFilter] = useState("ALL"),
+    [notice, setNotice] = useState("");
+  async function load() {
+    const r = await api(role, `/v1/houses/${houseId}/billing-queue`);
+    setRows(r);
+    return r;
+  }
+  useEffect(() => {
+    let active = true;
+    setRows(null);
+    setDetail(null);
+    setNotice("");
+    api(role, `/v1/houses/${houseId}/billing-queue`)
+      .then((r) => {
+        if (active) setRows(r);
+      })
+      .catch((e) => {
+        if (active && e.status !== 404) setNotice(e.message);
+      });
+    return () => {
+      active = false;
+    };
+  }, [houseId, role, refreshKey]);
+  if (!rows && !notice) return null;
+  const visible = (rows || []).filter(
+    (r) =>
+      filter === "ALL" ||
+      (filter === "UNASSIGNED" && !r.item.responsibleUserId) ||
+      (filter === "WAITING" && r.openQuestions > 0) ||
+      (filter === "CORRECTIONS" && r.openCorrections > 0) ||
+      (filter === "OVERDUE" &&
+        (r.overdueCorrections > 0 ||
+          (r.item.dueAt && new Date(r.item.dueAt) < new Date() && r.item.status !== "CLOSED"))),
+  );
+  return (
+    <details className="case-panel billing-queue">
+      <summary>Вопросы по начислениям · {rows?.length || 0}</summary>
+      <p>
+        Закрытая очередь финансовых обращений дома. Доступ выдан отдельно от справочных тарифов.
+      </p>
+      {notice && <p className="case-notice">{notice}</p>}
+      {detail ? (
+        renderCase({
+          item: detail,
+          onClose: () => {
+            setDetail(null);
+            load().catch((e) => setNotice(e.message));
+          },
+          onChange: (c) => {
+            setDetail(c);
+            load().catch((e) => setNotice(e.message));
+          },
+        })
+      ) : (
+        <>
+          <div className="case-actions">
+            <label>
+              Показать
+              <select value={filter} onChange={(e) => setFilter(e.target.value)}>
+                <option value="ALL">Все финансовые обращения</option>
+                <option value="UNASSIGNED">Без ответственного</option>
+                <option value="WAITING">Ожидаем сведения</option>
+                <option value="CORRECTIONS">Исправления в работе</option>
+                <option value="OVERDUE">Прошёл срок</option>
+              </select>
+            </label>
+            <button
+              type="button"
+              className="case-link"
+              onClick={() => load().catch((e) => setNotice(e.message))}
+            >
+              Обновить финансовую очередь
+            </button>
+          </div>
+          <div className="case-list">
+            {visible.map(({ item: c, openQuestions, openCorrections, overdueCorrections }) => (
+              <button
+                type="button"
+                className="case-list-item"
+                key={c.id}
+                onClick={() => setDetail(c)}
+              >
+                <small>
+                  Обращение №{c.number} · {c.author}
+                </small>
+                <strong>{c.description}</strong>
+                <span>{c.nextStep}</span>
+                <small>
+                  {openQuestions > 0 ? `Уточнений: ${openQuestions}. ` : ""}
+                  {openCorrections > 0 ? `Исправлений в работе: ${openCorrections}. ` : ""}
+                  {overdueCorrections > 0 ? `Просроченных запросов: ${overdueCorrections}` : ""}
+                </small>
+              </button>
+            ))}
+            {!visible.length && <p>В этой очереди обращений пока нет.</p>}
+          </div>
+        </>
+      )}
+    </details>
+  );
 }

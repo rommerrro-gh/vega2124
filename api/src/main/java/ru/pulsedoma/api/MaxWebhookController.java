@@ -22,8 +22,10 @@ public class MaxWebhookController {
     private final WebhookQueue queue;
     private final String secret;
 
-    public MaxWebhookController(ObjectMapper mapper, WebhookQueue queue,
-                                @Value("${max.webhook.secret}") String secret) {
+    public MaxWebhookController(
+            ObjectMapper mapper,
+            WebhookQueue queue,
+            @Value("${max.webhook.secret}") String secret) {
         this.mapper = mapper;
         this.queue = queue;
         this.secret = secret;
@@ -31,15 +33,21 @@ public class MaxWebhookController {
 
     // FR-ISS-002: acknowledge only after authentication, validation and durable enqueue.
     @PostMapping("/webhooks/max")
-    public ResponseEntity<Void> receive(@RequestHeader(value = "X-Max-Bot-Api-Secret", required = false) String supplied,
-                                        @NotBlank @RequestBody String body) throws Exception {
-        if (supplied == null || !MessageDigest.isEqual(secret.getBytes(StandardCharsets.UTF_8),
-                supplied.getBytes(StandardCharsets.UTF_8))) {
+    public ResponseEntity<Void> receive(
+            @RequestHeader(value = "X-Max-Bot-Api-Secret", required = false) String supplied,
+            @NotBlank @RequestBody String body)
+            throws Exception {
+        if (supplied == null
+                || !MessageDigest.isEqual(
+                        secret.getBytes(StandardCharsets.UTF_8),
+                        supplied.getBytes(StandardCharsets.UTF_8))) {
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
         }
         JsonNode update = mapper.readTree(body);
-        if (!update.isObject() || !update.hasNonNull("update_type")
-                || !update.get("update_type").isTextual() || update.get("update_type").asText().isBlank()) {
+        if (!update.isObject()
+                || !update.hasNonNull("update_type")
+                || !update.get("update_type").isTextual()
+                || update.get("update_type").asText().isBlank()) {
             return ResponseEntity.badRequest().build();
         }
         queue.enqueue(body);

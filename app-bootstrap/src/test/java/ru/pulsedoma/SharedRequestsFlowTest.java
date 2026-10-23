@@ -1,48 +1,346 @@
 package ru.pulsedoma;
 
+import static org.junit.jupiter.api.Assertions.*;
+
+import java.nio.file.*;
+import java.time.*;
+import java.util.*;
 import org.junit.jupiter.api.*;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.*;
-import ru.pulsedoma.issues.*;
 import ru.pulsedoma.duplicates.LocationFeatures;
-import java.nio.file.*;
-import java.time.*;
-import java.util.*;
-import static org.junit.jupiter.api.Assertions.*;
+import ru.pulsedoma.issues.*;
 
 @org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc
-@SpringBootTest @ActiveProfiles("demo")
+@SpringBootTest
+@ActiveProfiles("demo")
 class SharedRequestsFlowTest {
- static final String HOUSE="demo-house-1",A="demo-resident-1",B="shared-neighbour",STAFF="demo-dispatcher-1";
- static final Path DB=temp();static Path temp(){try{return Files.createTempFile("shared-requests-",".db");}catch(Exception e){throw new IllegalStateException(e);}}
- @DynamicPropertySource static void properties(DynamicPropertyRegistry r){r.add("spring.datasource.url",()->"jdbc:sqlite:"+DB);r.add("operations.scheduler-enabled",()->false);}
- @Autowired org.springframework.test.web.servlet.MockMvc mvc;
- @Autowired JdbcTemplate db;@Autowired ResidentCaseService cases;@Autowired SharedRequestService shared;@Autowired ProblemIntakeService intake;
- @BeforeEach void neighbour(){db.update("INSERT OR IGNORE INTO users(id,display_name,status) VALUES (?,'Второй житель','ACTIVE')",B);db.update("INSERT OR IGNORE INTO house_memberships(house_id,user_id,role,verification_status,access_status) VALUES (?,?,'RESIDENT','VERIFIED','ACTIVE')",HOUSE,B);}
- String key(){return UUID.randomUUID().toString();}
- ProblemIntakeService.Input input(){return input(ReportCategory.LIGHTING,1);}
- ProblemIntakeService.Input input(ReportCategory category,int entrance){return new ProblemIntakeService.Input(HOUSE,"Не горит свет в подъезде "+key(),category,null,new LocationFeatures(LocationFeatures.Area.ENTRANCE,entrance,2,null,null,null,null,null,null));}
- ResidentCaseService.CaseView create(ProblemIntakeService.Input in,String user){return intake.create(in,CaseKind.PROBLEM,key(),user);}
- ResidentCaseService.CaseView progress(String id,CaseStatus status){var c=cases.get(id,STAFF);return cases.update(id,c.kind(),status,"Общая работа: "+status,null,STAFF,c.revision(),"Проверка общего процесса",STAFF);}
- @Test void twoResidentsOneCommonQueueAndPrivateFilesAndMessages(){
-  var in=input();var a=create(in,A);String id=a.sharedRequestId();
-  assertTrue(intake.search(in,B).stream().anyMatch(m->m.source()==ProblemIntakeService.Source.SHARED&&m.id().equals(id)));
-  String k=key();var b=intake.joinShared(id,in,k,B);assertEquals(b.id(),intake.joinShared(id,in,k,B).id());
-  assertEquals(2,shared.get(id,A).participants());assertEquals(1,cases.queue(HOUSE,STAFF).stream().filter(c->id.equals(c.sharedRequestId())).count());
-  String aId=a.id();assertThrows(RuntimeException.class,()->cases.get(aId,B));assertThrows(RuntimeException.class,()->cases.get(b.id(),A));
-  byte[] pdf="%PDF-1.4 private\n%%EOF".getBytes();a=cases.upload(a.id(),null,"Личный документ",pdf,"application/pdf",0,A);String version=a.documents().getFirst().versions().getFirst().id();
-  assertThrows(RuntimeException.class,()->cases.download(version,B));assertArrayEquals(pdf,cases.download(version,A).bytes());
-  cases.message(b.id(),"Личные сведения второго жителя",key(),B);assertFalse(shared.get(id,A).toString().contains("Личные сведения"));assertTrue(shared.get(id,A).members().isEmpty());
-  assertTrue(intake.search(in,B).stream().anyMatch(m->m.source()==ProblemIntakeService.Source.OWN_SHARED&&m.caseId().equals(b.id())));
- }
- @Test void otherSearchCrossesCategoriesButNotDifferentPlaces(){var in=input();var a=create(in,A);var other=new ProblemIntakeService.Input(HOUSE,in.description(),ReportCategory.OTHER,in.location(),in.locationFeatures());assertTrue(intake.search(other,B).stream().anyMatch(m->m.id().equals(a.sharedRequestId())));var different=new ProblemIntakeService.Input(HOUSE,in.description(),ReportCategory.OTHER,null,new LocationFeatures(LocationFeatures.Area.ENTRANCE,2,2,null,null,null,null,null,null));assertFalse(intake.search(different,B).stream().anyMatch(m->m.id().equals(a.sharedRequestId())));}
- @Test void eachParticipantConfirmsAndOneObjectionReopensWholeProblem(){var in=input();var a=create(in,A);var b=intake.joinShared(a.sharedRequestId(),in,key(),B);progress(a.id(),CaseStatus.RESULT_PROPOSED);a=cases.get(a.id(),A);cases.respond(a.id(),true,null,a.revision(),A);assertEquals(CaseStatus.RESULT_PROPOSED,shared.get(a.sharedRequestId(),B).status());assertEquals(CaseStatus.CLOSED,cases.get(a.id(),A).status());b=cases.get(b.id(),B);cases.respond(b.id(),false,"",b.revision(),B);assertEquals(CaseStatus.REOPENED,cases.get(a.id(),A).status());assertEquals(CaseStatus.REOPENED,shared.get(a.sharedRequestId(),A).status());progress(a.id(),CaseStatus.RESULT_PROPOSED);for(String user:List.of(A,B)){String c=shared.get(a.sharedRequestId(),user).myCaseId();var current=cases.get(c,user);cases.respond(c,true,null,current.revision(),user);}assertEquals(CaseStatus.CLOSED,shared.get(a.sharedRequestId(),A).status());}
- @Test void withdrawalPreservesNeighboursAndStaffCanContinueAfterFirstResidentWithdraws(){var in=input();var a=create(in,A);var b=intake.joinShared(a.sharedRequestId(),in,key(),B);a=cases.get(a.id(),A);var withdrawn=shared.withdraw(a.id(),a.revision(),"Больше не участвую",A);assertTrue(withdrawn.withdrawn());assertEquals(1,shared.get(a.sharedRequestId(),B).participants());progress(a.id(),CaseStatus.IN_PROGRESS);assertEquals(CaseStatus.IN_PROGRESS,cases.get(b.id(),B).status());assertThrows(RuntimeException.class,()->cases.message(withdrawn.id(),"Нельзя менять отозванное",key(),A));}
- @Test void mergeSplitPreservePrivateCasesAndOldHistory(){var in=input();var a=create(in,A);var b=create(in,B);String first=a.sharedRequestId(),second=b.sharedRequestId();var merged=shared.merge(second,first,shared.get(second,STAFF).revision(),shared.get(first,STAFF).revision(),"Одна неисправность",STAFF);assertEquals(2,merged.participants());assertEquals(first,cases.get(b.id(),B).sharedRequestId());var split=shared.split(first,b.id(),merged.revision(),"Другая лампа",STAFF);assertEquals(1,split.participants());assertEquals(b.id(),cases.get(b.id(),B).id());assertEquals(1,shared.get(first,A).participants());assertFalse(shared.get(first,A).history().isEmpty());}
- @Test void billingNeverJoinsAndForeignUsersCannotManageAndNoSilent72HourClosure(){var a=create(input(),A);var bill=cases.create(HOUSE,CaseKind.PAYMENT,"Начисления",null,key(),A);assertNull(bill.sharedRequestId());assertThrows(RuntimeException.class,()->shared.merge(a.sharedRequestId(),bill.id(),0,0,"Недопустимо",STAFF));assertThrows(RuntimeException.class,()->shared.classify(a.sharedRequestId(),"Другой заголовок",ReportCategory.OTHER,null,shared.get(a.sharedRequestId(),A).revision(),"Нет прав",B));progress(a.id(),CaseStatus.RESULT_PROPOSED);db.update("UPDATE resident_cases SET updated_at=? WHERE id=?",Instant.now().minus(Duration.ofDays(4)).toString(),a.id());assertEquals(CaseStatus.RESULT_PROPOSED,cases.get(a.id(),A).status());}
- @Test void mergingTwoReportsFromSameResidentNeedsOneConfirmation(){var in=input();var a=create(in,A);var b=create(in,A);shared.merge(b.sharedRequestId(),a.sharedRequestId(),shared.get(b.sharedRequestId(),STAFF).revision(),shared.get(a.sharedRequestId(),STAFF).revision(),"Повторное обращение",STAFF);progress(a.id(),CaseStatus.RESULT_PROPOSED);a=cases.get(a.id(),A);cases.respond(a.id(),true,null,a.revision(),A);assertEquals(1,shared.get(a.sharedRequestId(),A).participants());assertEquals(CaseStatus.CLOSED,shared.get(a.sharedRequestId(),A).status());assertEquals(CaseStatus.CLOSED,cases.get(b.id(),A).status());}
- @Test void lastWithdrawalKeepsUnfinishedWorkInStaffQueue(){var a=create(input(),A);String work=key();db.update("INSERT INTO case_work_orders(id,case_id,title,scope,assignee_id,basis_type,basis,due_basis,state,created_by,created_at,updated_at) VALUES (?,?,'Проверка','Освещение',?,'MAINTENANCE','Основание','Срок уточняется','ASSIGNED',?,?,?)",work,a.id(),STAFF,STAFF,Instant.now().toString(),Instant.now().toString());shared.withdraw(a.id(),a.revision(),"Отзываю участие",A);assertTrue(cases.queue(HOUSE,STAFF).stream().anyMatch(c->a.sharedRequestId().equals(c.sharedRequestId())));assertThrows(RuntimeException.class,()->progress(a.id(),CaseStatus.RESULT_PROPOSED));db.update("UPDATE case_work_orders SET state='CANCELLED' WHERE id=?",work);progress(a.id(),CaseStatus.RESULT_PROPOSED);assertEquals(CaseStatus.CLOSED,shared.get(a.sharedRequestId(),STAFF).status());assertFalse(cases.queue(HOUSE,STAFF).stream().anyMatch(c->a.sharedRequestId().equals(c.sharedRequestId())));}
- @Test void sharedHttpRequiresAuthenticationRoleValidBodyAndCurrentRevision()throws Exception{var a=create(input(),A);String url="/v1/shared-requests/"+a.sharedRequestId();mvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get(url)).andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.status().isUnauthorized());mvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post(url+"/merge").header("X-Demo-Session","dispatcher").contentType("application/json").content("{} ")).andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.status().isBadRequest());String body="{\"title\":\"Свет\",\"category\":\"LIGHTING\",\"revision\":999,\"reason\":\"Уточнение\"}";mvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch(url).header("X-Demo-Session","dispatcher").contentType("application/json").content(body)).andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.status().isConflict());mvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch(url).header("X-Demo-Session","true").contentType("application/json").content(body)).andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.status().isNotFound());}
+    static final String HOUSE = "demo-house-1",
+            A = "demo-resident-1",
+            B = "shared-neighbour",
+            STAFF = "demo-dispatcher-1";
+    static final Path DB = temp();
+
+    static Path temp() {
+        try {
+            return Files.createTempFile("shared-requests-", ".db");
+        } catch (Exception e) {
+            throw new IllegalStateException(e);
+        }
+    }
+
+    @DynamicPropertySource
+    static void properties(DynamicPropertyRegistry r) {
+        r.add("spring.datasource.url", () -> "jdbc:sqlite:" + DB);
+        r.add("operations.scheduler-enabled", () -> false);
+    }
+
+    @Autowired org.springframework.test.web.servlet.MockMvc mvc;
+    @Autowired JdbcTemplate db;
+    @Autowired ResidentCaseService cases;
+    @Autowired SharedRequestService shared;
+    @Autowired ProblemIntakeService intake;
+
+    @BeforeEach
+    void neighbour() {
+        db.update(
+                "INSERT OR IGNORE INTO users(id,display_name,status) VALUES (?,'Второй житель','ACTIVE')",
+                B);
+        db.update(
+                "INSERT OR IGNORE INTO house_memberships(house_id,user_id,role,verification_status,access_status) VALUES (?,?,'RESIDENT','VERIFIED','ACTIVE')",
+                HOUSE,
+                B);
+    }
+
+    String key() {
+        return UUID.randomUUID().toString();
+    }
+
+    ProblemIntakeService.Input input() {
+        return input(ReportCategory.LIGHTING, 1);
+    }
+
+    ProblemIntakeService.Input input(ReportCategory category, int entrance) {
+        return new ProblemIntakeService.Input(
+                HOUSE,
+                "Не горит свет в подъезде " + key(),
+                category,
+                null,
+                new LocationFeatures(
+                        LocationFeatures.Area.ENTRANCE,
+                        entrance,
+                        2,
+                        null,
+                        null,
+                        null,
+                        null,
+                        null,
+                        null));
+    }
+
+    ResidentCaseService.CaseView create(ProblemIntakeService.Input in, String user) {
+        return intake.create(in, CaseKind.PROBLEM, key(), user);
+    }
+
+    ResidentCaseService.CaseView progress(String id, CaseStatus status) {
+        var c = cases.get(id, STAFF);
+        return cases.update(
+                id,
+                c.kind(),
+                status,
+                "Общая работа: " + status,
+                null,
+                STAFF,
+                c.revision(),
+                "Проверка общего процесса",
+                STAFF);
+    }
+
+    @Test
+    void twoResidentsOneCommonQueueAndPrivateFilesAndMessages() {
+        var in = input();
+        var a = create(in, A);
+        String id = a.sharedRequestId();
+        assertTrue(
+                intake.search(in, B).stream()
+                        .anyMatch(
+                                m ->
+                                        m.source() == ProblemIntakeService.Source.SHARED
+                                                && m.id().equals(id)));
+        String k = key();
+        var b = intake.joinShared(id, in, k, B);
+        assertEquals(b.id(), intake.joinShared(id, in, k, B).id());
+        assertEquals(2, shared.get(id, A).participants());
+        assertEquals(
+                1,
+                cases.queue(HOUSE, STAFF).stream()
+                        .filter(c -> id.equals(c.sharedRequestId()))
+                        .count());
+        String aId = a.id();
+        assertThrows(RuntimeException.class, () -> cases.get(aId, B));
+        assertThrows(RuntimeException.class, () -> cases.get(b.id(), A));
+        byte[] pdf = "%PDF-1.4 private\n%%EOF".getBytes();
+        a = cases.upload(a.id(), null, "Личный документ", pdf, "application/pdf", 0, A);
+        String version = a.documents().getFirst().versions().getFirst().id();
+        assertThrows(RuntimeException.class, () -> cases.download(version, B));
+        assertArrayEquals(pdf, cases.download(version, A).bytes());
+        cases.message(b.id(), "Личные сведения второго жителя", key(), B);
+        assertFalse(shared.get(id, A).toString().contains("Личные сведения"));
+        assertTrue(shared.get(id, A).members().isEmpty());
+        assertTrue(
+                intake.search(in, B).stream()
+                        .anyMatch(
+                                m ->
+                                        m.source() == ProblemIntakeService.Source.OWN_SHARED
+                                                && m.caseId().equals(b.id())));
+    }
+
+    @Test
+    void otherSearchCrossesCategoriesButNotDifferentPlaces() {
+        var in = input();
+        var a = create(in, A);
+        var other =
+                new ProblemIntakeService.Input(
+                        HOUSE,
+                        in.description(),
+                        ReportCategory.OTHER,
+                        in.location(),
+                        in.locationFeatures());
+        assertTrue(
+                intake.search(other, B).stream().anyMatch(m -> m.id().equals(a.sharedRequestId())));
+        var different =
+                new ProblemIntakeService.Input(
+                        HOUSE,
+                        in.description(),
+                        ReportCategory.OTHER,
+                        null,
+                        new LocationFeatures(
+                                LocationFeatures.Area.ENTRANCE,
+                                2,
+                                2,
+                                null,
+                                null,
+                                null,
+                                null,
+                                null,
+                                null));
+        assertFalse(
+                intake.search(different, B).stream()
+                        .anyMatch(m -> m.id().equals(a.sharedRequestId())));
+    }
+
+    @Test
+    void eachParticipantConfirmsAndOneObjectionReopensWholeProblem() {
+        var in = input();
+        var a = create(in, A);
+        var b = intake.joinShared(a.sharedRequestId(), in, key(), B);
+        progress(a.id(), CaseStatus.RESULT_PROPOSED);
+        a = cases.get(a.id(), A);
+        cases.respond(a.id(), true, null, a.revision(), A);
+        assertEquals(CaseStatus.RESULT_PROPOSED, shared.get(a.sharedRequestId(), B).status());
+        assertEquals(CaseStatus.CLOSED, cases.get(a.id(), A).status());
+        b = cases.get(b.id(), B);
+        cases.respond(b.id(), false, "", b.revision(), B);
+        assertEquals(CaseStatus.REOPENED, cases.get(a.id(), A).status());
+        assertEquals(CaseStatus.REOPENED, shared.get(a.sharedRequestId(), A).status());
+        progress(a.id(), CaseStatus.RESULT_PROPOSED);
+        for (String user : List.of(A, B)) {
+            String c = shared.get(a.sharedRequestId(), user).myCaseId();
+            var current = cases.get(c, user);
+            cases.respond(c, true, null, current.revision(), user);
+        }
+        assertEquals(CaseStatus.CLOSED, shared.get(a.sharedRequestId(), A).status());
+    }
+
+    @Test
+    void withdrawalPreservesNeighboursAndStaffCanContinueAfterFirstResidentWithdraws() {
+        var in = input();
+        var a = create(in, A);
+        var b = intake.joinShared(a.sharedRequestId(), in, key(), B);
+        a = cases.get(a.id(), A);
+        var withdrawn = shared.withdraw(a.id(), a.revision(), "Больше не участвую", A);
+        assertTrue(withdrawn.withdrawn());
+        assertEquals(1, shared.get(a.sharedRequestId(), B).participants());
+        progress(a.id(), CaseStatus.IN_PROGRESS);
+        assertEquals(CaseStatus.IN_PROGRESS, cases.get(b.id(), B).status());
+        assertThrows(
+                RuntimeException.class,
+                () -> cases.message(withdrawn.id(), "Нельзя менять отозванное", key(), A));
+    }
+
+    @Test
+    void mergeSplitPreservePrivateCasesAndOldHistory() {
+        var in = input();
+        var a = create(in, A);
+        var b = create(in, B);
+        String first = a.sharedRequestId(), second = b.sharedRequestId();
+        var merged =
+                shared.merge(
+                        second,
+                        first,
+                        shared.get(second, STAFF).revision(),
+                        shared.get(first, STAFF).revision(),
+                        "Одна неисправность",
+                        STAFF);
+        assertEquals(2, merged.participants());
+        assertEquals(first, cases.get(b.id(), B).sharedRequestId());
+        var split = shared.split(first, b.id(), merged.revision(), "Другая лампа", STAFF);
+        assertEquals(1, split.participants());
+        assertEquals(b.id(), cases.get(b.id(), B).id());
+        assertEquals(1, shared.get(first, A).participants());
+        assertFalse(shared.get(first, A).history().isEmpty());
+    }
+
+    @Test
+    void billingNeverJoinsAndForeignUsersCannotManageAndNoSilent72HourClosure() {
+        var a = create(input(), A);
+        var bill = cases.create(HOUSE, CaseKind.PAYMENT, "Начисления", null, key(), A);
+        assertNull(bill.sharedRequestId());
+        assertThrows(
+                RuntimeException.class,
+                () -> shared.merge(a.sharedRequestId(), bill.id(), 0, 0, "Недопустимо", STAFF));
+        assertThrows(
+                RuntimeException.class,
+                () ->
+                        shared.classify(
+                                a.sharedRequestId(),
+                                "Другой заголовок",
+                                ReportCategory.OTHER,
+                                null,
+                                shared.get(a.sharedRequestId(), A).revision(),
+                                "Нет прав",
+                                B));
+        progress(a.id(), CaseStatus.RESULT_PROPOSED);
+        db.update(
+                "UPDATE resident_cases SET updated_at=? WHERE id=?",
+                Instant.now().minus(Duration.ofDays(4)).toString(),
+                a.id());
+        assertEquals(CaseStatus.RESULT_PROPOSED, cases.get(a.id(), A).status());
+    }
+
+    @Test
+    void mergingTwoReportsFromSameResidentNeedsOneConfirmation() {
+        var in = input();
+        var a = create(in, A);
+        var b = create(in, A);
+        shared.merge(
+                b.sharedRequestId(),
+                a.sharedRequestId(),
+                shared.get(b.sharedRequestId(), STAFF).revision(),
+                shared.get(a.sharedRequestId(), STAFF).revision(),
+                "Повторное обращение",
+                STAFF);
+        progress(a.id(), CaseStatus.RESULT_PROPOSED);
+        a = cases.get(a.id(), A);
+        cases.respond(a.id(), true, null, a.revision(), A);
+        assertEquals(1, shared.get(a.sharedRequestId(), A).participants());
+        assertEquals(CaseStatus.CLOSED, shared.get(a.sharedRequestId(), A).status());
+        assertEquals(CaseStatus.CLOSED, cases.get(b.id(), A).status());
+    }
+
+    @Test
+    void lastWithdrawalKeepsUnfinishedWorkInStaffQueue() {
+        var a = create(input(), A);
+        String work = key();
+        db.update(
+                "INSERT INTO case_work_orders(id,case_id,title,scope,assignee_id,basis_type,basis,due_basis,state,created_by,created_at,updated_at) VALUES (?,?,'Проверка','Освещение',?,'MAINTENANCE','Основание','Срок уточняется','ASSIGNED',?,?,?)",
+                work,
+                a.id(),
+                STAFF,
+                STAFF,
+                Instant.now().toString(),
+                Instant.now().toString());
+        shared.withdraw(a.id(), a.revision(), "Отзываю участие", A);
+        assertTrue(
+                cases.queue(HOUSE, STAFF).stream()
+                        .anyMatch(c -> a.sharedRequestId().equals(c.sharedRequestId())));
+        assertThrows(RuntimeException.class, () -> progress(a.id(), CaseStatus.RESULT_PROPOSED));
+        db.update("UPDATE case_work_orders SET state='CANCELLED' WHERE id=?", work);
+        progress(a.id(), CaseStatus.RESULT_PROPOSED);
+        assertEquals(CaseStatus.CLOSED, shared.get(a.sharedRequestId(), STAFF).status());
+        assertFalse(
+                cases.queue(HOUSE, STAFF).stream()
+                        .anyMatch(c -> a.sharedRequestId().equals(c.sharedRequestId())));
+    }
+
+    @Test
+    void sharedHttpRequiresAuthenticationRoleValidBodyAndCurrentRevision() throws Exception {
+        var a = create(input(), A);
+        String url = "/v1/shared-requests/" + a.sharedRequestId();
+        mvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get(url))
+                .andExpect(
+                        org.springframework.test.web.servlet.result.MockMvcResultMatchers.status()
+                                .isUnauthorized());
+        mvc.perform(
+                        org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post(
+                                        url + "/merge")
+                                .header("X-Demo-Session", "dispatcher")
+                                .contentType("application/json")
+                                .content("{} "))
+                .andExpect(
+                        org.springframework.test.web.servlet.result.MockMvcResultMatchers.status()
+                                .isBadRequest());
+        String body =
+                "{\"title\":\"Свет\",\"category\":\"LIGHTING\",\"revision\":999,\"reason\":\"Уточнение\"}";
+        mvc.perform(
+                        org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch(
+                                        url)
+                                .header("X-Demo-Session", "dispatcher")
+                                .contentType("application/json")
+                                .content(body))
+                .andExpect(
+                        org.springframework.test.web.servlet.result.MockMvcResultMatchers.status()
+                                .isConflict());
+        mvc.perform(
+                        org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch(
+                                        url)
+                                .header("X-Demo-Session", "true")
+                                .contentType("application/json")
+                                .content(body))
+                .andExpect(
+                        org.springframework.test.web.servlet.result.MockMvcResultMatchers.status()
+                                .isNotFound());
+    }
 }

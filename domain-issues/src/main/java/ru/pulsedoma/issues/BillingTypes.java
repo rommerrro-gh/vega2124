@@ -1,10 +1,53 @@
 package ru.pulsedoma.issues;
+
 public final class BillingTypes {
     private BillingTypes() {}
-    public enum ReviewState { DRAFT, PUBLISHED, SUPERSEDED, CANCELLED }
-    public enum Outcome { EXPLAINED, DISCREPANCY, NEED_INFORMATION }
-    public enum Calculation { MANUAL, SIMPLE_PRODUCT }
-    public enum QuestionState { OPEN, ANSWERED, CANCELLED }
-    public enum CorrectionState { DRAFT, SENT, ACKNOWLEDGED, APPLIED, REWORK, VERIFIED, REFUSAL_RECEIVED, REFUSAL_REVIEWED, CANCELLED }
-    public enum Action { REVIEW_DRAFTED, REVIEW_PUBLISHED, REVIEW_CANCELLED, QUESTION_ASKED, QUESTION_ANSWERED, QUESTION_CANCELLED, CORRECTION_PREPARED, CORRECTION_MOVED, CORRECTION_RESCHEDULED }
+
+    public enum ReviewState {
+        DRAFT,
+        PUBLISHED,
+        SUPERSEDED,
+        CANCELLED
+    }
+
+    public enum Outcome {
+        EXPLAINED,
+        DISCREPANCY,
+        NEED_INFORMATION
+    }
+
+    public enum Calculation {
+        MANUAL,
+        SIMPLE_PRODUCT
+    }
+
+    public enum QuestionState {
+        OPEN,
+        ANSWERED,
+        CANCELLED
+    }
+
+    public enum CorrectionState {
+        DRAFT,
+        SENT,
+        ACKNOWLEDGED,
+        APPLIED,
+        REWORK,
+        VERIFIED,
+        REFUSAL_RECEIVED,
+        REFUSAL_REVIEWED,
+        CANCELLED
+    }
+
+    public enum Action {
+        REVIEW_DRAFTED,
+        REVIEW_PUBLISHED,
+        REVIEW_CANCELLED,
+        QUESTION_ASKED,
+        QUESTION_ANSWERED,
+        QUESTION_CANCELLED,
+        CORRECTION_PREPARED,
+        CORRECTION_MOVED,
+        CORRECTION_RESCHEDULED
+    }
 }

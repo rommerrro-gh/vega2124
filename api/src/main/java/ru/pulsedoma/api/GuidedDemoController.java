@@ -16,7 +16,9 @@ import ru.pulsedoma.house.GuidedDemoService;
 public class GuidedDemoController {
     private final GuidedDemoService service;
 
-    public GuidedDemoController(GuidedDemoService service) { this.service = service; }
+    public GuidedDemoController(GuidedDemoService service) {
+        this.service = service;
+    }
 
     @GetMapping
     public GuidedDemoService.DemoView status(Principal principal) {
@@ -24,7 +26,8 @@ public class GuidedDemoController {
     }
 
     @PostMapping("/activate")
-    public GuidedDemoService.DemoView activate(@Valid @RequestBody CodeRequest request, Principal principal) {
+    public GuidedDemoService.DemoView activate(
+            @Valid @RequestBody CodeRequest request, Principal principal) {
         return service.activate(principal.getName(), request.code());
     }
 

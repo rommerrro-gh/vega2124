@@ -1,2 +1,178 @@
-.tariff-section>summary{font-size:1.15rem;font-weight:700;cursor:pointer}.tariff-section>p{line-height:1.55}.tariff-toolbar{display:flex;align-items:end;gap:12px;flex-wrap:wrap;margin:20px 0}.tariff-toolbar label{display:grid;gap:7px}.tariff-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,320px),1fr));gap:16px;margin:16px 0}.tariff-card{background:#fff;border:1px solid #d9e4dd;border-radius:18px;padding:20px;min-width:0;overflow-wrap:anywhere}.tariff-card h3{margin:12px 0 6px;font-size:1.15rem}.tariff-card p{line-height:1.55}.tariff-price{font-size:1.8rem!important;font-weight:750;color:#214b38;margin:6px 0 16px!important}.tariff-price span{font-size:1rem;font-weight:400}.tariff-status{display:inline-block;font-size:.78rem;border-radius:8px;padding:5px 8px;background:#eaf3ed;color:#29543b}.tariff-draft{background:#f1eee6;color:#6a582b}.tariff-withdrawn{background:#fcece6;color:#903e21}.tariff-superseded{background:#f0f0ee;color:#62645e}.tariff-form{display:grid;gap:14px;background:#f5f7f4;padding:18px;border-radius:14px;margin:16px 0}.tariff-form label{display:grid;gap:7px;font-size:.92rem}.tariff-form input,.tariff-form select,.tariff-form textarea{width:100%;box-sizing:border-box}.tariff-form .tariff-check{display:flex;align-items:flex-start;line-height:1.5;gap:9px}.tariff-check input{width:18px;min-width:18px;margin-top:3px}.tariff-permissions,.tariff-registry{border-top:1px solid #d9e4dd;margin-top:24px;padding-top:18px}.tariff-person{border-bottom:1px solid #d9e4dd;padding:14px 0}.tariff-date-note,.tariff-empty{background:#f2f5ed;padding:15px;border-radius:12px}.tariff-section details>summary{cursor:pointer;font-weight:600;margin:12px 0}.tariff-section .case-notice:empty{display:none}
-.tariff-card{color:#19312d}.tariff-card h3{color:inherit}.tariff-form{color:#19312d}.tariff-date-note,.tariff-empty{color:#284b38}:root[data-theme="dark"] .tariff-card{background:#18271e;color:#edf5ee;border-color:#385344}:root[data-theme="dark"] .tariff-price{color:#a5dbb7}:root[data-theme="dark"] .tariff-form{background:#203529;color:#edf5ee}:root[data-theme="dark"] .tariff-status{background:#254c34;color:#d7f2e0}:root[data-theme="dark"] .tariff-draft{background:#493f27;color:#f3dda2}:root[data-theme="dark"] .tariff-withdrawn{background:#4a2f2c;color:#ffb5a8}:root[data-theme="dark"] .tariff-superseded{background:#344039;color:#c7d4ca}:root[data-theme="dark"] .tariff-date-note,:root[data-theme="dark"] .tariff-empty{background:#233c2a;color:#d7eadb}:root[data-theme="dark"] .tariff-permissions,:root[data-theme="dark"] .tariff-registry,:root[data-theme="dark"] .tariff-person{border-color:#385344}:root[data-theme="dark"] .tariff-toolbar input{color-scheme:dark}
+.tariff-section > summary {
+  font-size: 1.15rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+.tariff-section > p {
+  line-height: 1.55;
+}
+.tariff-toolbar {
+  display: flex;
+  align-items: end;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin: 20px 0;
+}
+.tariff-toolbar label {
+  display: grid;
+  gap: 7px;
+}
+.tariff-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 320px), 1fr));
+  gap: 16px;
+  margin: 16px 0;
+}
+.tariff-card {
+  background: #fff;
+  border: 1px solid #d9e4dd;
+  border-radius: 18px;
+  padding: 20px;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.tariff-card h3 {
+  margin: 12px 0 6px;
+  font-size: 1.15rem;
+}
+.tariff-card p {
+  line-height: 1.55;
+}
+.tariff-price {
+  font-size: 1.8rem !important;
+  font-weight: 750;
+  color: #214b38;
+  margin: 6px 0 16px !important;
+}
+.tariff-price span {
+  font-size: 1rem;
+  font-weight: 400;
+}
+.tariff-status {
+  display: inline-block;
+  font-size: 0.78rem;
+  border-radius: 8px;
+  padding: 5px 8px;
+  background: #eaf3ed;
+  color: #29543b;
+}
+.tariff-draft {
+  background: #f1eee6;
+  color: #6a582b;
+}
+.tariff-withdrawn {
+  background: #fcece6;
+  color: #903e21;
+}
+.tariff-superseded {
+  background: #f0f0ee;
+  color: #62645e;
+}
+.tariff-form {
+  display: grid;
+  gap: 14px;
+  background: #f5f7f4;
+  padding: 18px;
+  border-radius: 14px;
+  margin: 16px 0;
+}
+.tariff-form label {
+  display: grid;
+  gap: 7px;
+  font-size: 0.92rem;
+}
+.tariff-form input,
+.tariff-form select,
+.tariff-form textarea {
+  width: 100%;
+  box-sizing: border-box;
+}
+.tariff-form .tariff-check {
+  display: flex;
+  align-items: flex-start;
+  line-height: 1.5;
+  gap: 9px;
+}
+.tariff-check input {
+  width: 18px;
+  min-width: 18px;
+  margin-top: 3px;
+}
+.tariff-permissions,
+.tariff-registry {
+  border-top: 1px solid #d9e4dd;
+  margin-top: 24px;
+  padding-top: 18px;
+}
+.tariff-person {
+  border-bottom: 1px solid #d9e4dd;
+  padding: 14px 0;
+}
+.tariff-date-note,
+.tariff-empty {
+  background: #f2f5ed;
+  padding: 15px;
+  border-radius: 12px;
+}
+.tariff-section details > summary {
+  cursor: pointer;
+  font-weight: 600;
+  margin: 12px 0;
+}
+.tariff-section .case-notice:empty {
+  display: none;
+}
+.tariff-card {
+  color: #19312d;
+}
+.tariff-card h3 {
+  color: inherit;
+}
+.tariff-form {
+  color: #19312d;
+}
+.tariff-date-note,
+.tariff-empty {
+  color: #284b38;
+}
+:root[data-theme="dark"] .tariff-card {
+  background: #18271e;
+  color: #edf5ee;
+  border-color: #385344;
+}
+:root[data-theme="dark"] .tariff-price {
+  color: #a5dbb7;
+}
+:root[data-theme="dark"] .tariff-form {
+  background: #203529;
+  color: #edf5ee;
+}
+:root[data-theme="dark"] .tariff-status {
+  background: #254c34;
+  color: #d7f2e0;
+}
+:root[data-theme="dark"] .tariff-draft {
+  background: #493f27;
+  color: #f3dda2;
+}
+:root[data-theme="dark"] .tariff-withdrawn {
+  background: #4a2f2c;
+  color: #ffb5a8;
+}
+:root[data-theme="dark"] .tariff-superseded {
+  background: #344039;
+  color: #c7d4ca;
+}
+:root[data-theme="dark"] .tariff-date-note,
+:root[data-theme="dark"] .tariff-empty {
+  background: #233c2a;
+  color: #d7eadb;
+}
+:root[data-theme="dark"] .tariff-permissions,
+:root[data-theme="dark"] .tariff-registry,
+:root[data-theme="dark"] .tariff-person {
+  border-color: #385344;
+}
+:root[data-theme="dark"] .tariff-toolbar input {
+  color-scheme: dark;
+}

@@ -1,6 +1,16 @@
 package ru.pulsedoma.bootstrap;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+
 import com.fasterxml.jackson.databind.ObjectMapper;
+import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
+import java.time.Instant;
+import java.util.HexFormat;
+import java.util.concurrent.atomic.AtomicBoolean;
+import javax.crypto.Mac;
+import javax.crypto.spec.SecretKeySpec;
 import org.junit.jupiter.api.Test;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.datasource.SingleConnectionDataSource;
@@ -8,24 +18,22 @@ import org.springframework.mock.env.MockEnvironment;
 import org.springframework.mock.web.MockHttpServletRequest;
 import org.springframework.mock.web.MockHttpServletResponse;
 
-import javax.crypto.Mac;
-import javax.crypto.spec.SecretKeySpec;
-import java.net.URLEncoder;
-import java.nio.charset.StandardCharsets;
-import java.time.Instant;
-import java.util.HexFormat;
-import java.util.concurrent.atomic.AtomicBoolean;
-
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertTrue;
-
 class MaxInitDataFilterTest {
     @Test
     void demoRoleHeadersNeverAuthenticateInMaxProfile() throws Exception {
-        SingleConnectionDataSource dataSource = new SingleConnectionDataSource("jdbc:sqlite::memory:", true);
-        MaxInitDataFilter filter = new MaxInitDataFilter(new JdbcTemplate(dataSource), new ObjectMapper(),
-                new MockEnvironment(), "test-bot-token", "resident", "dispatcher", "admin");
-        for (String role : java.util.List.of("true", "dispatcher", "admin", "recipient", "engineer")) {
+        SingleConnectionDataSource dataSource =
+                new SingleConnectionDataSource("jdbc:sqlite::memory:", true);
+        MaxInitDataFilter filter =
+                new MaxInitDataFilter(
+                        new JdbcTemplate(dataSource),
+                        new ObjectMapper(),
+                        new MockEnvironment(),
+                        "test-bot-token",
+                        "resident",
+                        "dispatcher",
+                        "admin");
+        for (String role :
+                java.util.List.of("true", "dispatcher", "admin", "recipient", "engineer")) {
             MockHttpServletRequest request = new MockHttpServletRequest("GET", "/v1/me/houses");
             request.addHeader("X-Demo-Session", role);
             MockHttpServletResponse response = new MockHttpServletResponse();
@@ -39,21 +47,35 @@ class MaxInitDataFilterTest {
 
     @Test
     void acceptsSignedInitDataAndRejectsTampering() throws Exception {
-        SingleConnectionDataSource dataSource = new SingleConnectionDataSource("jdbc:sqlite::memory:", true);
+        SingleConnectionDataSource dataSource =
+                new SingleConnectionDataSource("jdbc:sqlite::memory:", true);
         JdbcTemplate jdbc = new JdbcTemplate(dataSource);
-        jdbc.execute("""
+        jdbc.execute(
+                """
                 CREATE TABLE users(id TEXT PRIMARY KEY, max_user_id TEXT UNIQUE,
                                    display_name TEXT NOT NULL, status TEXT NOT NULL)
                 """);
-        MaxInitDataFilter filter = new MaxInitDataFilter(jdbc, new ObjectMapper(), new MockEnvironment(),
-                "test-bot-token", "", "", "");
+        MaxInitDataFilter filter =
+                new MaxInitDataFilter(
+                        jdbc,
+                        new ObjectMapper(),
+                        new MockEnvironment(),
+                        "test-bot-token",
+                        "",
+                        "",
+                        "");
         String user = "{\"id\":123,\"first_name\":\"Иван\",\"last_name\":\"Петров\"}";
         String date = Long.toString(Instant.now().getEpochSecond());
         String data = "auth_date=" + date + "\nuser=" + user;
         byte[] key = hmac("WebAppData".getBytes(StandardCharsets.UTF_8), "test-bot-token");
         String hash = HexFormat.of().formatHex(hmac(key, data));
-        String initData = "auth_date=" + date + "&user=" + URLEncoder.encode(user, StandardCharsets.UTF_8)
-                + "&hash=" + hash;
+        String initData =
+                "auth_date="
+                        + date
+                        + "&user="
+                        + URLEncoder.encode(user, StandardCharsets.UTF_8)
+                        + "&hash="
+                        + hash;
 
         MockHttpServletRequest valid = new MockHttpServletRequest("GET", "/v1/me/houses");
         valid.addHeader("X-Max-Init-Data", initData);
@@ -62,8 +84,10 @@ class MaxInitDataFilterTest {
         filter.doFilter(valid, validResponse, (request, response) -> called.set(true));
         assertTrue(called.get());
         assertEquals(200, validResponse.getStatus());
-        assertEquals("Иван Петров", jdbc.queryForObject(
-                "SELECT display_name FROM users WHERE max_user_id = '123'", String.class));
+        assertEquals(
+                "Иван Петров",
+                jdbc.queryForObject(
+                        "SELECT display_name FROM users WHERE max_user_id = '123'", String.class));
 
         MockHttpServletRequest tampered = new MockHttpServletRequest("GET", "/v1/me/houses");
         tampered.addHeader("X-Max-Init-Data", initData.replace("123", "124"));

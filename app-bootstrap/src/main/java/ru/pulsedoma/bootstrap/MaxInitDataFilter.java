@@ -5,16 +5,6 @@ import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
-import org.springframework.beans.factory.annotation.Value;
-import org.springframework.core.env.Environment;
-import org.springframework.core.env.Profiles;
-import org.springframework.jdbc.core.JdbcTemplate;
-import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
-import org.springframework.security.core.context.SecurityContextHolder;
-import org.springframework.web.filter.OncePerRequestFilter;
-
-import javax.crypto.Mac;
-import javax.crypto.spec.SecretKeySpec;
 import java.io.IOException;
 import java.net.URLDecoder;
 import java.nio.charset.StandardCharsets;
@@ -25,6 +15,15 @@ import java.util.HexFormat;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
+import javax.crypto.Mac;
+import javax.crypto.spec.SecretKeySpec;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.core.env.Environment;
+import org.springframework.core.env.Profiles;
+import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.web.filter.OncePerRequestFilter;
 
 /** Verifies MAX WebApp.initData on every API request; never trusts initDataUnsafe. */
 public class MaxInitDataFilter extends OncePerRequestFilter {
@@ -36,11 +35,14 @@ public class MaxInitDataFilter extends OncePerRequestFilter {
     private final String demoAdminId;
     private final Environment environment;
 
-    public MaxInitDataFilter(JdbcTemplate jdbc, ObjectMapper mapper, Environment environment,
-                             @Value("${max.api.token:}") String botToken,
-                             @Value("${miniapp.demo-user-id:}") String demoUserId,
-                             @Value("${miniapp.demo-dispatcher-id:}") String demoDispatcherId,
-                             @Value("${miniapp.demo-admin-id:}") String demoAdminId) {
+    public MaxInitDataFilter(
+            JdbcTemplate jdbc,
+            ObjectMapper mapper,
+            Environment environment,
+            @Value("${max.api.token:}") String botToken,
+            @Value("${miniapp.demo-user-id:}") String demoUserId,
+            @Value("${miniapp.demo-dispatcher-id:}") String demoDispatcherId,
+            @Value("${miniapp.demo-admin-id:}") String demoAdminId) {
         this.jdbc = jdbc;
         this.mapper = mapper;
         this.environment = environment;
@@ -56,39 +58,57 @@ public class MaxInitDataFilter extends OncePerRequestFilter {
     }
 
     @Override
-    protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain chain)
+    protected void doFilterInternal(
+            HttpServletRequest request, HttpServletResponse response, FilterChain chain)
             throws ServletException, IOException {
         try {
             String userId;
-            if (environment.acceptsProfiles(Profiles.of("demo")) && !demoUserId.isBlank()
+            if (environment.acceptsProfiles(Profiles.of("demo"))
+                    && !demoUserId.isBlank()
                     && "true".equals(request.getHeader("X-Demo-Session"))) {
                 userId = demoUserId;
-            } else if (environment.acceptsProfiles(Profiles.of("demo")) && !demoDispatcherId.isBlank()
+            } else if (environment.acceptsProfiles(Profiles.of("demo"))
+                    && !demoDispatcherId.isBlank()
                     && "dispatcher".equals(request.getHeader("X-Demo-Session"))) {
                 userId = demoDispatcherId;
-            } else if (environment.acceptsProfiles(Profiles.of("demo")) && !demoAdminId.isBlank()
+            } else if (environment.acceptsProfiles(Profiles.of("demo"))
+                    && !demoAdminId.isBlank()
                     && "admin".equals(request.getHeader("X-Demo-Session"))) {
                 userId = demoAdminId;
-            } else if(environment.acceptsProfiles(Profiles.of("demo"))&&"recipient".equals(request.getHeader("X-Demo-Session"))){
-                userId="demo-recipient-1";
-            } else if(environment.acceptsProfiles(Profiles.of("demo"))&&"engineer".equals(request.getHeader("X-Demo-Session"))){
-                userId="scenario-"+java.util.UUID.nameUUIDFromBytes("pulse-final-v3:demo-house-1:worker".getBytes(java.nio.charset.StandardCharsets.UTF_8));
+            } else if (environment.acceptsProfiles(Profiles.of("demo"))
+                    && "recipient".equals(request.getHeader("X-Demo-Session"))) {
+                userId = "demo-recipient-1";
+            } else if (environment.acceptsProfiles(Profiles.of("demo"))
+                    && "engineer".equals(request.getHeader("X-Demo-Session"))) {
+                userId =
+                        "scenario-"
+                                + java.util.UUID.nameUUIDFromBytes(
+                                        "pulse-final-v3:demo-house-1:worker"
+                                                .getBytes(java.nio.charset.StandardCharsets.UTF_8));
             } else {
                 VerifiedMaxUser maxUser = verify(request.getHeader("X-Max-Init-Data"));
-                jdbc.update("""
+                jdbc.update(
+                        """
                         INSERT INTO users(id, max_user_id, display_name, status)
                         VALUES (?, ?, ?, 'ACTIVE')
                         ON CONFLICT(max_user_id) DO UPDATE SET display_name = excluded.display_name
                         WHERE excluded.display_name != 'MAX user'
                           AND users.display_name != excluded.display_name
-                        """, java.util.UUID.randomUUID().toString(), maxUser.id(), maxUser.displayName());
-                List<String> users = jdbc.query("SELECT id FROM users WHERE max_user_id = ? AND status = 'ACTIVE'",
-                        (rs, row) -> rs.getString(1), maxUser.id());
+                        """,
+                        java.util.UUID.randomUUID().toString(),
+                        maxUser.id(),
+                        maxUser.displayName());
+                List<String> users =
+                        jdbc.query(
+                                "SELECT id FROM users WHERE max_user_id = ? AND status = 'ACTIVE'",
+                                (rs, row) -> rs.getString(1),
+                                maxUser.id());
                 if (users.isEmpty()) throw new IllegalArgumentException("MAX user has no account");
                 userId = users.get(0);
             }
-            SecurityContextHolder.getContext().setAuthentication(
-                    new UsernamePasswordAuthenticationToken(userId, null, List.of()));
+            SecurityContextHolder.getContext()
+                    .setAuthentication(
+                            new UsernamePasswordAuthenticationToken(userId, null, List.of()));
         } catch (Exception e) {
             SecurityContextHolder.clearContext();
             if (!response.isCommitted()) response.sendError(HttpServletResponse.SC_UNAUTHORIZED);
@@ -106,7 +126,10 @@ public class MaxInitDataFilter extends OncePerRequestFilter {
         Map<String, String> values = new HashMap<>();
         for (String pair : initData.split("&")) {
             String[] parts = pair.split("=", 2);
-            if (parts.length != 2 || values.putIfAbsent(parts[0], URLDecoder.decode(parts[1], StandardCharsets.UTF_8)) != null) {
+            if (parts.length != 2
+                    || values.putIfAbsent(
+                                    parts[0], URLDecoder.decode(parts[1], StandardCharsets.UTF_8))
+                            != null) {
                 throw new IllegalArgumentException("Invalid MAX initData");
             }
         }
@@ -116,8 +139,11 @@ public class MaxInitDataFilter extends OncePerRequestFilter {
         if (supplied == null || supplied.length() != 64 || age < -60 || age > 3600) {
             throw new IllegalArgumentException("Expired MAX initData");
         }
-        String data = values.entrySet().stream().sorted(Map.Entry.comparingByKey())
-                .map(e -> e.getKey() + "=" + e.getValue()).collect(Collectors.joining("\n"));
+        String data =
+                values.entrySet().stream()
+                        .sorted(Map.Entry.comparingByKey())
+                        .map(e -> e.getKey() + "=" + e.getValue())
+                        .collect(Collectors.joining("\n"));
         byte[] secret = hmac("WebAppData".getBytes(StandardCharsets.UTF_8), botToken);
         byte[] expected = hmac(secret, data);
         if (!MessageDigest.isEqual(expected, HexFormat.of().parseHex(supplied))) {
