@@ -96,6 +96,12 @@ public class MaxBotDelivery {
                         Integer.class,
                         user)
                 != 1) return false;
+        if ("CASE_EVENT".equals(item.get("kind"))
+                && jdbc.queryForObject(
+                                "SELECT coalesce((SELECT case_updates FROM user_notification_preferences WHERE user_id=?),1)",
+                                Integer.class,
+                                user)
+                        == 0) return false;
         Object house = item.get("house_id");
         if (house != null
                 && jdbc.queryForObject(

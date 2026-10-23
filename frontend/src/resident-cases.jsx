@@ -1,3 +1,6 @@
+import { ChatCircleDots, Files, ClockCounterClockwise, Users } from "@phosphor-icons/react";
+import { go, useRoute } from "./navigation.jsx";
+import { PageRow, PageTitle } from "./account-pages.jsx";
 import { SharedRequestPanel } from "./shared-requests.jsx";
 import {
   PlaceFields,
@@ -62,7 +65,17 @@ function Notice({ children }) {
   ) : null;
 }
 
-export function CaseDetail({ item, api, role, headers, context, onChange, onClose }) {
+export function CaseDetail({
+  item,
+  api,
+  role,
+  headers,
+  context,
+  onChange,
+  onClose,
+  residentOnly = false,
+  section = "overview",
+}) {
   const [message, setMessage] = useState("");
   const [messageKey, setMessageKey] = useState(key);
   const [notice, setNotice] = useState("");
@@ -157,23 +170,56 @@ export function CaseDetail({ item, api, role, headers, context, onChange, onClos
     }
   }
   return (
-    <section className="case-panel" aria-label={`Обращение ${item.number}`}>
+    <section
+      className="case-panel"
+      data-case-section={residentOnly ? section : undefined}
+      aria-label={`Обращение ${item.number}`}
+    >
+      {residentOnly && (
+        <PageTitle>
+          {
+            {
+              overview: `Обращение № ${item.number}`,
+              visits: "Выбор времени",
+              messages: "Переписка",
+              documents: "Документы",
+              history: "История обращения",
+              billing: "Проверка начисления",
+            }[section]
+          }
+        </PageTitle>
+      )}
       <div className="case-heading">
         <div>
           <small>
             ОБРАЩЕНИЕ № {item.number} · {kinds[item.kind]}
           </small>
-          <h2>{statuses[item.status]}</h2>
+          <h2>
+            {residentOnly
+              ? section === "visits"
+                ? "Когда вам удобно?"
+                : item.description
+              : statuses[item.status]}
+          </h2>
         </div>
-        <button type="button" className="case-link" onClick={onClose}>
-          К списку
-        </button>
+        {!residentOnly && (
+          <button type="button" className="case-link" onClick={onClose}>
+            К списку
+          </button>
+        )}
       </div>
       <p className="muted">{item.address}</p>
-      <p className="case-description">{item.description}</p>
-      {item.category && <p>Тема: {problemCategories[item.category]}</p>}
-      {item.location && <p>Где заметили: {item.location}</p>}
-      <div className="case-next">
+      {!residentOnly && <p className="case-description">{item.description}</p>}
+      {residentOnly && section === "overview" && (
+        <p className="status-pill">{statuses[item.status]}</p>
+      )}
+      {(!residentOnly || section === "overview") && item.category && (
+        <p>Категория: {problemCategories[item.category]}</p>
+      )}
+      {(!residentOnly || section === "overview") && item.location && (
+        <p>Где заметили: {item.location}</p>
+      )}
+      <div className="case-next" hidden={residentOnly && section !== "overview"}>
         <strong>{item.nextStep}</strong>
         <p>Кто ведёт: {item.responsibleName}</p>
         <p>{item.dueAt ? `Срок: ${date(item.dueAt)}` : "Срок уточняется"}</p>
@@ -184,7 +230,83 @@ export function CaseDetail({ item, api, role, headers, context, onChange, onClos
           )}
       </div>
       <Notice>{notice}</Notice>
-      <SharedRequestPanel item={item} role={role} api={api} onChange={onChange} />
+      {!residentOnly && (
+        <SharedRequestPanel item={item} role={role} api={api} onChange={onChange} />
+      )}
+      {residentOnly && section === "overview" && (
+        <div className="page-list">
+          {item.sharedRequestId && (
+            <PageRow
+              icon={Users}
+              title="Общая проблема дома"
+              subtitle={`Участников: ${item.participants || 1} · Общий план и сроки`}
+              onClick={() => go(`/miniapp/shared/${item.sharedRequestId}`)}
+            />
+          )}
+          <PageRow
+            icon={CalendarBlank}
+            title="Время визита"
+            subtitle={item.visitOffered ? "Выберите удобное время" : "Предложения и согласование"}
+            onClick={() => go(`/miniapp/cases/${item.id}/visits`)}
+          />
+          <PageRow
+            icon={ChatCircleDots}
+            title="Переписка"
+            subtitle="Ваши сообщения и ответы сотрудников"
+            onClick={() => go(`/miniapp/cases/${item.id}/messages`)}
+          />
+          <PageRow
+            icon={Files}
+            title="Документы"
+            subtitle={`Файлов: ${item.documents.length}`}
+            onClick={() => go(`/miniapp/cases/${item.id}/documents`)}
+          />
+          <PageRow
+            icon={ClockCounterClockwise}
+            title="История обращения"
+            onClick={() => go(`/miniapp/cases/${item.id}/history`)}
+          />
+          {item.kind === "PAYMENT" && (
+            <PageRow
+              icon={Receipt}
+              title="Проверка начисления"
+              onClick={() => go(`/miniapp/cases/${item.id}/billing`)}
+            />
+          )}
+        </div>
+      )}
+      {residentOnly &&
+        section === "overview" &&
+        item.isAuthor &&
+        item.sharedRequestId &&
+        !item.withdrawn &&
+        item.status !== "CLOSED" && (
+          <details className="faq-row">
+            <summary>Отозвать моё обращение</summary>
+            <p className="muted">Общая работа и обращения соседей сохранятся.</p>
+            <label>
+              Причина
+              <textarea
+                maxLength={1000}
+                value={message}
+                onChange={(e) => setMessage(e.target.value)}
+              />
+            </label>
+            <button
+              type="button"
+              className="case-secondary"
+              disabled={busy || !message.trim()}
+              onClick={() =>
+                act(`/v1/cases/${item.id}/withdraw`, { revision: item.revision, reason: message })
+              }
+            >
+              Подтвердить отзыв
+            </button>
+          </details>
+        )}
+      {residentOnly && item.withdrawn && (
+        <p className="info-note">Вы отозвали обращение. История сохранена.</p>
+      )}
       {item.isAuthor && !item.withdrawn && ["RESULT_PROPOSED", "CLOSED"].includes(item.status) && (
         <div className="case-actions">
           {item.status === "RESULT_PROPOSED" && (
@@ -216,34 +338,63 @@ export function CaseDetail({ item, api, role, headers, context, onChange, onClos
       )}
       {item.fullAccess && !item.withdrawn && (
         <>
-          {item.id !== item.workflowCaseId ? (
-            <CaseVisits item={item} role={role} api={api} onChange={onChange} />
-          ) : (
-            <p className="muted">
-              Чтобы предложить жителю время визита, откройте его материалы в участниках общей
-              заявки.
-            </p>
+          {(!residentOnly || section === "visits") &&
+            (item.id !== item.workflowCaseId ? (
+              <CaseVisits
+                item={item}
+                role={role}
+                api={api}
+                onChange={onChange}
+                residentOnly={residentOnly}
+              />
+            ) : (
+              <p className="muted">
+                Чтобы предложить жителю время визита, откройте его материалы в участниках общей
+                заявки.
+              </p>
+            ))}
+          {!residentOnly && (
+            <CaseMassProblem item={item} role={role} api={api} onChange={onChange} />
           )}
-          <CaseMassProblem item={item} role={role} api={api} onChange={onChange} />
-          <CaseExchange item={item} role={role} api={api} headers={headers} onChange={onChange} />
-          {item.kind === "PAYMENT" && (
-            <BillingCase item={item} role={role} api={api} headers={headers} onChange={onChange} />
+          {(!residentOnly || section === "documents") && (
+            <CaseExchange
+              item={residentOnly ? { ...item, canManage: false } : item}
+              role={role}
+              api={api}
+              headers={headers}
+              onChange={onChange}
+              residentOnly={residentOnly}
+            />
           )}
-          {item.fullAccess && item.kind !== "PAYMENT" && (
+          {item.kind === "PAYMENT" && (!residentOnly || section === "billing") && (
+            <BillingCase
+              item={residentOnly ? { ...item, canManage: false } : item}
+              role={role}
+              api={api}
+              headers={headers}
+              onChange={onChange}
+              residentOnly={residentOnly}
+            />
+          )}
+          {!residentOnly && item.fullAccess && item.kind !== "PAYMENT" && (
             <CaseWorkflow item={item} role={role} api={api} headers={headers} onChange={onChange} />
           )}
-          <h3>История и ответы</h3>
-          <ol className="case-timeline">
-            {item.events.map((event) => (
-              <li key={event.id}>
-                <small>
-                  {date(event.createdAt)} · {event.actor}
-                </small>
-                <p>{event.text}</p>
-              </li>
-            ))}
-          </ol>
-          {item.status !== "CLOSED" && (
+          {(!residentOnly || ["messages", "history"].includes(section)) && (
+            <>
+              <h3>{section === "messages" ? "Переписка" : "История и ответы"}</h3>
+              <ol className="case-timeline">
+                {item.events.map((event) => (
+                  <li key={event.id}>
+                    <small>
+                      {date(event.createdAt)} · {event.actor}
+                    </small>
+                    <p>{event.text}</p>
+                  </li>
+                ))}
+              </ol>
+            </>
+          )}
+          {item.status !== "CLOSED" && (!residentOnly || section === "messages") && (
             <form
               onSubmit={async (event) => {
                 event.preventDefault();
@@ -271,7 +422,11 @@ export function CaseDetail({ item, api, role, headers, context, onChange, onClos
               <button disabled={busy || !message.trim()}>Отправить ответ</button>
             </form>
           )}
-          <details className="case-documents">
+          <details
+            className="case-documents"
+            open={residentOnly && section === "documents" ? true : undefined}
+            hidden={residentOnly && section !== "documents"}
+          >
             <summary>Документы · {item.documents.length}</summary>
             <p className="muted">
               Документы доступны участникам обработки с необходимыми полномочиями. Соседям они не
@@ -330,7 +485,7 @@ export function CaseDetail({ item, api, role, headers, context, onChange, onClos
           </details>
         </>
       )}
-      {item.canManage && item.status !== "CLOSED" && (
+      {!residentOnly && item.canManage && item.status !== "CLOSED" && (
         <details className="case-editor">
           <summary>Рассмотрение сотрудником</summary>
           <form
@@ -427,7 +582,7 @@ export function CaseDetail({ item, api, role, headers, context, onChange, onClos
           </form>
         </details>
       )}
-      {context?.canManagePermissions && (
+      {!residentOnly && context?.canManagePermissions && (
         <details className="case-editor">
           <summary>Участники конкретного обращения</summary>
           <p className="muted">
@@ -570,7 +725,15 @@ function FeaturedCase({ item, api, role, onOpen, onShowCases, total }) {
               </p>
             )}
             {!slot && item.dueAt && <p className="case-summary-date">{date(item.dueAt)}</p>}
-            <button type="button" className="case-secondary" onClick={onOpen}>
+            <button
+              type="button"
+              className="case-secondary"
+              onClick={() =>
+                onOpen(
+                  offered ? "visits" : item.status === "WAITING_RESIDENT" ? "messages" : "overview",
+                )
+              }
+            >
               {offered
                 ? "Выбрать время"
                 : result
@@ -611,7 +774,9 @@ export function ResidentCases({
   onShowCases,
   passport,
   candidateReason,
+  route,
 }) {
+  const routePage = route?.page || view;
   const [items, setItems] = useState([]),
     [context, setContext] = useState(null),
     [detail, setDetail] = useState(null);
@@ -622,17 +787,11 @@ export function ResidentCases({
     [notice, setNotice] = useState(""),
     [busy, setBusy] = useState(false),
     [review, setReview] = useState(false);
-  useEffect(() => {
-    const close = () => {
-      setDetail(null);
-      setCompose(false);
-      setReview(false);
-    };
-    window.addEventListener("pulse-resident-navigation", close);
-    return () => window.removeEventListener("pulse-resident-navigation", close);
-  }, []);
   const [matches, setMatches] = useState(null),
     [searchFailed, setSearchFailed] = useState(false);
+  useEffect(() => {
+    if (route?.page === "cases") setFilter(route.query.get("filter") || "ALL");
+  }, [route?.key]);
   const houseId = house.id;
   const storageKey = context ? `pulse-case-v2:${context.actorId}:${houseId}` : null;
   useEffect(() => {
@@ -692,6 +851,63 @@ export function ResidentCases({
     window.addEventListener("pulse-payment-question", question);
     return () => window.removeEventListener("pulse-payment-question", question);
   }, [houseId, context, draft]);
+  useEffect(() => {
+    if (!context || !route) return;
+    if (["new", "payment", "similar"].includes(route.page)) {
+      if (!canSubmit) {
+        setNotice("Для создания обращения нужен доступ жителя к этому дому.");
+        return;
+      }
+      if (!draft)
+        save({
+          kind: route.page === "payment" ? "PAYMENT" : "PROBLEM",
+          description: "",
+          location: "",
+          category: route.page === "payment" ? null : "",
+          clientRequestId: key(),
+        });
+      else if (
+        (route.page === "payment") !== (draft.kind === "PAYMENT") &&
+        route.page !== "similar"
+      ) {
+        setNotice("Открыт сохранённый черновик. Завершите его или удалите перед новым обращением.");
+        go(draft.kind === "PAYMENT" ? "/miniapp/payment" : "/miniapp/new", { replace: true });
+      }
+      setCompose(true);
+      setDetail(null);
+      setReview(route.page === "similar" || route.query.get("review") === "1" || !!draft?.pending);
+      if (
+        route.page === "similar" &&
+        !matches &&
+        !draft?.pending &&
+        route.query.get("withoutSearch") !== "1"
+      ) {
+        setNotice("Черновик сохранён. Повторите поиск, чтобы проверить актуальные общие проблемы.");
+        setReview(false);
+        go("/miniapp/new", { replace: true });
+      }
+    } else {
+      setCompose(false);
+      setReview(false);
+      if (route.page === "cases" && route.id) {
+        let active = true;
+        api(role, `/v1/cases/${encodeURIComponent(route.id)}`)
+          .then((item) => {
+            if (active && item.houseId === houseId && item.isAuthor) setDetail(item);
+            else if (active) setNotice("Обращение недоступно для этого дома и профиля.");
+          })
+          .catch((e) => active && setNotice(e.message));
+        return () => {
+          active = false;
+        };
+      }
+      setDetail(null);
+    }
+  }, [route?.key, context?.actorId, houseId]);
+  function openCase(item) {
+    setDetail(item);
+    go(`/miniapp/cases/${item.id}`);
+  }
   function save(next) {
     setMatches(null);
     setSearchFailed(false);
@@ -714,9 +930,11 @@ export function ResidentCases({
     setCompose(true);
     setReview(!!draft?.pending);
     setDetail(null);
+    go((draft?.kind || kind) === "PAYMENT" ? "/miniapp/payment" : "/miniapp/new");
   }
   function changed(next) {
     setDetail(next);
+    if (["new", "payment", "similar"].includes(route?.page)) go(`/miniapp/cases/${next.id}`);
     setItems((list) =>
       [next, ...list.filter((c) => c.id !== next.id)].sort((a, b) => b.number - a.number),
     );
@@ -750,6 +968,7 @@ export function ResidentCases({
     }
     if (draft.kind !== "PROBLEM") {
       setReview(true);
+      go("/miniapp/payment?review=1");
       return;
     }
     setBusy(true);
@@ -761,6 +980,7 @@ export function ResidentCases({
         }),
       );
       setReview(true);
+      go("/miniapp/similar");
     } catch (e) {
       setNotice(
         `Не удалось проверить похожие проблемы: ${e.message}. Можно повторить поиск или отправить отдельное обращение без проверки.`,
@@ -830,7 +1050,10 @@ export function ResidentCases({
         body: JSON.stringify({
           houseId,
           kind: sending.kind,
-          description: sending.description,
+          description:
+            sending.kind === "PAYMENT" && sending.period
+              ? `${sending.description}\nПериод: ${sending.period}`
+              : sending.description,
           location: sending.location || null,
           clientRequestId: sending.clientRequestId,
           category: sending.kind === "PROBLEM" ? sending.category || null : null,
@@ -891,33 +1114,22 @@ export function ResidentCases({
     items.find((i) => i.status !== "CLOSED" && !i.withdrawn) ||
     items.find((i) => !i.withdrawn);
   return (
-    <section className="case-workspace" aria-label="Обращения по дому">
+    <section
+      className="case-workspace"
+      aria-label="Обращения по дому"
+      hidden={!["home", "cases", "new", "payment", "similar", "events"].includes(routePage)}
+    >
       <Notice>{notice}</Notice>
-      <div hidden={view !== "events"}>
-        <HouseOperations
-          houseId={houseId}
-          role={role}
-          api={api}
-          canJoin={canSubmit}
-          onJoined={changed}
-        />
-      </div>
-      {context?.canReview && (
-        <details className="case-panel">
-          <summary>Рабочие обращения — доступ сотрудника</summary>
-          <StaffCases houseId={houseId} role={role} api={api} headers={headers} />
-        </details>
-      )}
       {view === "cases" && !!waiting.length && !detail && !compose && (
         <div className="case-next">
           <strong>Нужен ваш ответ · {waiting.length}</strong>
           <p>{waiting[0].nextStep}</p>
-          <button type="button" onClick={() => setDetail(waiting[0])}>
+          <button type="button" onClick={() => openCase(waiting[0])}>
             Открыть обращение
           </button>
         </div>
       )}
-      {!detail && !compose && canSubmit && view !== "events" && (
+      {!detail && !compose && canSubmit && ["home", "cases"].includes(routePage) && (
         <div className="case-start">
           <button type="button" disabled={!context} onClick={() => begin("PROBLEM")}>
             <NotePencil size={26} aria-hidden="true" />
@@ -942,8 +1154,7 @@ export function ResidentCases({
               <button
                 type="button"
                 onClick={() => {
-                  setCompose(true);
-                  setReview(!!draft.pending);
+                  begin(draft.kind);
                 }}
               >
                 Продолжить
@@ -971,7 +1182,9 @@ export function ResidentCases({
           <div className="case-heading">
             <h2>
               {review
-                ? "Проверьте сообщение"
+                ? draft.kind === "PROBLEM" && matches?.length
+                  ? "Возможно, об этом уже сообщили"
+                  : "Проверьте сообщение"
                 : draft.kind === "PAYMENT"
                   ? "Что вас смущает в квитанции?"
                   : "Что случилось?"}
@@ -980,7 +1193,10 @@ export function ResidentCases({
               type="button"
               className="case-link"
               disabled={busy}
-              onClick={() => setCompose(false)}
+              onClick={() => {
+                setCompose(false);
+                go("/miniapp/cases");
+              }}
             >
               Сохранить и закрыть
             </button>
@@ -995,10 +1211,9 @@ export function ResidentCases({
           {review ? (
             <>
               <p className="case-description">{draft.description}</p>
-              {draft.category && <p>Тема: {problemCategories[draft.category]}</p>}
+              {draft.category && <p>Категория: {problemCategories[draft.category]}</p>}
               {draft.kind === "PROBLEM" && matches !== null && !draft.joining && (
                 <section aria-label="Похожие проблемы">
-                  <h3>Похожие проблемы</h3>
                   <p className="muted">
                     Проверьте, не сообщили ли соседи об этой же проблеме. Личные документы и
                     переписка участников закрыты.
@@ -1008,13 +1223,15 @@ export function ResidentCases({
                       <article className="case-next" key={`${item.source}:${item.id}`}>
                         <strong>{item.description}</strong>
                         {item.location && <p>{item.location}</p>}
-                        <p>{item.participants || 1} участников</p>
-                        <p className="muted">Оценка сходства: {Math.round(item.score * 100)}%</p>
+                        <p>Участников: {item.participants || 1}</p>
+                        <p className="muted">Проверьте описание и место.</p>
                         <ul>
                           {item.reasons
                             .filter(
                               (r) =>
-                                !["structured_location", "same_house", "same_category"].includes(r),
+                                !["structured_location", "same_house", "same_category"].includes(
+                                  r,
+                                ) && !r.startsWith("shared_terms:"),
                             )
                             .slice(0, 4)
                             .map((r) =>
@@ -1033,7 +1250,7 @@ export function ResidentCases({
                               const id = item.caseId || item.id;
                               api(role, `/v1/cases/${id}`)
                                 .then((target) => {
-                                  setDetail(target);
+                                  openCase(target);
                                   setCompose(false);
                                 })
                                 .catch((e) => setNotice(e.message));
@@ -1064,13 +1281,16 @@ export function ResidentCases({
                   <p>Если это другая проблема, отправьте отдельное обращение ниже.</p>
                 </section>
               )}
-              <p>
-                Где заметили:{" "}
-                {draft.precise
-                  ? placeDescription(draft.locationFeatures)
-                  : draft.location || "Пока не определено"}
-              </p>
-              <p>Файлов: {files.length}. После перезагрузки файлы нужно выбрать заново.</p>
+              {draft.kind !== "PAYMENT" && (
+                <p>
+                  Где заметили:{" "}
+                  {draft.precise
+                    ? placeDescription(draft.locationFeatures)
+                    : draft.location || "Пока не определено"}
+                </p>
+              )}
+              {draft.kind === "PAYMENT" && draft.period && <p>Период: {draft.period}</p>}
+              {files.length > 0 && <p>Приложения: {files.map((f) => f.name).join(", ")}</p>}
               <p>Выбирать организацию и определять причину не нужно.</p>
               <div className="case-actions">
                 <button
@@ -1088,13 +1308,18 @@ export function ResidentCases({
                       ? "Повторить присоединение"
                       : draft.pending
                         ? "Повторить отправку"
-                        : "Отправить обращение"}
+                        : draft.kind === "PROBLEM" && matches?.length
+                          ? "У меня другая проблема — отправить отдельно"
+                          : "Отправить обращение"}
                 </button>
                 <button
                   type="button"
                   className="case-secondary"
                   disabled={busy || draft.pending}
-                  onClick={() => setReview(false)}
+                  onClick={() => {
+                    setReview(false);
+                    go(draft.kind === "PAYMENT" ? "/miniapp/payment" : "/miniapp/new");
+                  }}
                 >
                   Изменить
                 </button>
@@ -1129,6 +1354,19 @@ export function ResidentCases({
                   }
                 />
               </label>
+              {draft.kind === "PAYMENT" && (
+                <label>
+                  Период, если знаете
+                  <input
+                    type="month"
+                    onInput={(e) => save({ ...draft, period: e.currentTarget.value })}
+                    value={draft.period || ""}
+                    disabled={busy || draft.pending}
+                    onChange={(e) => save({ ...draft, period: e.target.value })}
+                  />
+                  <small>Можно не указывать.</small>
+                </label>
+              )}
               {draft.kind === "PROBLEM" && (
                 <>
                   <label>
@@ -1212,6 +1450,12 @@ export function ResidentCases({
                   />
                 </label>
               )}
+              {!!draft.attachmentNames?.length && !files.length && (
+                <p className="info-note">
+                  Черновик сохранён. Повторно выберите файлы: {draft.attachmentNames.join(", ")}.
+                  Браузер не восстанавливает вложения после закрытия страницы.
+                </p>
+              )}
               <label>
                 {draft.kind === "PAYMENT"
                   ? "Квитанция — по желанию"
@@ -1229,6 +1473,7 @@ export function ResidentCases({
                       setFiles([]);
                     } else {
                       setFiles(selected);
+                      save({ ...draft, attachmentNames: selected.map((f) => f.name) });
                       setNotice("");
                     }
                   }}
@@ -1252,6 +1497,7 @@ export function ResidentCases({
                   onClick={() => {
                     setMatches(null);
                     setReview(true);
+                    go("/miniapp/similar?withoutSearch=1");
                   }}
                 >
                   Продолжить без проверки
@@ -1270,7 +1516,12 @@ export function ResidentCases({
           api={api}
           headers={headers}
           onChange={changed}
-          onClose={() => setDetail(null)}
+          residentOnly
+          section={route?.section}
+          onClose={() => {
+            setDetail(null);
+            go("/miniapp/cases");
+          }}
         />
       )}
       {!detail && !compose && view === "home" && featured && (
@@ -1280,8 +1531,9 @@ export function ResidentCases({
           role={role}
           total={items.length}
           onShowCases={onShowCases}
-          onOpen={() => {
-            setDetail(featured);
+          onOpen={(section) => {
+            openCase(featured);
+            if (section !== "overview") go(`/miniapp/cases/${featured.id}/${section}`);
             requestAnimationFrame(() =>
               document.querySelector(".case-workspace")?.scrollIntoView({ block: "start" }),
             );
@@ -1301,7 +1553,13 @@ export function ResidentCases({
           </div>
           <label className="case-filter" hidden={view === "home"}>
             Показать
-            <select value={filter} onChange={(e) => setFilter(e.target.value)}>
+            <select
+              value={filter}
+              onChange={(e) => {
+                setFilter(e.target.value);
+                go(`/miniapp/cases?filter=${e.target.value}`, { replace: true });
+              }}
+            >
               <option value="ALL">Все</option>
               <option value="ACTIVE">Активные</option>
               <option value="WAITING">Нужен мой ответ</option>
@@ -1316,7 +1574,7 @@ export function ResidentCases({
                 type="button"
                 className="case-list-item"
                 key={item.id}
-                onClick={() => setDetail(item)}
+                onClick={() => openCase(item)}
               >
                 <small>
                   № {item.number} · {statuses[item.status]}
@@ -1342,7 +1600,30 @@ export function ResidentCases({
   );
 }
 
-export function StaffCases({ houseId, role, api, headers }) {
+export function StaffCases({ houseId, role, api, headers, section = "all" }) {
+  const route = useRoute();
+  const [categoryFilter, setCategoryFilter] = useState(route.query.get("category") || "ALL");
+  const [query, setQuery] = useState(route.query.get("q") || ""),
+    [statusFilter, setStatusFilter] = useState(route.query.get("status") || "ALL"),
+    [sort, setSort] = useState(route.query.get("sort") || "recent");
+  useEffect(() => {
+    setQuery(route.query.get("q") || "");
+    setStatusFilter(route.query.get("status") || "ALL");
+    setSort(route.query.get("sort") || "recent");
+    setCategoryFilter(route.query.get("category") || "ALL");
+  }, [route.key]);
+  const staffStatus = {
+    ...statuses,
+    WAITING_RESIDENT: "Ожидается ответ жителя",
+    RESULT_PROPOSED: "Ожидается проверка жителем",
+  };
+  function filters(next) {
+    const u = new URL(location.href);
+    for (const [k, v] of Object.entries(next))
+      v ? u.searchParams.set(k, v) : u.searchParams.delete(k);
+    go(u.pathname + u.search, { replace: true });
+  }
+
   const [items, setItems] = useState([]),
     [context, setContext] = useState(null),
     [detail, setDetail] = useState(null),
@@ -1391,102 +1672,219 @@ export function StaffCases({ houseId, role, api, headers }) {
       setNotice(e.message);
     }
   }
+  useEffect(() => {
+    if (route.query.get("caseId"))
+      setDetail(items.find((i) => i.id === route.query.get("caseId")) || null);
+    else setDetail(null);
+  }, [items, route.key]);
+  const visible = items
+    .filter(
+      (i) =>
+        (categoryFilter === "ALL" || i.category === categoryFilter) &&
+        `${i.number} ${i.description} ${i.location || ""}`
+          .toLowerCase()
+          .includes(query.toLowerCase()) &&
+        (statusFilter === "ALL" ||
+          (statusFilter === "OVERDUE"
+            ? i.status !== "CLOSED" &&
+              (i.overdueWorkCount > 0 || (i.dueAt && new Date(i.dueAt) < new Date()))
+            : statusFilter === "MINE"
+              ? i.responsibleUserId === context?.actorId
+              : i.status === statusFilter)),
+    )
+    .sort((a, b) =>
+      sort === "due" ? (a.dueAt || "9999").localeCompare(b.dueAt || "9999") : b.number - a.number,
+    );
   if (!houseId) return null;
   return (
     <section className="case-workspace">
       <Notice>{notice}</Notice>
-      <ControlPanel
-        key={`control:${houseId}:${context?.staff.map((s) => s.billingAccess).join()}`}
-        houseId={houseId}
-        role={role}
-        api={api}
-        renderCase={(props) => <CaseDetail {...props} api={api} headers={headers} />}
-      />
-      <ExchangeRegistry
-        key={`channels:${houseId}`}
-        houseId={houseId}
-        role={role}
-        api={api}
-        canManage={context?.canManagePermissions}
-      />
-      <HouseOperations houseId={houseId} role={role} api={api} optional />
-      <OperationsManagement houseId={houseId} role={role} api={api} />
-      <BillingQueue
-        houseId={houseId}
-        role={role}
-        api={api}
-        refreshKey={context?.staff.find((s) => s.id === context.actorId)?.billingAccess}
-        renderCase={(props) => (
-          <CaseDetail {...props} context={context} role={role} api={api} headers={headers} />
-        )}
-      />
-      {context?.canManagePermissions && (
-        <details className="case-panel">
-          <summary>Доступ к личным вопросам по начислениям</summary>
-          <p className="muted">
-            Это отдельное полномочие. Выдавайте его только сотруднику, который рассматривает
-            начисления. Оно не предоставляется вместе с ролью администратора.
-          </p>
-          {context.staff
-            .filter((s) => s.billingAssignable !== false)
-            .map((s) => (
-              <div className="case-permission" key={s.id}>
-                <span>{s.name}</span>
-                <button type="button" className="case-secondary" onClick={() => permission(s)}>
-                  {s.billingAccess ? "Отозвать доступ" : "Разрешить рассмотрение"}
+      {["all", "control"].includes(section) && (
+        <>
+          <ControlPanel
+            key={`control:${houseId}:${context?.staff.map((s) => s.billingAccess).join()}`}
+            houseId={houseId}
+            role={role}
+            api={api}
+            renderCase={(props) => <CaseDetail {...props} api={api} headers={headers} />}
+          />
+        </>
+      )}
+      {["all", "work"].includes(section) && (
+        <>
+          <ExchangeRegistry
+            key={`channels:${houseId}`}
+            houseId={houseId}
+            role={role}
+            api={api}
+            canManage={context?.canManagePermissions}
+          />
+          <HouseOperations houseId={houseId} role={role} api={api} optional />
+          <OperationsManagement houseId={houseId} role={role} api={api} />
+        </>
+      )}
+      {["all", "control"].includes(section) && (
+        <>
+          <BillingQueue
+            houseId={houseId}
+            role={role}
+            api={api}
+            refreshKey={context?.staff.find((s) => s.id === context.actorId)?.billingAccess}
+            renderCase={(props) => (
+              <CaseDetail {...props} context={context} role={role} api={api} headers={headers} />
+            )}
+          />
+          {context?.canManagePermissions && (
+            <details className="case-panel">
+              <summary>Доступ к личным вопросам по начислениям</summary>
+              <p className="muted">
+                Это отдельное полномочие. Выдавайте его только сотруднику, который рассматривает
+                начисления. Оно не предоставляется вместе с ролью администратора.
+              </p>
+              {context.staff
+                .filter((s) => s.billingAssignable !== false)
+                .map((s) => (
+                  <div className="case-permission" key={s.id}>
+                    <span>{s.name}</span>
+                    <button type="button" className="case-secondary" onClick={() => permission(s)}>
+                      {s.billingAccess ? "Отозвать доступ" : "Разрешить рассмотрение"}
+                    </button>
+                  </div>
+                ))}
+            </details>
+          )}
+        </>
+      )}
+      {["all", "queue"].includes(section) && (
+        <>
+          {detail ? (
+            <CaseDetail
+              item={detail}
+              context={context}
+              role={role}
+              api={api}
+              headers={headers}
+              onChange={(next) => {
+                setDetail(next);
+                setItems((list) => list.map((c) => (c.id === next.id ? next : c)));
+              }}
+              onClose={() => {
+                setDetail(null);
+                filters({ caseId: "" });
+              }}
+            />
+          ) : (
+            <section className="case-panel">
+              <div className="case-heading">
+                <div>
+                  {section === "all" && <small>ПЕРВИЧНОЕ РАССМОТРЕНИЕ</small>}
+                  <h2>
+                    {section === "all" ? "Очередь обращений" : `Обращений: ${visible.length}`}
+                  </h2>
+                </div>
+                <button type="button" className="case-link" onClick={refresh}>
+                  Обновить
                 </button>
               </div>
-            ))}
-        </details>
-      )}
-      {detail ? (
-        <CaseDetail
-          item={detail}
-          context={context}
-          role={role}
-          api={api}
-          headers={headers}
-          onChange={(next) => {
-            setDetail(next);
-            setItems((list) => list.map((c) => (c.id === next.id ? next : c)));
-          }}
-          onClose={() => setDetail(null)}
-        />
-      ) : (
-        <section className="case-panel">
-          <div className="case-heading">
-            <div>
-              <small>ПЕРВИЧНОЕ РАССМОТРЕНИЕ</small>
-              <h2>Новые обращения жителей</h2>
-            </div>
-            <button type="button" className="case-link" onClick={refresh}>
-              Обновить
-            </button>
-          </div>
-          <div className="case-list">
-            {items.map((item) => (
-              <button
-                type="button"
-                className="case-list-item"
-                key={item.id}
-                disabled={!item.fullAccess && !context?.canManagePermissions}
-                onClick={() => setDetail(item)}
-              >
-                <small>
-                  № {item.number} · {statuses[item.status]} · {kinds[item.kind]}
-                </small>
-                <strong>{text(item)}</strong>
-                <span>{item.nextStep}</span>
-                {item.overdueWorkCount > 0 && (
-                  <strong className="workflow-overdue">
-                    Прошёл срок заданий: {item.overdueWorkCount}
-                  </strong>
-                )}
-              </button>
-            ))}
-            {!items.length && <p className="muted">Новых обращений пока нет.</p>}
-          </div>
-        </section>
+              <div className="queue-filters">
+                <label>
+                  Найти обращение
+                  <input
+                    type="search"
+                    value={query}
+                    onChange={(e) => {
+                      setQuery(e.target.value);
+                      filters({ q: e.target.value });
+                    }}
+                    placeholder="Номер, описание или место"
+                  />
+                </label>
+                <label>
+                  Состояние
+                  <select
+                    value={statusFilter}
+                    onChange={(e) => {
+                      setStatusFilter(e.target.value);
+                      filters({ status: e.target.value });
+                    }}
+                  >
+                    <option value="ALL">Все</option>
+                    <option value="MINE">Назначенные мне</option>
+                    <option value="OVERDUE">Срок прошёл</option>
+                    {Object.entries(staffStatus).map(([id, label]) => (
+                      <option value={id} key={id}>
+                        {label}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label>
+                  Категория
+                  <select
+                    value={categoryFilter}
+                    onChange={(e) => {
+                      setCategoryFilter(e.target.value);
+                      filters({ category: e.target.value });
+                    }}
+                  >
+                    <option value="ALL">Все</option>
+                    {Object.entries(problemCategories).map(([id, label]) => (
+                      <option key={id} value={id}>
+                        {label}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label>
+                  Порядок
+                  <select
+                    value={sort}
+                    onChange={(e) => {
+                      setSort(e.target.value);
+                      filters({ sort: e.target.value });
+                    }}
+                  >
+                    <option value="recent">Новые</option>
+                    <option value="due">По сроку</option>
+                  </select>
+                </label>
+              </div>
+              <div className="case-list">
+                {visible.map((item) => (
+                  <button
+                    type="button"
+                    className="case-list-item"
+                    key={item.id}
+                    disabled={!item.fullAccess && !context?.canManagePermissions}
+                    onClick={() => {
+                      setDetail(item);
+                      filters({ caseId: item.id });
+                    }}
+                  >
+                    <small>
+                      № {item.number} · {staffStatus[item.status]} · {kinds[item.kind]}
+                    </small>
+                    <strong>{text(item)}</strong>
+                    <small className="queue-kind">
+                      {item.kind === "PAYMENT"
+                        ? "Личный вопрос"
+                        : item.sharedRequestId
+                          ? `Общая заявка · участников: ${item.participants || 1}`
+                          : "Работа по дому"}
+                    </small>
+                    <span>{item.nextStep}</span>
+                    {item.overdueWorkCount > 0 && (
+                      <strong className="workflow-overdue">
+                        Прошёл срок заданий: {item.overdueWorkCount}
+                      </strong>
+                    )}
+                  </button>
+                ))}
+                {!visible.length && <p className="muted">Новых обращений пока нет.</p>}
+              </div>
+            </section>
+          )}
+        </>
       )}
     </section>
   );

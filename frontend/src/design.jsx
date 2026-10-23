@@ -1,6 +1,8 @@
 import React, { useEffect, useState } from "react";
 import {
   House,
+  UserCircle,
+  User,
   ChatCircleDots,
   CalendarBlank,
   NotePencil,
@@ -62,28 +64,47 @@ export function useAppearance() {
   }, []);
   return theme;
 }
-export function AppearancePicker() {
+export function AppearancePicker({ variant = "select" }) {
   const { choice } = useAppearance();
+  function change(value) {
+    themeChoice = value;
+    try {
+      value === "system" ? localStorage.removeItem(KEY) : localStorage.setItem(KEY, value);
+    } catch {}
+    applyTheme();
+    window.dispatchEvent(new Event("pulse-theme"));
+  }
+  const options = [
+    ["system", "Как в MAX / системе"],
+    ["light", "Светлая"],
+    ["dark", "Тёмная"],
+  ];
+  if (variant === "cards")
+    return (
+      <fieldset className="appearance-options" aria-label="Оформление">
+        {options.map(([value, label]) => (
+          <label key={value} className={choice === value ? "selected" : ""}>
+            <input
+              type="radio"
+              name="appearance"
+              value={value}
+              checked={choice === value}
+              onChange={() => change(value)}
+            />
+            <span>{label}</span>
+          </label>
+        ))}
+      </fieldset>
+    );
   return (
     <label className="appearance-picker">
       Оформление
-      <select
-        aria-label="Оформление"
-        value={choice}
-        onChange={(e) => {
-          themeChoice = e.target.value;
-          try {
-            e.target.value === "system"
-              ? localStorage.removeItem(KEY)
-              : localStorage.setItem(KEY, e.target.value);
-          } catch {}
-          document.documentElement.dataset.theme = resolvedTheme(e.target.value);
-          window.dispatchEvent(new Event("pulse-theme"));
-        }}
-      >
-        <option value="system">Как в MAX / системе</option>
-        <option value="light">Светлое</option>
-        <option value="dark">Тёмное</option>
+      <select aria-label="Оформление" value={choice} onChange={(e) => change(e.target.value)}>
+        {options.map(([value, label]) => (
+          <option key={value} value={value}>
+            {label}
+          </option>
+        ))}
       </select>
     </label>
   );
@@ -136,6 +157,7 @@ export function ResidentNavigation({ value, onChange, disabled }) {
         ["home", "Дом", House],
         ["cases", "Обращения", ChatCircleDots],
         ["events", "События", CalendarBlank],
+        ["profile", "Профиль", User],
       ].map(([id, label, Icon]) => (
         <button
           type="button"

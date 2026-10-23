@@ -414,7 +414,16 @@ function PermissionPanel({ staff, busy, onGrant }) {
     </details>
   );
 }
-export function HouseTariffs({ houseId, role, api, headers, onQuestion, optional = false }) {
+export function HouseTariffs({
+  houseId,
+  role,
+  api,
+  headers,
+  onQuestion,
+  optional = false,
+  residentOnly = false,
+  houseAddress,
+}) {
   const [catalogue, setCatalogue] = useState(null),
     [rights, setRights] = useState(null),
     [registry, setRegistry] = useState([]),
@@ -431,8 +440,10 @@ export function HouseTariffs({ houseId, role, api, headers, onQuestion, optional
     const r = await api(role, base + "/access"),
       c = await api(role, base + `?date=${selectedDate}`);
     const [list, people] = await Promise.all([
-      r.canManage || r.canEdit || r.canPublish ? api(role, base + "/registry") : [],
-      r.canManage ? api(role, base + "/staff") : [],
+      !residentOnly && (r.canManage || r.canEdit || r.canPublish)
+        ? api(role, base + "/registry")
+        : [],
+      !residentOnly && r.canManage ? api(role, base + "/staff") : [],
     ]);
     return { r, c, list, people };
   }
@@ -487,9 +498,18 @@ export function HouseTariffs({ houseId, role, api, headers, onQuestion, optional
   const json = (path, method, body) => run(path, { method, body: JSON.stringify(body) });
   if (unavailable) return null;
   return (
-    <details className="case-panel case-workspace tariff-section">
+    <details
+      className="case-panel case-workspace tariff-section"
+      open={residentOnly ? true : undefined}
+    >
       <summary>Платежи и тарифы</summary>
-      <p>
+      {residentOnly && (
+        <>
+          <h2>Тарифы вашего дома</h2>
+          <p className="muted">{houseAddress}</p>
+        </>
+      )}
+      <p hidden={residentOnly}>
         Проверенные ставки вашего дома, периоды действия и документы-основания. Это справочные
         сведения: личная сумма зависит от объёма и условий начисления.
       </p>
@@ -502,6 +522,7 @@ export function HouseTariffs({ houseId, role, api, headers, onQuestion, optional
         role={role}
         api={api}
         onQuestion={onQuestion}
+        expanded={residentOnly}
       />
       <div className="tariff-toolbar">
         <Field label="Показать ставки на дату">
@@ -510,6 +531,9 @@ export function HouseTariffs({ houseId, role, api, headers, onQuestion, optional
             required
             disabled={busy}
             value={selectedDate}
+            onInput={(e) => {
+              if (e.currentTarget.value) setDate(e.currentTarget.value);
+            }}
             onChange={(e) => {
               if (e.target.value) setDate(e.target.value);
             }}
@@ -590,7 +614,7 @@ export function HouseTariffs({ houseId, role, api, headers, onQuestion, optional
           Задать вопрос по квитанции
         </button>
       )}
-      {rights && (rights.canManage || rights.canEdit || rights.canPublish) && (
+      {!residentOnly && rights && (rights.canManage || rights.canEdit || rights.canPublish) && (
         <details className="tariff-registry">
           <summary>Управление справочными ставками</summary>
           <p>

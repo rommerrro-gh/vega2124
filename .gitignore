@@ -15,3 +15,8 @@ data/
 .DS_Store
 __pycache__/
 *.pyc
+
+# Rebuilt from pinned frontend sources before packaging
+app-bootstrap/src/main/resources/static/miniapp/bundle.js
+app-bootstrap/src/main/resources/static/miniapp/bundle.css
+frontend/test/.pages-*.mjs

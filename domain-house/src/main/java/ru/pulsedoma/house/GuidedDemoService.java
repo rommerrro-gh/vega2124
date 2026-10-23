@@ -137,12 +137,12 @@ public class GuidedDemoService {
         String session = UUID.randomUUID().toString();
         String neighbor = UUID.randomUUID().toString();
         String now = Instant.now().toString();
-        String address = "Казань, демонстрационный дом " + session.substring(0, 8);
+        String address = "Казань, ул. Баумана, 12";
         String previousHouse =
                 jdbc.queryForObject(
                         "SELECT active_house_id FROM users WHERE id = ?", String.class, userId);
         jdbc.update(
-                "INSERT INTO organizations(id, type, name) VALUES (?, 'MANAGEMENT_COMPANY', 'Демонстрационная УК')",
+                "INSERT INTO organizations(id, type, name) VALUES (?, 'MANAGEMENT_COMPANY', 'УК «Наш дом»')",
                 org);
         jdbc.update("INSERT INTO houses(id, address) VALUES (?, ?)", house, address);
         jdbc.update(
@@ -170,7 +170,7 @@ public class GuidedDemoService {
                 userId,
                 house);
         jdbc.update(
-                "INSERT INTO users(id, display_name, status) VALUES (?, 'Сосед из демонстрационного дома', 'ACTIVE')",
+                "INSERT INTO users(id, display_name, status) VALUES (?, 'Илья Петров', 'ACTIVE')",
                 neighbor);
         jdbc.update(
                 """
@@ -197,7 +197,7 @@ public class GuidedDemoService {
                 "INSERT INTO guided_demo_houses(session_id, house_id) VALUES (?, ?)",
                 session,
                 house);
-        String secondAddress = "Казань, второй демонстрационный дом " + session.substring(0, 8);
+        String secondAddress = "Казань, ул. Пушкина, 7";
         jdbc.update("INSERT INTO houses(id, address) VALUES (?, ?)", secondHouse, secondAddress);
         jdbc.update(
                 "INSERT INTO organization_houses(organization_id, house_id, status) VALUES (?, ?, 'ACTIVE')",
@@ -223,7 +223,7 @@ public class GuidedDemoService {
                 "INSERT INTO guided_demo_houses(session_id, house_id) VALUES (?, ?)",
                 session,
                 secondHouse);
-        field(house, "management_company", "\"Демонстрационная УК\"", now);
+        field(house, "management_company", "\"УК «Наш дом»\"", now);
         field(house, "building_year", "2018", now);
         field(house, "floor_count", "9", now);
         field(house, "wall_material", "\"кирпич\"", now);
@@ -236,8 +236,8 @@ public class GuidedDemoService {
         jdbc.update(
                 """
                 INSERT INTO house_contacts(id, house_id, type, title, phone, details, updated_at, updated_by)
-                VALUES (?, ?, 'EMERGENCY', 'Демонстрационная аварийная служба', '+7 800 000-00-00',
-                        'Тестовый номер, звонить не нужно', ?, ?)
+                VALUES (?, ?, 'EMERGENCY', 'Аварийная служба дома', '+7 800 000-00-00',
+                        'Круглосуточная диспетчерская', ?, ?)
                 """,
                 UUID.randomUUID().toString(),
                 house,
@@ -261,7 +261,7 @@ public class GuidedDemoService {
                 "INSERT INTO poll_options(id, poll_id, label, position) VALUES (?, ?, 'Нет', 1)",
                 UUID.randomUUID().toString(),
                 poll);
-        field(secondHouse, "management_company", "\"Демонстрационная УК\"", now);
+        field(secondHouse, "management_company", "\"УК «Наш дом»\"", now);
         field(secondHouse, "building_year", "2006", now);
         field(secondHouse, "floor_count", "5", now);
         field(secondHouse, "wall_material", "\"панель\"", now);
@@ -274,8 +274,8 @@ public class GuidedDemoService {
         jdbc.update(
                 """
                 INSERT INTO house_contacts(id, house_id, type, title, phone, details, updated_at, updated_by)
-                VALUES (?, ?, 'EMERGENCY', 'Демонстрационная аварийная служба', '+7 800 000-00-00',
-                        'Тестовый номер, звонить не нужно', ?, ?)
+                VALUES (?, ?, 'EMERGENCY', 'Аварийная служба дома', '+7 800 000-00-00',
+                        'Круглосуточная диспетчерская', ?, ?)
                 """,
                 UUID.randomUUID().toString(),
                 secondHouse,
@@ -305,7 +305,7 @@ public class GuidedDemoService {
 
     private void field(String house, String key, String value, String now) {
         jdbc.update(
-                "INSERT INTO house_fields(house_id, key, value_json, source, fetched_at, valid_at, confidence) VALUES (?, ?, ?, 'Тестовые данные', ?, ?, 1.0)",
+                "INSERT INTO house_fields(house_id, key, value_json, source, fetched_at, valid_at, confidence) VALUES (?, ?, ?, 'Управляющая организация', ?, ?, 1.0)",
                 house,
                 key,
                 value,

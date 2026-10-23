@@ -18,5 +18,6 @@
     "esbuild": "0.25.9",
     "jsdom": "26.1.0",
     "prettier": "3.9.10"
-  }
+  },
+  "packageManager": "pnpm@11.25.0"
 }

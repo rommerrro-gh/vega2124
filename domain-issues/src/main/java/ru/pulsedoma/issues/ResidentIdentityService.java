@@ -28,6 +28,36 @@ public class ResidentIdentityService {
 
     public record LegacyInvitationView(String houseId, String address, String expiresAt) {}
 
+    public record Profile(String id, String displayName, boolean fromMax) {}
+
+    public record Preferences(boolean caseUpdates) {}
+
+    public Profile profile(String user) {
+        return jdbc.queryForObject(
+                "SELECT id,display_name,max_user_id FROM users WHERE id=? AND status='ACTIVE'",
+                (r, n) -> new Profile(r.getString(1), r.getString(2), r.getString(3) != null),
+                user);
+    }
+
+    public Preferences preferences(String user) {
+        return new Preferences(
+                jdbc.queryForObject(
+                                "SELECT coalesce((SELECT case_updates FROM user_notification_preferences WHERE user_id=?),1)",
+                                Integer.class,
+                                user)
+                        == 1);
+    }
+
+    @Transactional
+    public Preferences preferences(String user, boolean caseUpdates) {
+        jdbc.update(
+                "INSERT INTO user_notification_preferences(user_id,case_updates,updated_at) VALUES (?,?,?) ON CONFLICT(user_id) DO UPDATE SET case_updates=excluded.case_updates,updated_at=excluded.updated_at",
+                user,
+                caseUpdates ? 1 : 0,
+                java.time.Instant.now().toString());
+        return preferences(user);
+    }
+
     public List<HouseView> houses(String userId) {
         LinkedHashMap<String, HouseView> houses = new LinkedHashMap<>();
         jdbc.query(

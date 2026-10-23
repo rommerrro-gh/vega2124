@@ -3,3 +3,6 @@
 .env
 frontend/node_modules
 data/*.db*
+
+app-bootstrap/src/main/resources/static/miniapp/bundle.*
+frontend/test/.pages-*.mjs

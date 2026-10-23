@@ -1,6 +1,19 @@
-import { Users, ArrowRight, UserCircle } from "@phosphor-icons/react";
+import { parseRoute } from "./page-router.mjs";
+import { go, goTab, useRoute, useMaxBack } from "./navigation.jsx";
+import { AccountPages, PageTitle, PageRow } from "./account-pages.jsx";
+import { CommonProblems } from "./common-problems.jsx";
+import {
+  Users,
+  ArrowRight,
+  UserCircle,
+  ListBullets,
+  House,
+  ChartBar,
+  Receipt,
+  Buildings,
+} from "@phosphor-icons/react";
 import { AppearancePicker, ResidentHeader, ResidentNavigation, useAppearance } from "./design.jsx";
-import { OperationsInbox } from "./operations.jsx";
+import { OperationsInbox, HouseOperations } from "./operations.jsx";
 import { ExchangePortal } from "./case-exchange.jsx";
 import React, { useEffect, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
@@ -14,6 +27,9 @@ import { WorkPortal, WarrantyRegistry, WorkflowStaff } from "./warranty-workflow
 import { HouseTariffs } from "./house-tariffs.jsx";
 import { CaseDetail, ResidentCases, StaffCases } from "./resident-cases.jsx";
 import "./redesign.css";
+import "./pages.css";
+
+const parseCurrentRoute = () => parseRoute(location.href);
 
 function Button({ mode = "primary", className = "", ...props }) {
   return <MaxButton mode={mode} className={`app-button-${mode} ${className}`.trim()} {...props} />;
@@ -90,12 +106,17 @@ function authHeaders(role) {
 async function api(role, path, options = {}) {
   const response = await fetch(path, {
     ...options,
+    signal: options.signal || AbortSignal.timeout(options.body instanceof FormData ? 60000 : 30000),
     headers: {
       ...authHeaders(role),
       ...(options.body && !(options.body instanceof FormData)
         ? { "Content-Type": "application/json" }
         : {}),
     },
+  }).catch(() => {
+    throw new Error(
+      "Не удалось дождаться ответа сервера. Проверьте соединение и повторите действие.",
+    );
   });
   if (!response.ok) {
     if (response.status === 401)
@@ -113,24 +134,9 @@ async function api(role, path, options = {}) {
 }
 
 function navigate(path) {
-  const initData = window.WebApp?.initData;
-  const launchData =
-    window.location.hash || (initData ? `#WebAppData=${encodeURIComponent(initData)}` : "");
   const pathname = new URL(path, location.origin).pathname;
-  if (
-    [
-      "/miniapp/index.html",
-      "/dispatcher/index.html",
-      "/admin/index.html",
-      "/uk/index.html",
-      "/system/index.html",
-      "/work/index.html",
-      "/exchange/index.html",
-    ].includes(pathname)
-  ) {
-    localStorage.setItem("pulse-last-mode", pathname);
-  }
-  window.location.assign(`${path}${launchData}`);
+  localStorage.setItem("pulse-last-mode", pathname);
+  go(path);
 }
 
 function refreshAccess(goHome = false) {
@@ -176,196 +182,52 @@ const rolePages = [
 ];
 
 function Brand({ role }) {
-  const menu = useRef(null);
-  const [access, setAccess] = useState([]);
-  const [demo, setDemo] = useState(null);
-  const [localDemo, setLocalDemo] = useState(false);
-  const [workAccess, setWorkAccess] = useState(false);
-  const [exchangeAccess, setExchangeAccess] = useState(false);
-  const [notice, setNotice] = useState("");
-  const [help, setHelp] = useState(false);
-  useEffect(() => {
-    Promise.all([
-      api("true", "/v1/access/me"),
-      api("true", "/v1/guided-demo"),
-      api("true", "/v1/access/config"),
-      api("true", "/v1/workflow/houses"),
-      api("true", "/v1/exchange/inbox"),
-    ])
-      .then(([roles, state, config, workHouses, packets]) => {
-        setAccess(roles);
-        setDemo(state);
-        setLocalDemo(config.demoMode === true);
-        setWorkAccess(workHouses.length > 0);
-        setExchangeAccess(packets.length > 0);
-      })
-      .catch(() => {});
-  }, []);
-  useEffect(() => {
-    const closeOnEscape = (event) => {
-      if (event.key === "Escape" && menu.current) menu.current.open = false;
-    };
-    document.addEventListener("keydown", closeOnEscape);
-    return () => document.removeEventListener("keydown", closeOnEscape);
-  }, []);
-  const available = localDemo
-    ? rolePages
-    : rolePages.filter(([name]) => access.some((item) => item.role === name));
-  const current = rolePages.find(([, , path]) => location.pathname === path);
-  async function demoAction(action) {
-    setNotice("");
-    if (menu.current) menu.current.open = false;
-    try {
-      await api("true", `/v1/guided-demo/${action}`, { method: "POST" });
-      refreshAccess(true);
-    } catch (error) {
-      setNotice(error.message);
-    }
-  }
+  const route = useRoute();
+  const session =
+    new URLSearchParams(location.search).get("demoSession") ||
+    (route.workspace === "dispatcher"
+      ? "dispatcher"
+      : ["admin", "uk", "system"].includes(route.workspace)
+        ? "admin"
+        : "true");
   return (
-    <>
-      <header className="topbar">
-        <div className="brand">
-          <span className="brand-icon-frame">
-            <img className="brand-icon" src="/miniapp/app-icon.png?v=20261023-design-a" alt="" />
-          </span>
-          <span>Пульс дома</span>
-        </div>
-        <OperationsInbox
-          api={api}
-          role={
-            location.pathname === "/uk/index.html" || location.pathname === "/admin/index.html"
-              ? "admin"
-              : location.pathname === "/dispatcher/index.html"
-                ? "dispatcher"
-                : new URLSearchParams(location.search).get("demoSession") || "true"
-          }
-          onOpen={(n) =>
-            navigate(
-              location.pathname === "/miniapp/index.html"
-                ? `/miniapp/index.html?view=resident&caseId=${encodeURIComponent(n.case_id)}`
-                : `/work/index.html?houseId=${encodeURIComponent(n.house_id)}&caseId=${encodeURIComponent(n.case_id)}${localDemo ? "&demoSession=dispatcher" : ""}`,
-            )
-          }
-        />
-        {available.length || workAccess || exchangeAccess ? (
-          <details ref={menu} className="role-menu">
-            <summary aria-label="Выбрать роль">
-              <UserCircle className="profile-icon" size={34} weight="regular" aria-hidden="true" />
-              <span className="role-menu-label">{current?.[1] || role}</span>
-            </summary>
-            <button
-              className="role-menu-backdrop"
-              type="button"
-              aria-label="Закрыть меню ролей"
-              onClick={() => {
-                menu.current.open = false;
-              }}
-            />
-            <nav aria-label="Доступные роли">
-              {available.map(([name, label, path]) => (
-                <button
-                  key={name}
-                  type="button"
-                  aria-current={location.pathname === path ? "page" : undefined}
-                  onClick={() =>
-                    navigate(path === "/miniapp/index.html" ? `${path}?view=resident` : path)
-                  }
-                >
-                  {label}
-                  {location.pathname === path ? " ✓" : ""}
-                </button>
-              ))}
-              {localDemo && (
-                <button
-                  type="button"
-                  onClick={() => navigate("/work/index.html?demoSession=engineer")}
-                >
-                  Инженер и исполнитель
-                </button>
-              )}
-              {(workAccess || localDemo) && (
-                <button
-                  type="button"
-                  onClick={() =>
-                    navigate(
-                      "/work/index.html" +
-                        (localDemo
-                          ? `?demoSession=${["/uk/index.html", "/admin/index.html"].includes(location.pathname) ? "admin" : "dispatcher"}`
-                          : ""),
-                    )
-                  }
-                >
-                  Осмотры и работы
-                </button>
-              )}
-              {(exchangeAccess || localDemo) && (
-                <button
-                  type="button"
-                  onClick={() =>
-                    navigate("/exchange/index.html" + (localDemo ? "?demoSession=recipient" : ""))
-                  }
-                >
-                  Полученные материалы организаций
-                </button>
-              )}
-              <hr />
-              <AppearancePicker />
-              {demo?.active && (
-                <>
-                  <hr />
-                  <span className="role-menu-caption">
-                    Демонстрационный режим · тестовые данные
-                  </span>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      menu.current.open = false;
-                      setHelp((value) => !value);
-                    }}
-                  >
-                    Инструкция по сценарию
-                  </button>
-                  <button type="button" onClick={() => demoAction("restart")}>
-                    Начать заново
-                  </button>
-                  <button type="button" onClick={() => demoAction("exit")}>
-                    Выйти из демонстрации
-                  </button>
-                </>
-              )}
-            </nav>
-          </details>
-        ) : (
-          <span className="max-chip">
-            <span className="max-dot" /> {role} · MAX
-          </span>
-        )}
-      </header>
-      {demo?.active && (
-        <div className="guided-demo-badge">Демонстрационный режим · {demo.address}</div>
-      )}
-      {help && (
-        <div className="guided-demo-help">
-          <strong>Проверка сценария</strong>
-          <ol>
-            <li>
-              В роли жителя переключите два дома: у них одна УК, но разные паспорта и опросы.
-              Вернитесь в первый дом и создайте обращение «Не работает свет в подъезде», место
-              «Подъезд 1, этаж 2».
-            </li>
-            <li>Присоединитесь к похожей заявке или создайте новую.</li>
-            <li>Переключитесь в диспетчера и проведите заявку до выполнения.</li>
-            <li>Проверьте сообщение от бота, вернитесь в роль жителя и подтвердите результат.</li>
-          </ol>
-        </div>
-      )}
-      {notice && (
-        <div className="notice" role="alert">
-          {notice}
-        </div>
-      )}
-    </>
+    <header className="topbar">
+      <button
+        type="button"
+        className="brand brand-button"
+        onClick={() =>
+          go(`/${route.workspace}/${route.workspace === "miniapp" ? "home" : "queue"}`)
+        }
+        aria-label="Пульс дома — главная"
+      >
+        <span className="brand-icon-frame">
+          <img className="brand-icon" src="/miniapp/app-icon.png?v=20261023-design-a" alt="" />
+        </span>
+        <span>
+          Пульс дома
+          {route.workspace !== "miniapp" && <small className="workspace-caption">{role}</small>}
+        </span>
+      </button>
+      <OperationsInbox
+        api={api}
+        role={session}
+        onOpen={(n) =>
+          go(
+            route.workspace === "miniapp"
+              ? `/miniapp/cases/${encodeURIComponent(n.case_id)}`
+              : `/work/queue?houseId=${encodeURIComponent(n.house_id)}&caseId=${encodeURIComponent(n.case_id)}`,
+          )
+        }
+      />
+      <button
+        type="button"
+        className="profile-button icon-button"
+        aria-label="Мой профиль"
+        onClick={() => go(`/${route.workspace}/profile`)}
+      >
+        <UserCircle size={34} />
+      </button>
+    </header>
   );
 }
 
@@ -475,10 +337,10 @@ function Card({ children, className = "" }) {
   );
 }
 
-function DisclosureCard({ title, summary, children, className = "" }) {
+function DisclosureCard({ title, summary, children, className = "", open = false }) {
   return (
     <Card className={`disclosure-card ${className}`}>
-      <details>
+      <details open={open || undefined}>
         <summary>
           <span>
             <strong>{title}</strong>
@@ -593,7 +455,7 @@ function HousePassport({ passport, loading, error }) {
       ]
     : [];
   return (
-    <DisclosureCard className="passport-card" title="Паспорт дома" summary={summary}>
+    <DisclosureCard className="passport-card" title="Паспорт дома" summary={summary} open>
       <p className="muted">
         Сведения о доме. Для заполненных полей указаны источник и дата получения.
       </p>
@@ -737,6 +599,7 @@ function PollCard({ poll, onVote, busy }) {
 }
 
 function Resident() {
+  const route = useRoute();
   const [initialLoading, setInitialLoading] = useState(true);
   const [houses, setHouses] = useState([]);
   const [selectedHouseId, setSelectedHouseId] = useState("");
@@ -745,22 +608,13 @@ function Resident() {
   const [passportLoading, setPassportLoading] = useState(false);
   const [passportError, setPassportError] = useState("");
   const [polls, setPolls] = useState([]);
-  const [residentView, setResidentView] = useState(
-    new URLSearchParams(location.search).has("caseId") ? "cases" : "home",
-  );
-  function changeResidentView(next) {
-    setResidentView(next);
-    window.dispatchEvent(new CustomEvent("pulse-resident-navigation", { detail: next }));
-    requestAnimationFrame(() => {
-      window.scrollTo({ top: 0, behavior: "auto" });
-      if (next === "events")
-        document
-          .querySelector(".resident-events .disclosure-card details")
-          ?.setAttribute("open", "");
-    });
-  }
-  const [homePollOpen, setHomePollOpen] = useState(false);
-  const [homeUtilitiesOpen, setHomeUtilitiesOpen] = useState(false);
+  const residentView =
+    route.page === "home"
+      ? "home"
+      : route.page === "events" || route.page === "polls"
+        ? "events"
+        : "cases";
+  const changeResidentView = (next) => goTab(`/miniapp/${next}`);
   const [pollBusy, setPollBusy] = useState(false);
   const [notice, setNotice] = useState("");
   const demoSession =
@@ -776,11 +630,16 @@ function Resident() {
         request("/v1/me/active-house"),
       ]);
       setHouses(myHouses);
-      const launch = new URLSearchParams(location.search).get("caseId")
-        ? `case_${new URLSearchParams(location.search).get("caseId")}`
-        : window.WebApp?.initDataUnsafe?.start_param ||
-          new URLSearchParams(location.search).get("WebAppStartParam") ||
-          "";
+      const launch =
+        route.page === "cases" && route.id
+          ? `case_${route.id}`
+          : !["/", "/miniapp/index.html"].includes(location.pathname)
+            ? ""
+            : new URLSearchParams(location.search).get("caseId")
+              ? `case_${new URLSearchParams(location.search).get("caseId")}`
+              : window.WebApp?.initDataUnsafe?.start_param ||
+                new URLSearchParams(location.search).get("WebAppStartParam") ||
+                "";
       const match = typeof launch === "string" && /^case_([0-9a-f-]{36})$/.exec(launch);
       let linkedHouse = null;
       if (match) {
@@ -790,6 +649,8 @@ function Resident() {
           if (linked.isAuthor && myHouses.some((h) => h.id === linked.houseId)) {
             linkedHouse = linked.houseId;
             setInitialCaseId(linked.id);
+            if (location.pathname.endsWith("index.html"))
+              go(`/miniapp/cases/${linked.id}`, { replace: true });
           } else setNotice("Обращение недоступно для этого профиля.");
         } catch (error) {
           setNotice(error.message);
@@ -798,6 +659,8 @@ function Resident() {
       if (myHouses.length)
         setSelectedHouseId(
           linkedHouse ||
+            myHouses.find((h) => h.id === new URLSearchParams(location.search).get("houseId"))
+              ?.id ||
             myHouses.find((house) => house.id === selected.houseId)?.id ||
             myHouses[0].id,
         );
@@ -808,6 +671,41 @@ function Resident() {
       .catch(fail)
       .finally(() => setInitialLoading(false));
   }, []);
+
+  useEffect(() => {
+    if (!houses.length) return;
+    let active = true;
+    const hinted = route.query.get("houseId");
+    if (hinted && hinted !== selectedHouseId && houses.some((h) => h.id === hinted)) {
+      request("/v1/me/active-house", { method: "PUT", body: JSON.stringify({ houseId: hinted }) })
+        .then(() => {
+          if (active) setSelectedHouseId(hinted);
+        })
+        .catch(fail);
+    }
+    if (route.id && ["cases", "shared"].includes(route.page))
+      request(
+        `/v1/${route.page === "cases" ? "cases" : "shared-problems"}/${encodeURIComponent(route.id)}`,
+      )
+        .then((c) => {
+          if (
+            active &&
+            (route.page !== "cases" || c.isAuthor) &&
+            c.houseId !== selectedHouseId &&
+            houses.some((h) => h.id === c.houseId)
+          ) {
+            setSelectedHouseId(c.houseId);
+            request("/v1/me/active-house", {
+              method: "PUT",
+              body: JSON.stringify({ houseId: c.houseId }),
+            }).catch(fail);
+          }
+        })
+        .catch(fail);
+    return () => {
+      active = false;
+    };
+  }, [route.key, houses]);
 
   useEffect(() => {
     if (!selectedHouseId) return;
@@ -859,19 +757,6 @@ function Resident() {
     }
   }
 
-  async function refreshPolls() {
-    if (!selectedHouseId) return;
-    setPollBusy(true);
-    setNotice("");
-    try {
-      setPolls(await request(`/v1/houses/${encodeURIComponent(selectedHouseId)}/polls`));
-    } catch (error) {
-      fail(error);
-    } finally {
-      setPollBusy(false);
-    }
-  }
-
   const selectedHouse = houses.find((house) => house.id === selectedHouseId);
   const canReport = selectedHouse?.memberships?.some(
     (item) => item.role === "RESIDENT" && item.verificationStatus === "VERIFIED",
@@ -887,136 +772,252 @@ function Resident() {
         </Card>
       </main>
     );
+  async function selectHouse(id) {
+    if (!houses.some((h) => h.id === id)) throw new Error("Дом недоступен этому профилю.");
+    await request("/v1/me/active-house", { method: "PUT", body: JSON.stringify({ houseId: id }) });
+    setSelectedHouseId(id);
+  }
+  const account = route.account;
+  const caseArea = ["home", "cases", "new", "payment", "similar", "events"].includes(route.page);
+  const navValue = account
+    ? "profile"
+    : ["events", "polls", "notices"].includes(route.page)
+      ? "events"
+      : ["cases", "shared", "new", "payment", "similar"].includes(route.page)
+        ? "cases"
+        : "home";
   return (
-    <main className={`shell resident-shell resident-view-${residentView}`}>
-      <Brand role="Жителю" />
+    <main className={`shell resident-shell resident-view-${route.page}`}>
+      {route.root && <Brand role="Житель" />}
       <Notice message={notice} />
-      <GuidedDemoEntry />
-      <ResidentHeader
-        house={selectedHouse}
-        houses={houses}
-        onChange={(id) => {
-          setSelectedHouseId(id);
-          request("/v1/me/active-house", {
-            method: "PUT",
-            body: JSON.stringify({ houseId: id }),
-          }).catch(fail);
-        }}
-      />
-
-      {selectedHouse && (
-        <ResidentCases
-          key={`${demoSession}:${selectedHouseId}`}
+      {route.page === "home" && (
+        <ResidentHeader
           house={selectedHouse}
-          role={demoSession}
-          api={api}
-          headers={authHeaders}
-          canSubmit={canReport}
-          view={residentView}
-          onShowCases={() => changeResidentView("cases")}
-          initialCaseId={initialCaseId}
-          passport={passport}
-          candidateReason={candidateReason}
+          houses={houses}
+          onChange={(id) => selectHouse(id).catch(fail)}
         />
       )}
-
-      <div hidden={residentView !== "home" || !homeUtilitiesOpen} className="resident-tariffs">
-        {selectedHouse && (
-          <HouseTariffs
-            key={`tariffs:${demoSession}:${selectedHouseId}`}
-            houseId={selectedHouseId}
+      {account && (
+        <AccountPages
+          route={route}
+          api={api}
+          role={demoSession}
+          houses={houses}
+          selectedHouseId={selectedHouseId}
+          onHouse={selectHouse}
+          guidedEntry={<GuidedDemoEntry />}
+        />
+      )}
+      {["new", "payment", "similar"].includes(route.page) && (
+        <PageTitle>
+          {route.page === "payment"
+            ? "Вопрос по квитанции"
+            : route.page === "similar"
+              ? "Похожие проблемы"
+              : "Новое обращение"}
+        </PageTitle>
+      )}
+      {route.page === "cases" && !route.id && <PageTitle root>Обращения</PageTitle>}
+      {route.page === "cases" && !route.id && (
+        <div className="segmented-tabs">
+          <button
+            aria-current={route.query.get("tab") !== "common" ? "page" : undefined}
+            onClick={() => go("/miniapp/cases")}
+          >
+            Мои
+          </button>
+          <button
+            aria-current={route.query.get("tab") === "common" ? "page" : undefined}
+            onClick={() => go("/miniapp/cases?tab=common")}
+          >
+            Общие проблемы
+          </button>
+        </div>
+      )}
+      {selectedHouse && (
+        <div hidden={!caseArea || route.query.get("tab") === "common"}>
+          <ResidentCases
+            key={`${demoSession}:${selectedHouseId}`}
+            house={selectedHouse}
             role={demoSession}
             api={api}
             headers={authHeaders}
-            onQuestion={
-              canReport
-                ? (text) => {
-                    if (typeof text === "string")
-                      window.dispatchEvent(
-                        new CustomEvent("pulse-payment-question", {
-                          detail: { houseId: selectedHouseId, text },
-                        }),
-                      );
-                    else document.getElementById("resident-payment-start")?.click();
-                  }
-                : undefined
-            }
+            canSubmit={canReport}
+            view={residentView}
+            route={route}
+            onShowCases={() => go("/miniapp/cases")}
+            initialCaseId={initialCaseId}
+            passport={passport}
+            candidateReason={candidateReason}
+          />
+        </div>
+      )}
+      {selectedHouse &&
+        ((route.page === "cases" && !route.id && route.query.get("tab") === "common") ||
+          route.page === "shared") && (
+          <CommonProblems
+            houseId={selectedHouseId}
+            role={demoSession}
+            api={api}
+            id={route.page === "shared" ? route.id : null}
+            onHouse={selectHouse}
           />
         )}
-      </div>
-      <div className="content-grid resident-events">
-        {canReport && residentView === "home" && (
-          <section className="home-poll">
+      {["tariffs", "contacts", "passport"].includes(route.page) && (
+        <PageTitle>
+          {route.page === "tariffs"
+            ? "Платежи и тарифы"
+            : route.page === "contacts"
+              ? "Контакты дома"
+              : "Паспорт дома"}
+        </PageTitle>
+      )}
+      {selectedHouse && route.page === "tariffs" && (
+        <HouseTariffs
+          houseId={selectedHouseId}
+          role={demoSession}
+          api={api}
+          headers={authHeaders}
+          residentOnly
+          houseAddress={selectedHouse?.address}
+          onQuestion={(text) => {
+            go("/miniapp/payment");
+            if (typeof text === "string")
+              window.dispatchEvent(
+                new CustomEvent("pulse-payment-question", {
+                  detail: { houseId: selectedHouseId, text },
+                }),
+              );
+          }}
+        />
+      )}
+      {route.page === "contacts" && (
+        <section>
+          <h2>К кому обратиться</h2>
+          <p className="muted">{selectedHouse?.address}</p>
+          {passportLoading && <p role="status">Загружаем контакты…</p>}
+          {passportError && <Notice message={passportError} />}{" "}
+          {passport?.contacts?.map((c) => (
+            <div className="contact-row" key={c.id}>
+              <h3>{c.title}</h3>
+              <p className="muted">{c.details}</p>
+              <a href={`tel:${c.phone.replace(/[^+0-9]/g, "")}`}>{c.phone}</a>
+            </div>
+          ))}
+          {passport && !passport.contacts?.length && <p>Администратор пока не добавил контакты.</p>}
+          <p className="info-note">
+            По обычной проблеме удобнее создать обращение — так сохранится история.
+          </p>
+          <button onClick={() => go("/miniapp/new")}>Сообщить о проблеме</button>
+        </section>
+      )}
+      {route.page === "passport" && (
+        <>
+          <PageRow title="Контакты организации" onClick={() => go("/miniapp/contacts")} />
+          <HousePassport passport={passport} loading={passportLoading} error={passportError} />
+        </>
+      )}
+      {route.page === "home" && (
+        <section className="home-links">
+          <PageRow
+            icon={Users}
+            title="Опрос жителей"
+            subtitle={(openPolls[0] || polls[0])?.question || "Пока нет активных опросов"}
+            onClick={() =>
+              go(
+                openPolls[0] || polls[0]
+                  ? `/miniapp/polls/${(openPolls[0] || polls[0]).id}?houseId=${encodeURIComponent(selectedHouseId)}`
+                  : "/miniapp/events",
+              )
+            }
+          />
+          <PageRow icon={Receipt} title="Платежи и тарифы" onClick={() => go("/miniapp/tariffs")} />
+          <PageRow
+            icon={Buildings}
+            title="Информация и контакты дома"
+            onClick={() => go("/miniapp/passport")}
+          />
+        </section>
+      )}
+      {route.page === "events" && (
+        <section>
+          <PageTitle root>События дома</PageTitle>
+          <div className="segmented-tabs">
             <button
-              type="button"
-              className="home-poll-row"
-              aria-expanded={homePollOpen}
-              onClick={() => setHomePollOpen((v) => !v)}
+              aria-current={!route.query.get("filter") ? "page" : undefined}
+              onClick={() => go("/miniapp/events")}
             >
-              <Users size={30} />
-              <span>
-                <strong>Опрос жителей</strong>
-                <small>{(openPolls[0] || polls[0])?.question || "Пока нет активных опросов"}</small>
-              </span>
-              <ArrowRight size={21} />
+              Ближайшее
             </button>
-            {homePollOpen && (
-              <div className="poll-list">
-                {openPolls[0] || polls[0] ? (
-                  <PollCard poll={openPolls[0] || polls[0]} onVote={voteInPoll} busy={pollBusy} />
-                ) : (
-                  <p className="muted">Когда появится опрос, он будет здесь.</p>
-                )}
-              </div>
-            )}
-          </section>
-        )}
-        {canReport && (
-          <div hidden={residentView !== "events"}>
-            <DisclosureCard
-              title="Опросы дома"
-              summary={
-                openPolls.length
-                  ? `${countLabel(openPolls.length, "опрос ждёт", "опроса ждут", "опросов ждут")} вашего ответа`
-                  : polls.length
-                    ? countLabel(polls.length, "опрос", "опроса", "опросов")
-                    : "Опросов пока нет"
-              }
+            <button
+              aria-current={route.query.get("filter") === "polls" ? "page" : undefined}
+              onClick={() => go("/miniapp/events?filter=polls")}
             >
-              <div className="poll-list">
-                {polls.map((poll) => (
-                  <PollCard key={poll.id} poll={poll} onVote={voteInPoll} busy={pollBusy} />
-                ))}
-                {!polls.length && <p className="muted">В выбранном доме пока нет опросов.</p>}
-                <Button mode="secondary" type="button" disabled={pollBusy} onClick={refreshPolls}>
-                  Обновить опросы
-                </Button>
-              </div>
-            </DisclosureCard>
+              Опросы
+            </button>
           </div>
-        )}
-        {selectedHouse && residentView === "home" && (
-          <button
-            type="button"
-            className="home-information-toggle"
-            aria-expanded={homeUtilitiesOpen}
-            onClick={() => setHomeUtilitiesOpen((v) => !v)}
-          >
-            Платежи, тарифы и информация о доме
-          </button>
-        )}
-        {selectedHouse && (
-          <div hidden={residentView !== "home" || !homeUtilitiesOpen}>
-            <DisclosureCard title="Мой дом" summary="Паспорт и полезные контакты">
-              <HousePassport passport={passport} loading={passportLoading} error={passportError} />
-            </DisclosureCard>
-          </div>
-        )}
-      </div>
-      <footer>
-        Пульс дома <span>·</span> Сделаем дом лучше вместе
-      </footer>
-      <ResidentNavigation value={residentView} onChange={changeResidentView} />
+          {!route.query.get("filter") && selectedHouse && (
+            <HouseOperations
+              houseId={selectedHouseId}
+              role={demoSession}
+              api={api}
+              residentOnly
+              compact
+            />
+          )}
+          {polls.map((p) => (
+            <PageRow
+              key={p.id}
+              icon={Users}
+              title={p.question}
+              subtitle={
+                p.closed
+                  ? "Опрос завершён"
+                  : p.myOptionId
+                    ? "Вы уже проголосовали"
+                    : "Ждёт вашего ответа"
+              }
+              onClick={() =>
+                go(`/miniapp/polls/${p.id}?houseId=${encodeURIComponent(selectedHouseId)}`)
+              }
+            />
+          ))}
+          {!polls.length && <p className="muted">Опросов пока нет.</p>}
+        </section>
+      )}
+      {route.page === "notices" && selectedHouse && (
+        <>
+          <PageTitle>Событие дома</PageTitle>
+          <HouseOperations
+            houseId={selectedHouseId}
+            role={demoSession}
+            api={api}
+            residentOnly
+            canJoin={canReport}
+            selectedId={route.id}
+            page
+            onJoined={(item) => go(`/miniapp/cases/${item.id}`)}
+          />
+        </>
+      )}
+      {route.page === "polls" && (
+        <section>
+          <PageTitle>Опрос жителей</PageTitle>
+          {polls.find((p) => p.id === route.id) ? (
+            <PollCard
+              poll={polls.find((p) => p.id === route.id)}
+              onVote={voteInPoll}
+              busy={pollBusy}
+            />
+          ) : passportLoading ? (
+            <p role="status">Загружаем опрос…</p>
+          ) : (
+            <p>Опрос недоступен для выбранного дома.</p>
+          )}
+        </section>
+      )}
+      {route.page === "home" && !selectedHouse && <GuidedDemoEntry />}
+      {!route.form && <ResidentNavigation value={navValue} onChange={changeResidentView} />}
     </main>
   );
 }
@@ -1207,7 +1208,7 @@ function Admin() {
   }
 
   return (
-    <main className="shell">
+    <main className="shell staff-shell">
       <Brand role="Администратору" />
       <section className="hero">
         <div className="hero-copy">
@@ -1541,11 +1542,13 @@ function Admin() {
       <footer>
         Пульс дома <span>·</span> Кабинет администратора
       </footer>
+      <StaffNavigation route={parseCurrentRoute()} />
     </main>
   );
 }
 
 function Dispatcher() {
+  const route = useRoute();
   const [houses, setHouses] = useState([]),
     [houseId, setHouseId] = useState(""),
     [notice, setNotice] = useState("");
@@ -1553,17 +1556,36 @@ function Dispatcher() {
     api("dispatcher", "/v1/me/dispatcher-houses")
       .then((rows) => {
         setHouses(rows);
-        setHouseId(rows[0]?.id || "");
+        setHouseId(
+          rows.find((h) => h.id === new URLSearchParams(location.search).get("houseId"))?.id ||
+            rows[0]?.id ||
+            "",
+        );
       })
       .catch((e) => setNotice(e.message));
   }, []);
   return (
-    <main className="shell">
-      <Brand role="Диспетчеру" />
-      <Hero dispatcher />
+    <main className="shell staff-shell">
+      <Brand role="Диспетчер" />
+      <PageTitle root>
+        {route.page === "control"
+          ? "Контроль и сроки"
+          : route.page === "work"
+            ? "Работы дома"
+            : "Очередь обращений"}
+      </PageTitle>
       <Notice message={notice} />
       <Field id="house" label="Дом">
-        <select id="house" value={houseId} onChange={(e) => setHouseId(e.target.value)}>
+        <select
+          id="house"
+          value={houseId}
+          onChange={(e) => {
+            setHouseId(e.target.value);
+            const u = new URL(location.href);
+            u.searchParams.set("houseId", e.target.value);
+            go(u.pathname + u.search, { replace: true });
+          }}
+        >
           {houses.map((h) => (
             <option key={h.id} value={h.id}>
               {h.address}
@@ -1573,11 +1595,21 @@ function Dispatcher() {
       </Field>
       {houseId && (
         <>
-          <HouseTariffs houseId={houseId} role="dispatcher" api={api} headers={authHeaders} />
-          <StaffCases houseId={houseId} role="dispatcher" api={api} headers={authHeaders} />
+          {route.page === "work" && (
+            <HouseTariffs houseId={houseId} role="dispatcher" api={api} headers={authHeaders} />
+          )}
+          <StaffCases
+            houseId={houseId}
+            role="dispatcher"
+            api={api}
+            headers={authHeaders}
+            section={
+              route.page === "control" ? "control" : route.page === "work" ? "work" : "queue"
+            }
+          />
         </>
       )}
-      <footer>Пульс дома · Кабинет диспетчера</footer>
+      <StaffNavigation route={route} />
     </main>
   );
 }
@@ -1594,7 +1626,9 @@ function InvitationGate() {
   const [token, setToken] = useState(() => {
     const start =
       new URLSearchParams(location.search).get("invite") ||
-      window.WebApp?.initDataUnsafe?.start_param ||
+      (["/", "/miniapp/index.html"].includes(location.pathname)
+        ? window.WebApp?.initDataUnsafe?.start_param
+        : "") ||
       "";
     return start.startsWith("demo_") ||
       start.startsWith("case_") ||
@@ -1632,7 +1666,7 @@ function InvitationGate() {
       });
   }, [token]);
   useEffect(() => {
-    if (!token && !dismissed) {
+    if (!token && !dismissed && ["/", "/miniapp/index.html"].includes(location.pathname)) {
       if (new URLSearchParams(location.search).get("view") === "resident") return;
       const lastMode = localStorage.getItem("pulse-last-mode");
       if (lastMode === "/exchange/index.html") {
@@ -1865,7 +1899,7 @@ function SystemAdmin() {
     });
   }
   return (
-    <main className="shell">
+    <main className="shell staff-shell">
       <Brand role="Системному администратору" />
       <section className="hero">
         <div className="hero-copy">
@@ -2087,6 +2121,7 @@ function SystemAdmin() {
           </div>
         </Card>
       </div>
+      <StaffNavigation route={parseCurrentRoute()} />
     </main>
   );
 }
@@ -2179,7 +2214,7 @@ function UkAdmin() {
     }
   }
   return (
-    <main className="shell">
+    <main className="shell staff-shell">
       <Brand role="Администратору УК" />
       <section className="hero">
         <div className="hero-copy">
@@ -2295,11 +2330,109 @@ function UkAdmin() {
           </div>
         </Card>
       </div>
+      <StaffNavigation route={parseCurrentRoute()} />
     </main>
   );
 }
 
+function StaffAccount({ route }) {
+  const role =
+    route.query.get("demoSession") ||
+    (["admin", "uk", "system"].includes(route.workspace)
+      ? "admin"
+      : route.workspace === "dispatcher"
+        ? "dispatcher"
+        : "true");
+  const [houses, setHouses] = useState([]),
+    [selected, setSelected] = useState("");
+  useEffect(() => {
+    api(role, "/v1/me/houses")
+      .then((h) => {
+        setHouses(h);
+        setSelected(h[0]?.id || "");
+      })
+      .catch(() => {});
+  }, [role]);
+  return (
+    <main className="shell resident-shell">
+      {route.page === "profile" && <Brand role="Рабочий кабинет" />}
+      <AccountPages
+        route={route}
+        role={role}
+        api={api}
+        houses={houses}
+        selectedHouseId={selected}
+        onHouse={async (id) => {
+          await api(role, "/v1/me/active-house", {
+            method: "PUT",
+            body: JSON.stringify({ houseId: id }),
+          });
+          setSelected(id);
+        }}
+      />
+      <StaffNavigation route={route} />
+    </main>
+  );
+}
+function StaffNavigation({ route }) {
+  const admin = ["admin", "uk", "system", "exchange"].includes(route.workspace);
+  return (
+    <nav className="resident-navigation" aria-label="Рабочие разделы">
+      {(admin
+        ? [
+            ["queue", "Рабочий кабинет", ListBullets],
+            ["profile", "Профиль", UserCircle],
+          ]
+        : [
+            ["queue", "Очередь", ListBullets],
+            ["work", "Работы дома", House],
+            ["control", "Контроль", ChartBar],
+            ["profile", "Профиль", UserCircle],
+          ]
+      ).map(([id, label, Icon]) => (
+        <button
+          key={id}
+          aria-current={route.page === id ? "page" : undefined}
+          onClick={() => goTab(`/${route.workspace}/${id}`)}
+        >
+          <Icon size={25} weight={route.page === id ? "fill" : "regular"} />
+          <span>{label}</span>
+        </button>
+      ))}
+    </nav>
+  );
+}
+
 function App() {
+  const route = useRoute();
+  useMaxBack(route);
+  useEffect(() => {
+    const titles = {
+      home: "Мой дом",
+      cases: route.id ? "Обращение" : "Обращения",
+      events: "События дома",
+      profile: "Профиль",
+      settings: "Настройки",
+      houses: "Мои дома",
+      roles: "Мои роли",
+      notifications: "Уведомления",
+      help: "Помощь",
+      about: "О приложении",
+      contacts: "Контакты дома",
+      passport: "Паспорт дома",
+      tariffs: "Платежи и тарифы",
+      payment: "Вопрос по квитанции",
+      new: "Новое обращение",
+      similar: "Похожие проблемы",
+      shared: "Общая проблема",
+      polls: "Опрос жителей",
+      notices: "Событие дома",
+      queue: "Рабочая очередь",
+      work: "Работы дома",
+      control: "Контроль",
+    };
+    document.title = (titles[route.page] || "Рабочий кабинет") + " · Пульс дома";
+  }, [route.key]);
   const [revision, setRevision] = useState(0);
   const appearance = useAppearance();
   useEffect(() => {
@@ -2308,13 +2441,19 @@ function App() {
     return () => window.removeEventListener("pulse-access-changed", refresh);
   }, []);
   const path = location.pathname;
+  if (route.workspace !== "miniapp" && route.account)
+    return (
+      <MaxUI key={revision} colorScheme={appearance.resolved}>
+        <StaffAccount route={route} />
+      </MaxUI>
+    );
   const startParam =
     new URLSearchParams(location.search).get("invite") ||
     window.WebApp?.initDataUnsafe?.start_param ||
     new URLSearchParams(location.search).get("WebAppStartParam") ||
     "";
   if (
-    path === "/exchange/index.html" ||
+    path.startsWith("/exchange/") ||
     (["/", "/miniapp/index.html"].includes(path) &&
       startParam.startsWith("xp_") &&
       new URLSearchParams(location.search).get("view") !== "resident")
@@ -2324,14 +2463,16 @@ function App() {
         <ExchangePortal
           api={api}
           headers={authHeaders}
-          brand={<Brand role="Получателю материалов" />}
+          brand={<Brand role="Получатель материалов" />}
+          navigation={<StaffNavigation route={route} />}
           inviteToken={startParam.startsWith("xp_") ? startParam : ""}
         />
       </MaxUI>
     );
   if (
-    path === "/work/index.html" ||
-    (startParam.startsWith("wf_") &&
+    path.startsWith("/work/") ||
+    (["/", "/miniapp/index.html"].includes(path) &&
+      startParam.startsWith("wf_") &&
       new URLSearchParams(location.search).get("view") !== "resident")
   )
     return (
@@ -2340,6 +2481,8 @@ function App() {
           api={api}
           headers={authHeaders}
           brand={<Brand role="Специалисту" />}
+          navigation={<StaffNavigation route={route} />}
+          section={route.page}
           inviteToken={startParam.startsWith("wf_") ? startParam : ""}
           renderCase={(props) => <CaseDetail {...props} api={api} headers={authHeaders} />}
         />
@@ -2347,13 +2490,13 @@ function App() {
     );
   return (
     <MaxUI key={revision} colorScheme={appearance.resolved}>
-      {path === "/dispatcher/index.html" ? (
+      {path.startsWith("/dispatcher/") ? (
         <Dispatcher />
-      ) : path === "/admin/index.html" ? (
+      ) : path.startsWith("/admin/") ? (
         <Admin />
-      ) : path === "/system/index.html" ? (
+      ) : path.startsWith("/system/") ? (
         <SystemAdmin />
-      ) : path === "/uk/index.html" ? (
+      ) : path.startsWith("/uk/") ? (
         <UkAdmin />
       ) : (
         <InvitationGate />

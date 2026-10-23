@@ -20,10 +20,13 @@ import ru.pulsedoma.identity.AccessStatus;
 @Service
 public class AccessActivationService {
     private final JdbcTemplate jdbc;
+    private final ru.pulsedoma.issues.SharedRequestService shared;
     private final SecureRandom random = new SecureRandom();
 
-    public AccessActivationService(JdbcTemplate jdbc) {
+    public AccessActivationService(
+            JdbcTemplate jdbc, ru.pulsedoma.issues.SharedRequestService shared) {
         this.jdbc = jdbc;
+        this.shared = shared;
     }
 
     public record OrganizationView(String id, String name, List<HouseView> houses) {}
@@ -496,6 +499,7 @@ public class AccessActivationService {
                         userId,
                         houseId);
         }
+        if (role == AccessRole.RESIDENT) shared.reconcileConfirmations(houseId, actor);
         audit(actor, "ACCESS_REVOKED", "user", userId, role.name() + ":" + houseId);
     }
 

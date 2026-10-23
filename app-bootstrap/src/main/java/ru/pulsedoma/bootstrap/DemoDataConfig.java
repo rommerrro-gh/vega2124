@@ -19,13 +19,13 @@ public class DemoDataConfig {
     OrderedRunner demoData(JdbcTemplate jdbc) {
         return args -> {
             jdbc.update(
-                    "INSERT OR IGNORE INTO users(id,display_name,status) VALUES ('demo-recipient-1','Получатель · демо','ACTIVE')");
+                    "INSERT OR IGNORE INTO users(id,display_name,status) VALUES ('demo-recipient-1','Елена Кузнецова','ACTIVE')");
             jdbc.update(
-                    "INSERT OR IGNORE INTO users(id, display_name, status) VALUES ('demo-resident-1', 'Демо-житель', 'ACTIVE')");
+                    "INSERT OR IGNORE INTO users(id, display_name, status) VALUES ('demo-resident-1', 'Роман Иванов', 'ACTIVE')");
             jdbc.update(
-                    "INSERT OR IGNORE INTO users(id, display_name, status) VALUES ('demo-dispatcher-1', 'Демо-диспетчер', 'ACTIVE')");
+                    "INSERT OR IGNORE INTO users(id, display_name, status) VALUES ('demo-dispatcher-1', 'Анна Соколова', 'ACTIVE')");
             jdbc.update(
-                    "INSERT OR IGNORE INTO users(id, display_name, status) VALUES ('demo-admin-1', 'Демо-администратор', 'ACTIVE')");
+                    "INSERT OR IGNORE INTO users(id, display_name, status) VALUES ('demo-admin-1', 'Мария Орлова', 'ACTIVE')");
             jdbc.update(
                     "INSERT OR IGNORE INTO houses(id, address) VALUES ('demo-house-1', 'Казань, ул. Баумана, 12')");
             jdbc.update(
@@ -51,7 +51,7 @@ public class DemoDataConfig {
             jdbc.update(
                     "INSERT OR IGNORE INTO system_administrators(user_id, created_at) VALUES ('demo-admin-1', '2026-09-28T00:00:00Z')");
             jdbc.update(
-                    "INSERT OR IGNORE INTO organizations(id, type, name) VALUES ('demo-uk-1', 'MANAGEMENT_COMPANY', 'Демонстрационная УК')");
+                    "INSERT OR IGNORE INTO organizations(id, type, name) VALUES ('demo-uk-1', 'MANAGEMENT_COMPANY', 'УК «Наш дом»')");
             jdbc.update(
                     "INSERT OR IGNORE INTO organization_houses(organization_id, house_id) VALUES ('demo-uk-1', 'demo-house-1')");
             jdbc.update(
@@ -63,15 +63,15 @@ public class DemoDataConfig {
             jdbc.update(
                     """
                     INSERT OR IGNORE INTO house_fields(house_id, key, value_json, source, fetched_at)
-                    VALUES ('demo-house-1', 'management_company', '"Демонстрационная УК"', 'Демо-данные', '2026-09-28T00:00:00Z'),
-                           ('demo-house-1', 'building_year', '2005', 'Демо-данные', '2026-09-28T00:00:00Z'),
-                           ('demo-house-1', 'floor_count', '9', 'Демо-данные', '2026-09-28T00:00:00Z'),
-                           ('demo-house-1', 'wall_material', '"кирпич"', 'Демо-данные', '2026-09-28T00:00:00Z'),
-                           ('demo-house-1', 'entrance_count', '4', 'Демо-данные', '2026-09-28T00:00:00Z'),
-                           ('demo-house-1', 'apartment_count', '144', 'Демо-данные', '2026-09-28T00:00:00Z'),
-                           ('demo-house-1', 'total_area_sqm', '9600', 'Демо-данные', '2026-09-28T00:00:00Z'),
-                           ('demo-house-1', 'registered_residents_count', '312', 'Демо-данные', '2026-09-28T00:00:00Z'),
-                           ('demo-house-1', 'capital_repairs', '["2021 — замена лифтов","2024 — ремонт кровли"]', 'Демо-данные', '2026-09-28T00:00:00Z')
+                    VALUES ('demo-house-1', 'management_company', '"УК «Наш дом»"', 'Управляющая организация', '2026-09-28T00:00:00Z'),
+                           ('demo-house-1', 'building_year', '2005', 'Управляющая организация', '2026-09-28T00:00:00Z'),
+                           ('demo-house-1', 'floor_count', '9', 'Управляющая организация', '2026-09-28T00:00:00Z'),
+                           ('demo-house-1', 'wall_material', '"кирпич"', 'Управляющая организация', '2026-09-28T00:00:00Z'),
+                           ('demo-house-1', 'entrance_count', '4', 'Управляющая организация', '2026-09-28T00:00:00Z'),
+                           ('demo-house-1', 'apartment_count', '144', 'Управляющая организация', '2026-09-28T00:00:00Z'),
+                           ('demo-house-1', 'total_area_sqm', '9600', 'Управляющая организация', '2026-09-28T00:00:00Z'),
+                           ('demo-house-1', 'registered_residents_count', '312', 'Управляющая организация', '2026-09-28T00:00:00Z'),
+                           ('demo-house-1', 'capital_repairs', '["2021 — замена лифтов","2024 — ремонт кровли"]', 'Управляющая организация', '2026-09-28T00:00:00Z')
                     """);
         };
     }

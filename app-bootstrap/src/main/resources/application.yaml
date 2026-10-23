@@ -28,7 +28,7 @@ max:
   bot:
     username: ${MAX_BOT_USERNAME:}
   webhook:
-    secret: ${MAX_WEBHOOK_SECRET:local-dev-secret}
+    secret: ${MAX_WEBHOOK_SECRET:}
     queue-key: ${MAX_WEBHOOK_QUEUE_KEY:max:webhook:updates}
   api:
     base-url: ${MAX_API_BASE_URL:https://platform-api2.max.ru}
@@ -41,8 +41,8 @@ integration:
 storage:
   minio:
     endpoint: ${MINIO_ENDPOINT:http://localhost:9000}
-    access-key: ${MINIO_ACCESS_KEY:minioadmin}
-    secret-key: ${MINIO_SECRET_KEY:minioadmin}
+    access-key: ${MINIO_ACCESS_KEY:}
+    secret-key: ${MINIO_SECRET_KEY:}
 management:
   endpoints:
     web:

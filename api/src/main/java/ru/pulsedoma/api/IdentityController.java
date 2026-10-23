@@ -34,6 +34,24 @@ public class IdentityController {
         return miniApp.legacyInvitation(token);
     }
 
+    @GetMapping("/v1/me/profile")
+    public ResidentIdentityService.Profile profile(Principal principal) {
+        return miniApp.profile(principal.getName());
+    }
+
+    @GetMapping("/v1/me/preferences")
+    public ResidentIdentityService.Preferences preferences(Principal principal) {
+        return miniApp.preferences(principal.getName());
+    }
+
+    @PutMapping("/v1/me/preferences")
+    public ResidentIdentityService.Preferences preferences(
+            @Valid @RequestBody PreferencesRequest request, Principal principal) {
+        return miniApp.preferences(principal.getName(), request.caseUpdates());
+    }
+
+    public record PreferencesRequest(@jakarta.validation.constraints.NotNull Boolean caseUpdates) {}
+
     @GetMapping("/v1/me/houses")
     public List<ResidentIdentityService.HouseView> getMyHouses(Principal principal) {
         return miniApp.houses(principal.getName());

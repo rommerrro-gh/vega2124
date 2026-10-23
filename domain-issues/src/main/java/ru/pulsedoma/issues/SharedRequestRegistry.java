@@ -162,6 +162,54 @@ public class SharedRequestRegistry {
                 group);
     }
 
+    private static final String ELIGIBLE =
+            """
+        FROM shared_request_members m JOIN shared_requests s ON s.id=m.request_id
+        JOIN users u ON u.id=m.user_id
+        JOIN house_memberships h ON h.house_id=s.house_id AND h.user_id=m.user_id AND h.role='RESIDENT'
+        WHERE m.request_id=? AND m.withdrawn_at IS NULL AND u.status='ACTIVE'
+        AND h.verification_status='VERIFIED' AND h.access_status='ACTIVE'
+        """;
+
+    public int confirmationParticipants(String group) {
+        return db.queryForObject(
+                "SELECT count(DISTINCT m.user_id) " + ELIGIBLE, Integer.class, group);
+    }
+
+    public int confirmationCount(String group) {
+        return db.queryForObject(
+                "SELECT count(DISTINCT m.user_id) " + ELIGIBLE + " AND m.confirmed_at IS NOT NULL",
+                Integer.class,
+                group);
+    }
+
+    public boolean finishIfConfirmed(String group, String actor, CaseCompletionGuard completion) {
+        var g = db.queryForMap("SELECT * FROM shared_requests WHERE id=?", group);
+        if (!"RESULT_PROPOSED".equals(g.get("status"))
+                || confirmationParticipants(group) == 0
+                || confirmationCount(group) != confirmationParticipants(group)) return false;
+        for (String id : allCases(group)) completion.requireComplete(id);
+        String root = (String) g.get("root_case_id");
+        completion.requireComplete(root);
+        String note = "Все действующие участники подтвердили результат";
+        db.update(
+                "UPDATE resident_cases SET status='CLOSED',next_step=?,revision=revision+1,updated_at=? WHERE id=?",
+                note,
+                now(),
+                root);
+        db.update(
+                "UPDATE shared_requests SET status='CLOSED',next_step=?,revision=revision+1,updated_at=? WHERE id=?",
+                note,
+                now(),
+                group);
+        history(
+                group,
+                actor,
+                Action.UPDATED,
+                "Сверен действующий доступ участников. Подтверждения бывших участников не требуются и не проставляются");
+        return true;
+    }
+
     public void sync(String source, String actor) {
         var g = group(source);
         if (g == null) return;
@@ -258,15 +306,7 @@ public class SharedRequestRegistry {
                             now(),
                             own);
             }
-            if (db.queryForObject(
-                            "SELECT count(*) FROM shared_request_members WHERE request_id=? AND withdrawn_at IS NULL AND confirmed_at IS NULL",
-                            Integer.class,
-                            group)
-                    == 0)
-                db.update(
-                        "UPDATE resident_cases SET status='CLOSED',next_step='Все участники подтвердили результат',revision=revision+1,updated_at=? WHERE id=?",
-                        now(),
-                        root);
+            finishIfConfirmed(group, actor, completion);
             history(group, actor, Action.CONFIRMED, "Участник подтвердил результат");
         } else {
             if (!List.of("RESULT_PROPOSED", "CLOSED").contains((String) c.get("status")))

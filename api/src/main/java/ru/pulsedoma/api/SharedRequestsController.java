@@ -8,6 +8,7 @@ import org.springframework.web.bind.annotation.*;
 import ru.pulsedoma.issues.*;
 
 @RestController
+@org.springframework.validation.annotation.Validated
 public class SharedRequestsController {
     private final SharedRequestService shared;
     private final ResidentCaseService cases;
@@ -18,6 +19,18 @@ public class SharedRequestsController {
         this.shared = shared;
         this.cases = cases;
         this.intake = intake;
+    }
+
+    @GetMapping("/v1/houses/{house}/shared-problems")
+    public List<SharedRequestService.PublicView> publicList(
+            @PathVariable @NotBlank String house, Principal user) {
+        return shared.publicList(house, user.getName());
+    }
+
+    @GetMapping("/v1/shared-problems/{id}")
+    public SharedRequestService.PublicView publicView(
+            @PathVariable @NotBlank String id, Principal user) {
+        return shared.publicView(id, user.getName());
     }
 
     @GetMapping("/v1/shared-requests/{id}")

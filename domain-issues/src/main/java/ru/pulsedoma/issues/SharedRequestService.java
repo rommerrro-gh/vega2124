@@ -121,7 +121,9 @@ public class SharedRequestService {
             List<Member> members,
             List<PublicEvent> history,
             List<SharedWorkRegistry.Item> work,
-            String workflowCaseId) {}
+            String workflowCaseId,
+            int confirmationParticipants,
+            String houseId) {}
 
     public View get(String id, String user) {
         var g = row(id);
@@ -155,11 +157,7 @@ public class SharedRequestService {
                                 "SELECT display_name FROM users WHERE id=?",
                                 String.class,
                                 g.get("responsible_user_id"));
-        int yes =
-                db.queryForObject(
-                        "SELECT count(DISTINCT user_id) FROM shared_request_members WHERE request_id=? AND withdrawn_at IS NULL AND confirmed_at IS NOT NULL",
-                        Integer.class,
-                        id);
+        int yes = registry.confirmationCount(id);
         var events =
                 db.query(
                         "SELECT action,note,created_at FROM shared_request_history WHERE request_id=? ORDER BY rowid",
@@ -182,7 +180,85 @@ public class SharedRequestService {
                 members,
                 events,
                 manage ? work.list((String) g.get("root_case_id")) : List.of(),
-                (String) g.get("root_case_id"));
+                (String) g.get("root_case_id"),
+                registry.confirmationParticipants(id),
+                house);
+    }
+
+    public record PublicView(
+            String id,
+            String houseId,
+            String title,
+            ReportCategory category,
+            String location,
+            CaseStatus status,
+            String nextStep,
+            String dueAt,
+            String responsibleName,
+            int participants,
+            int confirmedCount,
+            int confirmationParticipants,
+            String myCaseId,
+            List<PublicEvent> history) {}
+
+    public PublicView publicView(String id, String user) {
+        var g = get(id, user);
+        return new PublicView(
+                g.id(),
+                g.houseId(),
+                g.title(),
+                g.category(),
+                g.location(),
+                g.status(),
+                g.nextStep(),
+                g.dueAt(),
+                g.responsibleName(),
+                g.participants(),
+                g.confirmedCount(),
+                g.confirmationParticipants(),
+                g.myCaseId(),
+                g.history());
+    }
+
+    public List<PublicView> publicList(String house, String user) {
+        if (!resident(house, user)) throw missing();
+        return db
+                .query(
+                        "SELECT id FROM shared_requests WHERE house_id=? AND merged_into IS NULL ORDER BY updated_at DESC,id",
+                        (r, n) -> r.getString(1),
+                        house)
+                .stream()
+                .map(id -> publicView(id, user))
+                .toList();
+    }
+
+    @Transactional
+    public void reconcilePendingConfirmations() {
+        for (var g :
+                db.queryForList(
+                        "SELECT s.id,coalesce(s.responsible_user_id,c.author_id) AS actor FROM shared_requests s JOIN resident_cases c ON c.id=s.root_case_id WHERE s.status='RESULT_PROPOSED' AND s.merged_into IS NULL")) {
+            try {
+                registry.finishIfConfirmed(
+                        (String) g.get("id"), (String) g.get("actor"), completion);
+            } catch (BusinessException unfinished) {
+                /* Real unfinished work must still be completed by staff. */
+            }
+        }
+    }
+
+    @Transactional
+    public void reconcileConfirmations(String house, String actor) {
+        for (String id :
+                db.query(
+                        "SELECT id FROM shared_requests WHERE house_id=? AND status='RESULT_PROPOSED' AND merged_into IS NULL",
+                        (r, n) -> r.getString(1),
+                        house)) {
+            try {
+                registry.finishIfConfirmed(id, actor, completion);
+            } catch (BusinessException unfinished) {
+                /* Existing unfinished work still requires staff action. */
+            }
+        }
     }
 
     public ResidentCaseService.CaseView byCase(String caseId, String user) {

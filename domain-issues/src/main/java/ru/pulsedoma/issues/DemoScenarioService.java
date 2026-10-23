@@ -89,24 +89,24 @@ public class DemoScenarioService {
         }
         cleanup(house);
         String third = "scenario-" + uid(house, "third-resident");
-        actor(third, "Ещё один сосед · демо");
+        actor(third, "Ольга Смирнова");
         role(house, third, "RESIDENT", org);
         String neighbour = "scenario-" + uid(house, "neighbour"),
                 worker = "scenario-" + uid(house, "worker");
-        actor(neighbour, "Сосед · демо");
-        actor(worker, "Инженер · демо");
-        actor(dispatcher, "Диспетчер · демо");
+        actor(neighbour, "Илья Петров");
+        actor(worker, "Алексей Волков");
+        actor(dispatcher, "Анна Соколова");
         role(house, neighbour, "RESIDENT", org);
         role(house, dispatcher, "DISPATCHER", org);
         db.update(
-                "INSERT INTO workflow_staff(house_id,user_id,function,organization_id,organization_label,authority,granted_by,active,created_at) VALUES (?,?,'ENGINEER',?,'Демонстрационная служба','Учебный сценарий',?,1,?) ON CONFLICT(house_id,user_id,function) DO UPDATE SET active=1",
+                "INSERT INTO workflow_staff(house_id,user_id,function,organization_id,organization_label,authority,granted_by,active,created_at) VALUES (?,?,'ENGINEER',?,'Служба эксплуатации','Назначение управляющей организацией',?,1,?) ON CONFLICT(house_id,user_id,function) DO UPDATE SET active=1",
                 house,
                 worker,
                 org,
                 dispatcher,
                 now());
         db.update(
-                "INSERT INTO workflow_staff(house_id,user_id,function,organization_id,organization_label,authority,granted_by,active,created_at) VALUES (?,?,'CONTRACTOR',?,'Демонстрационный подрядчик','Учебный сценарий',?,1,?) ON CONFLICT(house_id,user_id,function) DO UPDATE SET active=1",
+                "INSERT INTO workflow_staff(house_id,user_id,function,organization_id,organization_label,authority,granted_by,active,created_at) VALUES (?,?,'CONTRACTOR',?,'Стройсервис','Назначение управляющей организацией',?,1,?) ON CONFLICT(house_id,user_id,function) DO UPDATE SET active=1",
                 house,
                 worker,
                 org,
@@ -174,11 +174,7 @@ public class DemoScenarioService {
                         CaseStatus.REOPENED,
                         "Житель сообщил, что мусор убран не полностью. Повторная уборка назначена",
                         "Двор");
-        event(
-                reopened,
-                resident,
-                "REOPENED",
-                "Демонстрация: житель сообщил, что проблема осталась");
+        event(reopened, resident, "REOPENED", "Житель сообщил, что проблема осталась");
         String payment =
                 plain(
                         house,
@@ -231,7 +227,7 @@ public class DemoScenarioService {
                 start.plusSeconds(7200).toString());
         String work = uid(house, "leak-work");
         db.update(
-                "INSERT INTO case_work_orders(id,case_id,title,scope,assignee_id,basis_type,basis,due_at,due_basis,state,created_by,created_at,updated_at) VALUES (?,?,?,?,?,'WARRANTY','Демонстрационный договор',?,'Учебный план работ','IN_PROGRESS',?,?,?)",
+                "INSERT INTO case_work_orders(id,case_id,title,scope,assignee_id,basis_type,basis,due_at,due_basis,state,created_by,created_at,updated_at) VALUES (?,?,?,?,?,'WARRANTY','Договор на гарантийное обслуживание',?,'Согласованный план работ','IN_PROGRESS',?,?,?)",
                 work,
                 registry.root(leak),
                 "Проверить герметичность оконного узла",
@@ -243,10 +239,10 @@ public class DemoScenarioService {
                 now());
         String warranty = uid(house, "warranty");
         db.update(
-                "INSERT INTO house_warranties(id,house_id,title,object_type,state,developer,contractor,contract_reference,basis,starts_on,ends_on,checked_by,checked_at,created_at,updated_at) VALUES (?,?,?,'CONSTRUCTION','VERIFIED','Демонстрационный застройщик','Демонстрационный подрядчик','ДЕМО-01','Учебный документ, не юридическое заключение',?,?,?,?,?,?)",
+                "INSERT INTO house_warranties(id,house_id,title,object_type,state,developer,contractor,contract_reference,basis,starts_on,ends_on,checked_by,checked_at,created_at,updated_at) VALUES (?,?,?,'CONSTRUCTION','VERIFIED','Строительная компания «Горизонт»','Стройсервис','Договор №12/2021','Условия договора на строительство',?,?,?,?,?,?)",
                 warranty,
                 house,
-                "Оконные узлы · демонстрационный пример",
+                "Оконные узлы",
                 LocalDate.now().minusYears(1).toString(),
                 LocalDate.now().plusYears(2).toString(),
                 dispatcher,
@@ -254,7 +250,7 @@ public class DemoScenarioService {
                 now(),
                 now());
         db.update(
-                "INSERT INTO case_warranty_reviews(id,case_id,warranty_id,outcome,basis,explanation,reviewed_by,created_at) VALUES (?,?,?,'POSSIBLE_WARRANTY','ДЕМО-01','Учебный пример: требуется осмотр',?,?)",
+                "INSERT INTO case_warranty_reviews(id,case_id,warranty_id,outcome,basis,explanation,reviewed_by,created_at) VALUES (?,?,?,'POSSIBLE_WARRANTY','Договор №12/2021','Для определения причины требуется осмотр',?,?)",
                 uid(house, "warranty-review"),
                 leak,
                 warranty,
@@ -265,36 +261,36 @@ public class DemoScenarioService {
             LocalDate from = LocalDate.now().minusMonths(i == 0 ? 2 : 0).withDayOfMonth(1);
             LocalDate until = i == 0 ? LocalDate.now().withDayOfMonth(1).minusDays(1) : null;
             db.update(
-                    "INSERT INTO house_tariffs(id,house_id,series_id,state,title,category,provider,applicability,unit,unit_label,amount,valid_from,valid_until,source_reference,explanation,edited_by,published_by,published_at,created_at,updated_at) VALUES (?,?,?,'PUBLISHED','Вода · учебный тариф','UTILITY','Демонстрационный поставщик','Только учебный пример','M3','м³',?,?,?,?,?,?,?,?,?,?)",
+                    "INSERT INTO house_tariffs(id,house_id,series_id,state,title,category,provider,applicability,unit,unit_label,amount,valid_from,valid_until,source_reference,explanation,edited_by,published_by,published_at,created_at,updated_at) VALUES (?,?,?,'PUBLISHED','Холодная вода','UTILITY','Горводоканал','Жилые помещения','M3','м³',?,?,?,?,?,?,?,?,?,?)",
                     tariff,
                     house,
                     uid(house, "water-series"),
                     i == 0 ? "40.00" : "44.00",
                     from.toString(),
                     until == null ? null : until.toString(),
-                    "ДЕМО-ТАРИФ-" + i,
-                    "Условные значения для демонстрации. Не являются действующими тарифами",
+                    (i == 0 ? "Решение №40 от 01.01.2026" : "Решение №44 от 01.10.2026"),
+                    "Ставка за один кубический метр. Сумма зависит от объёма потребления",
                     dispatcher,
                     dispatcher,
                     now(),
                     now(),
                     now());
             db.update(
-                    "INSERT INTO tariff_history(id,tariff_id,revision,actor_id,action,reason,snapshot_json,created_at) VALUES (?,?,0,?,'PUBLISHED','Учебный пример','{}',?)",
+                    "INSERT INTO tariff_history(id,tariff_id,revision,actor_id,action,reason,snapshot_json,created_at) VALUES (?,?,0,?,'PUBLISHED','Публикация сведений','{}',?)",
                     uid(house, "tariff-history-" + i),
                     tariff,
                     dispatcher,
                     now());
         }
         db.update(
-                "INSERT INTO billing_questions(id,case_id,state,question,purpose,requested_by,created_at) VALUES (?,?,'OPEN','За какой месяц вы заметили увеличение?','Чтобы сравнить объём и учебные тарифы. Можно ответить, что квитанции нет',?,?)",
+                "INSERT INTO billing_questions(id,case_id,state,question,purpose,requested_by,created_at) VALUES (?,?,'OPEN','За какой месяц вы заметили увеличение?','Чтобы сравнить объём потребления и ставки. Можно ответить, что квитанции нет',?,?)",
                 uid(house, "billing-question"),
                 payment,
                 dispatcher,
                 now());
         String channel = uid(house, "channel"), packet = uid(house, "packet");
         db.update(
-                "INSERT INTO exchange_channels(id,house_id,source_organization_id,organization_name,participant_type,mode,contact,source_reference,disclosure_scope,state,checked_by,checked_at,created_at) VALUES (?,?,?,'Гарантийная служба · учебный пример','WARRANTY','PORTAL','Учебный кабинет получателя','ДЕМО-КАНАЛ','Описание дефекта без личных документов','VERIFIED',?,?,?)",
+                "INSERT INTO exchange_channels(id,house_id,source_organization_id,organization_name,participant_type,mode,contact,source_reference,disclosure_scope,state,checked_by,checked_at,created_at) VALUES (?,?,?,'Гарантийная служба застройщика','WARRANTY','PORTAL','Личный кабинет организации','Согласованный канал взаимодействия','Описание дефекта без личных документов','VERIFIED',?,?,?)",
                 channel,
                 house,
                 org,
@@ -304,7 +300,7 @@ public class DemoScenarioService {
         String snapshot =
                 json(db.queryForMap("SELECT * FROM exchange_channels WHERE id=?", channel));
         db.update(
-                "INSERT INTO exchange_packets(id,case_id,channel_id,channel_snapshot,source_organization_id,subject,statement,disclosure_basis,authority,materials_note,include_address,state,due_basis,created_by,created_at,updated_at) VALUES (?,?,?,?,?,'Проверка оконного узла · учебный пример','После дождя мокнет стена возле окна. Просим предложить обследование','Учебный сценарий обмена между участниками','Демонстрационные полномочия','Только описание дефекта; личных файлов нет',0,'SENT','Срок уточняется',?,?,?)",
+                "INSERT INTO exchange_packets(id,case_id,channel_id,channel_snapshot,source_organization_id,subject,statement,disclosure_basis,authority,materials_note,include_address,state,due_basis,created_by,created_at,updated_at) VALUES (?,?,?,?,?,'Проверка оконного узла','После дождя мокнет стена возле окна. Просим предложить обследование','Рассмотрение обращения по условиям гарантийного обслуживания','Полномочия по договору обслуживания','Только описание дефекта; личных файлов нет',0,'SENT','Срок уточняется',?,?,?)",
                 packet,
                 registry.root(leak),
                 channel,
@@ -315,7 +311,7 @@ public class DemoScenarioService {
                 now());
         if (house.equals("demo-house-1"))
             db.update(
-                    "INSERT INTO exchange_invitations(id,packet_id,token_hash,recipient_name,participation_basis,expires_at,created_by,created_at,accepted_by) VALUES (?,?,?,'Получатель · демо','Изолированный учебный доступ',?,?,?,'demo-recipient-1')",
+                    "INSERT INTO exchange_invitations(id,packet_id,token_hash,recipient_name,participation_basis,expires_at,created_by,created_at,accepted_by) VALUES (?,?,?,'Елена Кузнецова','Приглашение для рассмотрения обращения',?,?,?,'demo-recipient-1')",
                     uid(house, "recipient-invitation"),
                     packet,
                     uid(house, "unavailable-demo-token"),
@@ -323,7 +319,7 @@ public class DemoScenarioService {
                     dispatcher,
                     now());
         db.update(
-                "INSERT INTO exchange_history(id,packet_id,action,note,actor_id,created_at,snapshot_json) VALUES (?,?,'PACKET_SENT','Учебный пакет доступен отдельному получателю',?,?,'{}')",
+                "INSERT INTO exchange_history(id,packet_id,action,note,actor_id,created_at,snapshot_json) VALUES (?,?,'PACKET_SENT','Материалы доступны назначенному получателю',?,?,'{}')",
                 uid(house, "packet-history"),
                 packet,
                 dispatcher,
@@ -344,7 +340,7 @@ public class DemoScenarioService {
                     List.of("Освещение", "Озеленение", "Велопарковка").get(i),
                     i);
         db.update(
-                "INSERT INTO house_operations_notices(id,house_id,source_organization_id,title,kind,resource,scope,summary,advice,contact,source_reference,starts_at,ends_at,end_basis,state,published_at,created_by,created_at,updated_at) VALUES (?,?,?,'Плановое отключение горячей воды','OUTAGE','HOT_WATER','Весь дом','Учебный пример плановых работ','Подготовьте запас воды','Демонстрационная диспетчерская','ДЕМО-УВЕДОМЛЕНИЕ',?,?,'Время учебного сценария','PUBLISHED',?,?,?,?)",
+                "INSERT INTO house_operations_notices(id,house_id,source_organization_id,title,kind,resource,scope,summary,advice,contact,source_reference,starts_at,ends_at,end_basis,state,published_at,created_by,created_at,updated_at) VALUES (?,?,?,'Плановое отключение горячей воды','OUTAGE','HOT_WATER','Весь дом','Плановые работы на сетях горячего водоснабжения','Подготовьте запас воды','Диспетчерская УК «Наш дом»','План работ №26',?,?,'Согласованное время работ','PUBLISHED',?,?,?,?)",
                 uid(house, "notice"),
                 house,
                 org,
@@ -386,7 +382,7 @@ public class DemoScenarioService {
                 next,
                 now(),
                 now());
-        event(id, author, "REGISTERED", "Демонстрационный пример: обращение зарегистрировано");
+        event(id, author, "REGISTERED", "Обращение зарегистрировано");
         return id;
     }
 

@@ -14,14 +14,20 @@ import ru.pulsedoma.issues.OperationsMonitoringService;
 public class OperationsReminderScheduler {
     private final OperationsMonitoringService monitoring;
 
-    public OperationsReminderScheduler(OperationsMonitoringService monitoring) {
+    private final ru.pulsedoma.issues.SharedRequestService shared;
+
+    public OperationsReminderScheduler(
+            OperationsMonitoringService monitoring,
+            ru.pulsedoma.issues.SharedRequestService shared) {
         this.monitoring = monitoring;
+        this.shared = shared;
     }
 
     @Scheduled(
             initialDelayString = "${operations.scan-ms:60000}",
             fixedDelayString = "${operations.scan-ms:60000}")
     public void scan() {
+        shared.reconcilePendingConfirmations();
         monitoring.scan();
     }
 }

@@ -65,16 +65,12 @@ public final class MaxWebhookWorker {
                             retryId,
                             e);
                 } else {
-                    queue.retry(delivery);
-                    retryAfter =
-                            Instant.now()
-                                    .plusSeconds(
-                                            Math.min(
-                                                    60,
-                                                    1L
-                                                            << Math.min(
-                                                                    attempts == null ? 1 : attempts,
-                                                                    6)));
+                    queue.retry(
+                            delivery,
+                            java.time.Duration.ofSeconds(
+                                    Math.min(
+                                            60,
+                                            1L << Math.min(attempts == null ? 1 : attempts, 6))));
                     log.warn("MAX update failed; retry scheduled: {}", retryId, e);
                 }
             } catch (RuntimeException redisError) {

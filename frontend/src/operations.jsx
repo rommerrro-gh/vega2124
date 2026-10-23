@@ -1,7 +1,18 @@
+import { PageRow } from "./account-pages.jsx";
+import { go } from "./navigation.jsx";
 import { Bell } from "@phosphor-icons/react";
 import React, { useEffect, useState } from "react";
 import "./operations.css";
-const date = (v) => (v ? new Date(v).toLocaleString("ru-RU") : "Срок уточняется");
+const date = (v) =>
+  v
+    ? new Date(v).toLocaleString("ru-RU", {
+        day: "2-digit",
+        month: "2-digit",
+        year: "numeric",
+        hour: "2-digit",
+        minute: "2-digit",
+      })
+    : "Срок уточняется";
 const local = (v) =>
   v
     ? new Date(new Date(v).getTime() - new Date(v).getTimezoneOffset() * 60000)
@@ -162,7 +173,8 @@ function VisitOffer({ workers, busy, onSubmit }) {
     </Form>
   );
 }
-export function CaseVisits({ item, role, api, onChange }) {
+export function CaseVisits({ item, role, api, onChange, residentOnly = false }) {
+  const [choice, setChoice] = useState({});
   const [data, setData] = useState(null),
     [busy, setBusy] = useState(false),
     [notice, setNotice] = useState(""),
@@ -200,7 +212,7 @@ export function CaseVisits({ item, role, api, onChange }) {
   }
   return (
     <section className="case-workflow">
-      <h3>Визиты и удобное время</h3>
+      {!residentOnly && <h3>Визиты и удобное время</h3>}
       <Msg>{notice}</Msg>
       {!data?.visits.length && (
         <p className="muted">
@@ -209,16 +221,25 @@ export function CaseVisits({ item, role, api, onChange }) {
       )}
       {data?.visits.map((v) => (
         <article className="workflow-card" key={v.id}>
-          <h4>{visitStates[v.state]}</h4>
-          <p>{v.purpose}</p>
+          <h3>{v.purpose}</h3>
+          <p className="status-pill">{visitStates[v.state]}</p>
           <p>Специалист: {v.worker_name}</p>
           {v.slots
             .filter((s) => !v.selected_slot_id || s.id === v.selected_slot_id)
             .map((s) => (
               <div key={s.id} className="ops-time">
-                <strong>
-                  {date(s.starts_at)} — {date(s.ends_at)}
-                </strong>
+                {(!residentOnly || !v.canChoose) && (
+                  <strong>
+                    {date(s.starts_at)} —{" "}
+                    {new Date(s.ends_at).toLocaleDateString() ===
+                    new Date(s.starts_at).toLocaleDateString()
+                      ? new Date(s.ends_at).toLocaleTimeString("ru-RU", {
+                          hour: "2-digit",
+                          minute: "2-digit",
+                        })
+                      : date(s.ends_at)}
+                  </strong>
+                )}
                 {s.id === v.selected_slot_id && (
                   <span>
                     {" "}
@@ -226,7 +247,26 @@ export function CaseVisits({ item, role, api, onChange }) {
                     {v.state === "CONFIRMED" ? "Ваше согласованное время" : "Ранее выбранное время"}
                   </span>
                 )}
-                {v.canChoose && (
+                {v.canChoose && residentOnly && (
+                  <label className="visit-choice">
+                    <input
+                      type="radio"
+                      name={`visit-${v.id}`}
+                      checked={choice[v.id] === s.id}
+                      disabled={busy || new Date(s.starts_at) <= new Date()}
+                      onChange={() => setChoice({ ...choice, [v.id]: s.id })}
+                    />
+                    {date(s.starts_at)} —{" "}
+                    {new Date(s.ends_at).toLocaleDateString() ===
+                    new Date(s.starts_at).toLocaleDateString()
+                      ? new Date(s.ends_at).toLocaleTimeString("ru-RU", {
+                          hour: "2-digit",
+                          minute: "2-digit",
+                        })
+                      : date(s.ends_at)}
+                  </label>
+                )}
+                {v.canChoose && !residentOnly && (
                   <button
                     type="button"
                     disabled={busy || new Date(s.starts_at) <= new Date()}
@@ -239,6 +279,23 @@ export function CaseVisits({ item, role, api, onChange }) {
                 )}
               </div>
             ))}
+          {residentOnly && v.canChoose && (
+            <button
+              type="button"
+              disabled={
+                busy ||
+                !v.slots.some((s) => s.id === choice[v.id] && new Date(s.starts_at) > new Date())
+              }
+              onClick={() =>
+                run(`/v1/visits/${v.id}/choose`, { revision: v.revision, slotId: choice[v.id] })
+              }
+            >
+              Подтвердить время
+            </button>
+          )}
+          {residentOnly && v.canChoose && (
+            <p className="muted">До подтверждения время не считается согласованным.</p>
+          )}
           {v.report && <p>{v.report}</p>}
           {v.resident_note && <p>Просьба о переносе: {v.resident_note}</p>}
           <div className="case-actions">
@@ -253,12 +310,15 @@ export function CaseVisits({ item, role, api, onChange }) {
                   Нужно другое время
                 </button>
               )}
-            {v.canRecord && v.state === "CONFIRMED" && item.status !== "CLOSED" && (
-              <button type="button" onClick={() => setAction({ v, mode: "complete" })}>
-                Зафиксировать результат визита
-              </button>
-            )}
-            {data.canPlan && !["COMPLETED", "CANCELLED"].includes(v.state) && (
+            {!residentOnly &&
+              v.canRecord &&
+              v.state === "CONFIRMED" &&
+              item.status !== "CLOSED" && (
+                <button type="button" onClick={() => setAction({ v, mode: "complete" })}>
+                  Зафиксировать результат визита
+                </button>
+              )}
+            {!residentOnly && data.canPlan && !["COMPLETED", "CANCELLED"].includes(v.state) && (
               <button
                 type="button"
                 className="case-link"
@@ -289,7 +349,7 @@ export function CaseVisits({ item, role, api, onChange }) {
           }
         />
       )}
-      {data?.canPlan && (
+      {!residentOnly && data?.canPlan && (
         <details>
           <summary>Предложить или изменить время визита</summary>
           <VisitOffer
@@ -386,6 +446,10 @@ export function HouseOperations({
   canJoin = false,
   onJoined,
   optional = false,
+  residentOnly = false,
+  compact = false,
+  selectedId = null,
+  page = false,
 }) {
   const [data, setData] = useState(null),
     [notice, setNotice] = useState(""),
@@ -430,14 +494,48 @@ export function HouseOperations({
     }
   }
   if (!data) return notice ? <Msg>{notice}</Msg> : null;
+  if (compact)
+    return (
+      <section className="events-notices">
+        <h2>Работы и отключения</h2>
+        {data.notices.map((n) => (
+          <PageRow
+            key={n.id}
+            title={n.title}
+            subtitle={`${noticeStates[n.state]} · ${resources[n.resource]} · ${date(n.starts_at)}`}
+            onClick={() => go(`/miniapp/notices/${n.id}?houseId=${encodeURIComponent(houseId)}`)}
+          />
+        ))}
+        {data.problems.map((p) => (
+          <PageRow
+            key={p.id}
+            title={p.title}
+            subtitle={massStates[p.state]}
+            onClick={() => go(`/miniapp/notices/${p.id}?houseId=${encodeURIComponent(houseId)}`)}
+          />
+        ))}
+        {!data.notices.length && !data.problems.length && (
+          <p className="muted">Публикаций пока нет.</p>
+        )}
+      </section>
+    );
+  const visibleData = selectedId
+    ? {
+        ...data,
+        notices: data.notices.filter((n) => n.id === selectedId),
+        problems: data.problems.filter((p) => p.id === selectedId),
+      }
+    : data;
+  if (selectedId && !visibleData.notices.length && !visibleData.problems.length)
+    return <p>Публикация недоступна для выбранного дома.</p>;
   return (
-    <details className="case-panel">
+    <details className="case-panel" open={page ? true : undefined}>
       <summary>События дома, общие проблемы и отключения</summary>
       <Msg>{notice}</Msg>
       <p>
         Здесь только общедомовые сведения. Личные сообщения и документы соседям не показываются.
       </p>
-      {canJoin && (
+      {canJoin && !page && (
         <details className="workflow-card">
           <summary>Получать обновления дома в MAX</summary>
           <p>
@@ -473,8 +571,8 @@ export function HouseOperations({
         </details>
       )}
       <h3>Общие проблемы</h3>
-      {!data.problems.length && <p>Общие проблемы пока не опубликованы.</p>}
-      {data.problems.map((p) => (
+      {!selectedId && !data.problems.length && <p>Общие проблемы пока не опубликованы.</p>}
+      {visibleData.problems.map((p) => (
         <article className="workflow-card" key={p.id}>
           <h4>{p.title}</h4>
           <strong>{massStates[p.state]}</strong>
@@ -486,7 +584,7 @@ export function HouseOperations({
           <p>
             {date(p.due_at)} · {p.due_basis}
           </p>
-          {data.canManage && <p>Связанных личных обращений: {p.linked_count}</p>}
+          {!residentOnly && data.canManage && <p>Связанных личных обращений: {p.linked_count}</p>}
           {p.works.map((w) => (
             <div className="case-next" key={w.id}>
               <strong>
@@ -499,6 +597,7 @@ export function HouseOperations({
               {w.worker_name && <p>Исполнитель: {w.worker_name}</p>}
               {w.report && <p>{w.report}</p>}
               {p.state === "ACTIVE" &&
+                !residentOnly &&
                 (data.canManage || w.canReport) &&
                 !["ACCEPTED", "CANCELLED"].includes(w.state) && (
                   <button
@@ -521,7 +620,7 @@ export function HouseOperations({
                 У меня тоже эта проблема
               </button>
             )}
-            {data.canManage && ["DRAFT", "ACTIVE"].includes(p.state) && (
+            {!residentOnly && data.canManage && ["DRAFT", "ACTIVE"].includes(p.state) && (
               <button
                 type="button"
                 className="case-secondary"
@@ -530,7 +629,7 @@ export function HouseOperations({
                 Обновить общую проблему
               </button>
             )}
-            {data.canManage && p.state === "ACTIVE" && (
+            {!residentOnly && data.canManage && p.state === "ACTIVE" && (
               <button type="button" onClick={() => setAction({ mode: "assign", p })}>
                 Назначить общую работу
               </button>
@@ -547,10 +646,10 @@ export function HouseOperations({
         </article>
       ))}
       <h3>Работы и отключения</h3>
-      {!data.notices.length && (
+      {!selectedId && !data.notices.length && (
         <p>Публикаций пока нет. Это не подтверждает отсутствие аварий или работ.</p>
       )}
-      {data.notices.map((n) => (
+      {visibleData.notices.map((n) => (
         <article className="workflow-card" key={n.id}>
           <h4>{n.title}</h4>
           <strong>
@@ -579,11 +678,13 @@ export function HouseOperations({
           <p>{n.advice}</p>
           <p>Контакт службы: {n.contact}</p>
           <p className="muted">Источник: {n.source_reference}</p>
-          {data.canManage && !["COMPLETED", "CANCELLED", "WITHDRAWN"].includes(n.state) && (
-            <button type="button" onClick={() => setEdit({ mode: "notice", row: n })}>
-              Обновить / перенести / отменить
-            </button>
-          )}
+          {!residentOnly &&
+            data.canManage &&
+            !["COMPLETED", "CANCELLED", "WITHDRAWN"].includes(n.state) && (
+              <button type="button" onClick={() => setEdit({ mode: "notice", row: n })}>
+                Обновить / перенести / отменить
+              </button>
+            )}
           <details>
             <summary>История публикации</summary>
             {n.history.map((h, i) => (
@@ -594,7 +695,7 @@ export function HouseOperations({
           </details>
         </article>
       ))}
-      {data.canManage && (
+      {!residentOnly && data.canManage && (
         <div className="case-actions">
           <button type="button" onClick={() => setEdit({ mode: "mass" })}>
             Добавить общую проблему
@@ -808,7 +909,7 @@ export function CaseMassProblem({ item, api, role, onChange }) {
     </section>
   );
 }
-export function PaymentComparison({ houseId, role, api, onQuestion }) {
+export function PaymentComparison({ houseId, role, api, onQuestion, expanded = false }) {
   const [from, setFrom] = useState(() => {
       const d = new Date();
       d.setMonth(d.getMonth() - 1);
@@ -842,10 +943,16 @@ export function PaymentComparison({ houseId, role, api, onQuestion }) {
       setBusy(false);
     }
   }
+  useEffect(() => {
+    if (expanded) compare();
+  }, [houseId, role, expanded]);
   return (
-    <details className="workflow-card">
+    <details
+      className={`workflow-card payment-comparison ${expanded ? "comparison-page" : ""}`}
+      open={expanded ? true : undefined}
+    >
       <summary>Почему могла измениться плата: сравнить ставки</summary>
-      <p>
+      <p hidden={expanded}>
         Знать формулу и перепечатывать квитанцию не нужно. Сначала сравним проверенные ставки дома
         за две даты.
       </p>
@@ -857,6 +964,12 @@ export function PaymentComparison({ houseId, role, api, onQuestion }) {
             type="date"
             required
             value={from}
+            onInput={(e) => {
+              setFrom(e.currentTarget.value);
+              setData(null);
+              setSeries("");
+              setQty("");
+            }}
             onChange={(e) => {
               setFrom(e.target.value);
               setData(null);
@@ -871,6 +984,12 @@ export function PaymentComparison({ houseId, role, api, onQuestion }) {
             type="date"
             required
             value={to}
+            onInput={(e) => {
+              setTo(e.currentTarget.value);
+              setData(null);
+              setSeries("");
+              setQty("");
+            }}
             onChange={(e) => {
               setTo(e.target.value);
               setData(null);
@@ -880,7 +999,8 @@ export function PaymentComparison({ houseId, role, api, onQuestion }) {
           />
         </label>
         {data && (
-          <>
+          <details className="comparison-estimate">
+            <summary>Оценить по известному объёму — необязательно</summary>
             <label>
               Оценить одну услугу при известном объёме — необязательно
               <select
@@ -911,7 +1031,7 @@ export function PaymentComparison({ houseId, role, api, onQuestion }) {
                 />
               </label>
             )}
-          </>
+          </details>
         )}
         <button disabled={busy}>Сравнить проверенные сведения</button>
       </form>
@@ -1247,8 +1367,7 @@ export function OperationsInbox({ api, role, onOpen }) {
       <Msg>{notice}</Msg>
       {!items.length && (
         <p>
-          Новых напоминаний нет. Подписки на общедомовые обновления находятся в разделе событий
-          дома.
+          Новых напоминаний нет. Подписки находятся в разделе «Профиль → Настройки → Уведомления».
         </p>
       )}
       {items.map((n) => (

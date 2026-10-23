@@ -1,3 +1,4 @@
+import { go, useRoute } from "./navigation.jsx";
 import { HouseOperations, OperationsManagement } from "./operations.jsx";
 import { ControlPanel, ExchangeRegistry } from "./case-exchange.jsx";
 import { HouseTariffs } from "./house-tariffs.jsx";
@@ -1291,7 +1292,24 @@ function ActForm({ initial = {}, evidence, onSubmit, busy, correctionRequired = 
   );
 }
 
-export function WorkPortal({ api, headers, brand, renderCase, inviteToken = "" }) {
+export function WorkPortal({
+  api,
+  headers,
+  brand,
+  renderCase,
+  inviteToken = "",
+  section = "queue",
+  navigation,
+}) {
+  const route = useRoute();
+  const [search, setSearch] = useState(route.query.get("q") || ""),
+    [sort, setSort] = useState(route.query.get("sort") || "recent");
+  function navigateFilters(values) {
+    const u = new URL(location.href);
+    for (const [k, v] of Object.entries(values))
+      v ? u.searchParams.set(k, v) : u.searchParams.delete(k);
+    go(u.pathname + u.search, { replace: true });
+  }
   const role = ["admin", "dispatcher", "engineer"].includes(
     new URLSearchParams(location.search).get("demoSession"),
   )
@@ -1305,7 +1323,7 @@ export function WorkPortal({ api, headers, brand, renderCase, inviteToken = "" }
     [notice, setNotice] = useState(""),
     [token, setToken] = useState(inviteToken),
     [busy, setBusy] = useState(false),
-    [filter, setFilter] = useState("ALL");
+    [filter, setFilter] = useState(route.query.get("filter") || "ALL");
   async function loadHouses() {
     const h = await api(role, "/v1/workflow/houses");
     setHouses(h);
@@ -1369,28 +1387,39 @@ export function WorkPortal({ api, headers, brand, renderCase, inviteToken = "" }
       setBusy(false);
     }
   }
+  useEffect(() => {
+    setSearch(route.query.get("q") || "");
+    setSort(route.query.get("sort") || "recent");
+    setFilter(route.query.get("filter") || "ALL");
+    setDetail(items.find((c) => c.id === route.query.get("caseId")) || null);
+  }, [route.key, items]);
   const house = houses.find((h) => h.id === houseId);
-  const visible = items.filter(
-    (i) =>
-      filter === "ALL" ||
-      (filter === "OVERDUE" &&
-        i.status !== "CLOSED" &&
-        (i.overdueWorkCount > 0 || (i.dueAt && new Date(i.dueAt) < new Date()))) ||
-      (filter === "WARRANTY" && i.kind === "WARRANTY"),
-  );
+  const visible = items
+    .filter(
+      (i) =>
+        `${i.number} ${i.description} ${i.location || ""}`
+          .toLowerCase()
+          .includes(search.toLowerCase()) &&
+        (filter === "ALL" ||
+          (filter === "OVERDUE" &&
+            i.status !== "CLOSED" &&
+            (i.overdueWorkCount > 0 || (i.dueAt && new Date(i.dueAt) < new Date()))) ||
+          (filter === "WARRANTY" && i.kind === "WARRANTY") ||
+          (filter === "MINE" && i.responsibleUserId === context?.actorId)),
+    )
+    .sort((a, b) =>
+      sort === "due" ? (a.dueAt || "9999").localeCompare(b.dueAt || "9999") : b.number - a.number,
+    );
   return (
-    <main className="shell">
+    <main className="shell staff-shell">
       {brand}
-      <section className="hero">
-        <div className="hero-copy">
-          <div className="hero-kicker">
-            <span className="live-dot" />
-            Рабочий кабинет
-          </div>
-          <h1>От осмотра до результата</h1>
-          <p>Гарантийное рассмотрение, осмотры и назначенные работы по доступным вам обращениям.</p>
-        </div>
-      </section>
+      <h1>
+        {section === "control"
+          ? "Контроль и сроки"
+          : section === "work"
+            ? "Работы дома"
+            : "Рабочая очередь"}
+      </h1>
       <div className="case-workspace">
         <Notice>{notice}</Notice>
         {token && (
@@ -1409,7 +1438,13 @@ export function WorkPortal({ api, headers, brand, renderCase, inviteToken = "" }
           <section className="case-panel">
             <label>
               Рабочий дом
-              <select value={houseId} onChange={(e) => setHouseId(e.target.value)}>
+              <select
+                value={houseId}
+                onChange={(e) => {
+                  setHouseId(e.target.value);
+                  navigateFilters({ houseId: e.target.value, caseId: "" });
+                }}
+              >
                 {houses.map((h) => (
                   <option key={h.id} value={h.id}>
                     {h.address}
@@ -1440,54 +1475,68 @@ export function WorkPortal({ api, headers, brand, renderCase, inviteToken = "" }
             </p>
           </section>
         )}
-        {detail
-          ? renderCase({
-              item: detail,
-              context,
-              role,
-              onChange: (c) => {
-                setDetail(c);
-                setItems((list) => list.map((i) => (i.id === c.id ? c : i)));
-              },
-              onClose: () => setDetail(null),
-            })
-          : houseId && (
-              <section className="case-panel">
-                <h2>Рабочая очередь</h2>
-                <label>
-                  Показать
-                  <select value={filter} onChange={(e) => setFilter(e.target.value)}>
-                    <option value="ALL">Все доступные</option>
-                    <option value="WARRANTY">Строительные дефекты</option>
-                    <option value="OVERDUE">Прошёл срок шага или задания</option>
-                  </select>
-                </label>
-                <div className="case-list">
-                  {visible.map((c) => (
-                    <button
-                      key={c.id}
-                      type="button"
-                      className="case-list-item"
-                      disabled={!c.fullAccess && !context?.canManagePermissions}
-                      onClick={() => setDetail(c)}
+        {["queue", "index.html"].includes(section) &&
+          (detail
+            ? renderCase({
+                item: detail,
+                context,
+                role,
+                onChange: (c) => {
+                  setDetail(c);
+                  setItems((list) => list.map((i) => (i.id === c.id ? c : i)));
+                },
+                onClose: () => {
+                  setDetail(null);
+                  navigateFilters({ caseId: "" });
+                },
+              })
+            : houseId && (
+                <section className="case-panel">
+                  <h2>Рабочая очередь</h2>
+                  <label>
+                    Показать
+                    <select
+                      value={filter}
+                      onChange={(e) => {
+                        setFilter(e.target.value);
+                        navigateFilters({ filter: e.target.value });
+                      }}
                     >
-                      <small>Обращение №{c.number}</small>
-                      <strong>{c.description}</strong>
-                      <span>{c.nextStep}</span>
-                      {c.openWorkCount > 0 && <small>Открытых заданий: {c.openWorkCount}</small>}
-                      {c.overdueWorkCount > 0 && (
-                        <strong className="workflow-overdue">
-                          Прошёл срок заданий: {c.overdueWorkCount}
-                        </strong>
-                      )}
-                      <small>{date(c.dueAt)}</small>
-                    </button>
-                  ))}
-                  {!visible.length && <p className="muted">В этой очереди обращений пока нет.</p>}
-                </div>
-              </section>
-            )}
-        {houseId && (
+                      <option value="ALL">Все доступные</option>
+                      <option value="MINE">Назначенные мне</option>
+                      <option value="WARRANTY">Строительные дефекты</option>
+                      <option value="OVERDUE">Прошёл срок шага или задания</option>
+                    </select>
+                  </label>
+                  <div className="case-list">
+                    {visible.map((c) => (
+                      <button
+                        key={c.id}
+                        type="button"
+                        className="case-list-item"
+                        disabled={!c.fullAccess && !context?.canManagePermissions}
+                        onClick={() => {
+                          setDetail(c);
+                          navigateFilters({ caseId: c.id });
+                        }}
+                      >
+                        <small>Обращение №{c.number}</small>
+                        <strong>{c.description}</strong>
+                        <span>{c.nextStep}</span>
+                        {c.openWorkCount > 0 && <small>Открытых заданий: {c.openWorkCount}</small>}
+                        {c.overdueWorkCount > 0 && (
+                          <strong className="workflow-overdue">
+                            Прошёл срок заданий: {c.overdueWorkCount}
+                          </strong>
+                        )}
+                        <small>{date(c.dueAt)}</small>
+                      </button>
+                    ))}
+                    {!visible.length && <p className="muted">В этой очереди обращений пока нет.</p>}
+                  </div>
+                </section>
+              ))}
+        {houseId && section === "control" && (
           <>
             <ControlPanel
               key={`control:${houseId}`}
@@ -1505,7 +1554,7 @@ export function WorkPortal({ api, headers, brand, renderCase, inviteToken = "" }
             />
           </>
         )}
-        {houseId && (
+        {houseId && section === "work" && (
           <>
             <HouseOperations
               key={`ops:${houseId}`}
@@ -1522,7 +1571,7 @@ export function WorkPortal({ api, headers, brand, renderCase, inviteToken = "" }
             />
           </>
         )}
-        {houseId && (
+        {houseId && section === "work" && (
           <HouseTariffs
             key={`tariffs:${houseId}`}
             houseId={houseId}
@@ -1532,10 +1581,10 @@ export function WorkPortal({ api, headers, brand, renderCase, inviteToken = "" }
             optional
           />
         )}
-        {house?.canManageRegistry && (
+        {section === "work" && house?.canManageRegistry && (
           <WorkflowStaff key={houseId} houseId={houseId} role={role} api={api} />
         )}
-        {house?.canReadRegistry && (
+        {section === "work" && house?.canReadRegistry && (
           <WarrantyRegistry
             key={houseId}
             houseId={houseId}
@@ -1546,6 +1595,7 @@ export function WorkPortal({ api, headers, brand, renderCase, inviteToken = "" }
           />
         )}
       </div>
+      {navigation}
     </main>
   );
 }

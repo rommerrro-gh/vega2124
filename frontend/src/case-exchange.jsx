@@ -216,21 +216,22 @@ function Draft({ item, channels, packet, onSubmit, busy }) {
     </>
   );
 }
-export function CaseExchange({ item, role, api, headers, onChange }) {
-  const [data, setData] = useState(null),
+export function CaseExchange({ item, role, api, headers, onChange, residentOnly = false }) {
+  const [sourceData, setData] = useState(null),
     [channels, setChannels] = useState([]),
     [notice, setNotice] = useState(""),
     [busy, setBusy] = useState(false),
     [action, setAction] = useState(null),
     [token, setToken] = useState(""),
     [username, setUsername] = useState("");
+  const data = residentOnly && sourceData ? { ...sourceData, canWork: false } : sourceData;
   useEffect(() => {
     let active = true;
     api(role, `/v1/cases/${item.id}/exchange`)
       .then((w) => {
         if (active) {
           setData(w);
-          if (w.canWork)
+          if (!residentOnly && w.canWork)
             api(role, `/v1/houses/${item.houseId}/exchange-channels`)
               .then((c) => {
                 if (active) setChannels(c);
@@ -1063,7 +1064,7 @@ export function ControlPanel({ houseId, role, api, renderCase }) {
     </details>
   );
 }
-export function ExchangePortal({ api, headers, brand, inviteToken = "" }) {
+export function ExchangePortal({ api, headers, brand, inviteToken = "", navigation }) {
   const role = new URLSearchParams(location.search).get("demoSession") || "true";
   const [items, setItems] = useState([]),
     [notice, setNotice] = useState(""),
@@ -1091,7 +1092,7 @@ export function ExchangePortal({ api, headers, brand, inviteToken = "" }) {
     }
   }
   return (
-    <main className="shell">
+    <main className="shell staff-shell">
       {brand}
       <section className="hero">
         <div className="hero-copy">
@@ -1258,6 +1259,7 @@ export function ExchangePortal({ api, headers, brand, inviteToken = "" }) {
           Обновить пакеты
         </button>
       </section>
+      {navigation}
     </main>
   );
 }

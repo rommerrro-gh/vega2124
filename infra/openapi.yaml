@@ -11,6 +11,57 @@ servers:
   - url: http://localhost:8080
     description: Локальный запуск
 paths:
+  /v1/houses/{house}/shared-problems:
+    get:
+      summary: Общие проблемы дома без личных материалов участников
+      parameters:
+        - {name: house, in: path, required: true, schema: {type: string}}
+      responses:
+        '200':
+          description: Публичные сведения общей работы для жителя своего дома
+          content:
+            application/json:
+              schema: {type: array, items: {$ref: '#/components/schemas/PublicSharedProblem'}}
+        '401': {description: Требуется вход}
+        '404': {description: Дом недоступен}
+  /v1/shared-problems/{id}:
+    get:
+      summary: Публичная карточка общей проблемы
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string}}
+      responses:
+        '200':
+          description: Без участников, частных файлов и служебных назначений
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/PublicSharedProblem'}
+        '401': {description: Требуется вход}
+        '404': {description: Заявка недоступна}
+
+  /v1/me/profile: {"get": {"operationId": "currentProfile", "responses": {"200": {"description": "Данные текущего пользователя", "content": {"application/json": {"schema": {"type": "object", "required": ["id", "displayName", "fromMax"], "properties": {"id": {"type": "string"}, "displayName": {"type": "string"}, "fromMax": {"type": "boolean"}}}}}}, "401": {"description": "Требуется авторизованный вход"}}}}
+  /v1/me/preferences: {"get": {"operationId": "currentPreferences", "responses": {"200": {"description": "Данные текущего пользователя", "content": {"application/json": {"schema": {"type": "object", "required": ["caseUpdates"], "properties": {"caseUpdates": {"type": "boolean"}}}}}}, "401": {"description": "Требуется авторизованный вход"}}}, "put": {"operationId": "setCurrentPreferences", "responses": {"200": {"description": "Данные текущего пользователя", "content": {"application/json": {"schema": {"type": "object", "required": ["caseUpdates"], "properties": {"caseUpdates": {"type": "boolean"}}}}}}, "401": {"description": "Требуется авторизованный вход"}}, "requestBody": {"required": true, "content": {"application/json": {"schema": {"type": "object", "required": ["caseUpdates"], "properties": {"caseUpdates": {"type": "boolean"}}}}}}}}
+  /miniapp/home: {"get": {"operationId": "page_home", "responses": {"200": {"description": "Оболочка страницы; данные загружаются через авторизованный API", "content": {"text/html": {"schema": {"type": "string"}}}}}}}
+  /miniapp/cases: {"get": {"operationId": "page_cases", "responses": {"200": {"description": "Оболочка страницы; данные загружаются через авторизованный API", "content": {"text/html": {"schema": {"type": "string"}}}}}}}
+  /miniapp/events: {"get": {"operationId": "page_events", "responses": {"200": {"description": "Оболочка страницы; данные загружаются через авторизованный API", "content": {"text/html": {"schema": {"type": "string"}}}}}}}
+  /miniapp/profile: {"get": {"operationId": "page_profile", "responses": {"200": {"description": "Оболочка страницы; данные загружаются через авторизованный API", "content": {"text/html": {"schema": {"type": "string"}}}}}}}
+  /miniapp/settings: {"get": {"operationId": "page_settings", "responses": {"200": {"description": "Оболочка страницы; данные загружаются через авторизованный API", "content": {"text/html": {"schema": {"type": "string"}}}}}}}
+  /miniapp/houses: {"get": {"operationId": "page_houses", "responses": {"200": {"description": "Оболочка страницы; данные загружаются через авторизованный API", "content": {"text/html": {"schema": {"type": "string"}}}}}}}
+  /miniapp/roles: {"get": {"operationId": "page_roles", "responses": {"200": {"description": "Оболочка страницы; данные загружаются через авторизованный API", "content": {"text/html": {"schema": {"type": "string"}}}}}}}
+  /miniapp/notifications: {"get": {"operationId": "page_notifications", "responses": {"200": {"description": "Оболочка страницы; данные загружаются через авторизованный API", "content": {"text/html": {"schema": {"type": "string"}}}}}}}
+  /miniapp/help: {"get": {"operationId": "page_help", "responses": {"200": {"description": "Оболочка страницы; данные загружаются через авторизованный API", "content": {"text/html": {"schema": {"type": "string"}}}}}}}
+  /miniapp/about: {"get": {"operationId": "page_about", "responses": {"200": {"description": "Оболочка страницы; данные загружаются через авторизованный API", "content": {"text/html": {"schema": {"type": "string"}}}}}}}
+  /miniapp/contacts: {"get": {"operationId": "page_contacts", "responses": {"200": {"description": "Оболочка страницы; данные загружаются через авторизованный API", "content": {"text/html": {"schema": {"type": "string"}}}}}}}
+  /miniapp/passport: {"get": {"operationId": "page_passport", "responses": {"200": {"description": "Оболочка страницы; данные загружаются через авторизованный API", "content": {"text/html": {"schema": {"type": "string"}}}}}}}
+  /miniapp/tariffs: {"get": {"operationId": "page_tariffs", "responses": {"200": {"description": "Оболочка страницы; данные загружаются через авторизованный API", "content": {"text/html": {"schema": {"type": "string"}}}}}}}
+  /miniapp/payment: {"get": {"operationId": "page_payment", "responses": {"200": {"description": "Оболочка страницы; данные загружаются через авторизованный API", "content": {"text/html": {"schema": {"type": "string"}}}}}}}
+  /miniapp/similar: {"get": {"operationId": "page_similar", "responses": {"200": {"description": "Оболочка страницы; данные загружаются через авторизованный API", "content": {"text/html": {"schema": {"type": "string"}}}}}}}
+  /miniapp/new: {"get": {"operationId": "page_new", "responses": {"200": {"description": "Оболочка страницы; данные загружаются через авторизованный API", "content": {"text/html": {"schema": {"type": "string"}}}}}}}
+  /miniapp/cases/{id}: {"parameters": [{"name": "id", "in": "path", "required": true, "schema": {"type": "string", "minLength": 1}}], "get": {"operationId": "page_cases_detail", "responses": {"200": {"description": "Оболочка страницы; данные загружаются через авторизованный API", "content": {"text/html": {"schema": {"type": "string"}}}}}}}
+  /miniapp/shared/{id}: {"parameters": [{"name": "id", "in": "path", "required": true, "schema": {"type": "string", "minLength": 1}}], "get": {"operationId": "page_shared_detail", "responses": {"200": {"description": "Оболочка страницы; данные загружаются через авторизованный API", "content": {"text/html": {"schema": {"type": "string"}}}}}}}
+  /miniapp/polls/{id}: {"parameters": [{"name": "id", "in": "path", "required": true, "schema": {"type": "string", "minLength": 1}}], "get": {"operationId": "page_polls_detail", "responses": {"200": {"description": "Оболочка страницы; данные загружаются через авторизованный API", "content": {"text/html": {"schema": {"type": "string"}}}}}}}
+  /miniapp/notices/{id}: {"parameters": [{"name": "id", "in": "path", "required": true, "schema": {"type": "string", "minLength": 1}}], "get": {"operationId": "page_notices_detail", "responses": {"200": {"description": "Оболочка страницы; данные загружаются через авторизованный API", "content": {"text/html": {"schema": {"type": "string"}}}}}}}
+  /miniapp/cases/{id}/{section}: {"parameters": [{"name": "id", "in": "path", "required": true, "schema": {"type": "string", "minLength": 1}}, {"name": "section", "in": "path", "required": true, "schema": {"type": "string", "enum": ["visits", "messages", "documents", "history", "billing"]}}], "get": {"operationId": "page_case_section", "responses": {"200": {"description": "Оболочка страницы; данные загружаются через авторизованный API", "content": {"text/html": {"schema": {"type": "string"}}}}}}}
+  /{workspace}/{page}: {"parameters": [{"name": "workspace", "in": "path", "required": true, "schema": {"type": "string", "enum": ["dispatcher", "work", "admin", "uk", "system", "exchange"]}}, {"name": "page", "in": "path", "required": true, "schema": {"type": "string", "enum": ["queue", "work", "control", "profile", "settings", "houses", "roles", "notifications", "help", "about", "tariffs", "registry", "team"]}}], "get": {"operationId": "page_workspace", "responses": {"200": {"description": "Оболочка страницы; данные загружаются через авторизованный API", "content": {"text/html": {"schema": {"type": "string"}}}}}}}
   /v1/cases/{id}/visits: {"parameters": [{"name": "id", "in": "path", "required": true, "schema": {"type": "string", "minLength": 1}}], "get": {"operationId": "operationsVisits", "summary": "Визиты по обращению и действующие варианты времени", "responses": {"200": {"description": "Результат с проверкой текущих полномочий", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/OperationsVisitWorkspace"}}}}, "400": {"description": "Неверные данные, срок, шаг или состав участников"}, "401": {"description": "Требуется вход MAX; демонстрационные роли только на демостенде"}, "404": {"description": "Объект отсутствует или текущий доступ не действует"}, "409": {"description": "Устаревшая версия; обновите представление"}}}, "post": {"operationId": "operationsOffer", "summary": "Предложить варианты времени с сохранением прежнего согласования", "responses": {"200": {"description": "Результат с проверкой текущих полномочий", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/OperationsVisitWorkspace"}}}}, "400": {"description": "Неверные данные, срок, шаг или состав участников"}, "401": {"description": "Требуется вход MAX; демонстрационные роли только на демостенде"}, "404": {"description": "Объект отсутствует или текущий доступ не действует"}, "409": {"description": "Устаревшая версия; обновите представление"}}, "requestBody": {"required": true, "content": {"application/json": {"schema": {"$ref": "#/components/schemas/OperationsVisit"}}}}}}
   /v1/visits/{id}/choose: {"parameters": [{"name": "id", "in": "path", "required": true, "schema": {"type": "string", "minLength": 1}}], "post": {"operationId": "operationsChoose", "summary": "Житель выбирает время с проверкой доступности специалиста", "responses": {"200": {"description": "Результат с проверкой текущих полномочий", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/OperationsVisitWorkspace"}}}}, "400": {"description": "Неверные данные, срок, шаг или состав участников"}, "401": {"description": "Требуется вход MAX; демонстрационные роли только на демостенде"}, "404": {"description": "Объект отсутствует или текущий доступ не действует"}, "409": {"description": "Устаревшая версия; обновите представление"}}, "requestBody": {"required": true, "content": {"application/json": {"schema": {"$ref": "#/components/schemas/OperationsVisitChoice"}}}}}}
   /v1/visits/{id}/change: {"parameters": [{"name": "id", "in": "path", "required": true, "schema": {"type": "string", "minLength": 1}}], "post": {"operationId": "operationsChange", "summary": "Житель просит другое время", "responses": {"200": {"description": "Результат с проверкой текущих полномочий", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/OperationsVisitWorkspace"}}}}, "400": {"description": "Неверные данные, срок, шаг или состав участников"}, "401": {"description": "Требуется вход MAX; демонстрационные роли только на демостенде"}, "404": {"description": "Объект отсутствует или текущий доступ не действует"}, "409": {"description": "Устаревшая версия; обновите представление"}}, "requestBody": {"required": true, "content": {"application/json": {"schema": {"$ref": "#/components/schemas/OperationsVisitDecision"}}}}}}
@@ -1052,6 +1103,31 @@ paths:
       responses: {"200": {"description": "Операция выполнена", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/CaseWorkflow"}}}}, "400": {"description": "Проверьте данные и допустимость действия"}, "401": {"description": "Нужна авторизация"}, "403": {"description": "Нет полномочий"}, "404": {"description": "Материал недоступен"}, "409": {"description": "Ревизия изменилась; обновите карточку"}}
 components:
   schemas:
+    PublicSharedProblem:
+      type: object
+      properties:
+        id: {type: string}
+        houseId: {type: string}
+        title: {type: string}
+        category: {$ref: '#/components/schemas/ProblemCategory'}
+        location: {type: string, nullable: true}
+        status: {type: string, enum: [RECEIVED, IN_REVIEW, WAITING_RESIDENT, IN_PROGRESS, RESULT_PROPOSED, CLOSED, REOPENED]}
+        nextStep: {type: string}
+        dueAt: {type: string, nullable: true}
+        responsibleName: {type: string}
+        participants: {type: integer}
+        confirmedCount: {type: integer}
+        confirmationParticipants: {type: integer}
+        myCaseId: {type: string, nullable: true}
+        history:
+          type: array
+          items:
+            type: object
+            properties:
+              action: {type: string}
+              note: {type: string}
+              createdAt: {type: string}
+
     OperationsSlot: {"type": "object", "properties": {"startsAt": {"type": ["string", "null"], "format": "date-time"}, "endsAt": {"type": ["string", "null"], "format": "date-time"}}, "required": ["startsAt", "endsAt"]}
     OperationsVisit: {"type": "object", "properties": {"purpose": {"type": "string", "maxLength": 1000, "minLength": 1}, "workerId": {"type": "string", "maxLength": 80, "minLength": 1}, "slots": {"type": "array", "minItems": 1, "maxItems": 5, "items": {"$ref": "#/components/schemas/OperationsSlot"}}, "caseRevision": {"type": "integer", "minimum": 0}, "reason": {"type": "string", "maxLength": 1000, "minLength": 1}}, "required": ["purpose", "workerId", "slots", "caseRevision", "reason"]}
     OperationsVisitChoice: {"type": "object", "properties": {"slotId": {"type": "string", "maxLength": 80, "minLength": 1}, "revision": {"type": "integer", "minimum": 0}, "caseRevision": {"type": "integer", "minimum": 0}}, "required": ["slotId", "revision", "caseRevision"]}
@@ -1455,6 +1531,8 @@ components:
         participants: {type: integer, minimum: 0}
         workflowCaseId: {type: string, description: Служебная карточка общей работы; чтение требует полномочий сотрудника}
         work: {type: array, description: Общие работы доступны только сотрудникам, items: {$ref: '#/components/schemas/SharedWorkItem'}}
+        confirmationParticipants: {type: integer, minimum: 0, description: Число действующих участников, от которых требуется подтверждение}
+        houseId: {type: string}
         confirmedCount: {type: integer, minimum: 0}
         revision: {type: integer, minimum: 0}
         myCaseId: {type: [string, 'null']}

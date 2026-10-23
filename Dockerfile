@@ -1,4 +1,12 @@
 # syntax=docker/dockerfile:1.7-labs
+FROM node:22-alpine AS frontend
+WORKDIR /src/frontend
+RUN npm install --global pnpm@11.25.0
+COPY frontend/package.json frontend/pnpm-lock.yaml ./
+RUN --mount=type=cache,target=/root/.local/share/pnpm/store pnpm install --frozen-lockfile
+COPY frontend/ ./
+RUN pnpm format:check && pnpm test && pnpm build
+
 FROM maven:3.9.9-eclipse-temurin-21 AS build
 WORKDIR /src
 COPY --parents **/pom.xml ./
@@ -6,6 +14,7 @@ RUN --mount=type=cache,target=/root/.m2 \
     mvn -B -DskipTests dependency:go-offline
 
 COPY . .
+COPY --from=frontend /src/app-bootstrap/src/main/resources/static/miniapp/bundle.js /src/app-bootstrap/src/main/resources/static/miniapp/bundle.css ./app-bootstrap/src/main/resources/static/miniapp/
 RUN --mount=type=cache,target=/root/.m2 \
     mvn -B -DskipTests clean package
 

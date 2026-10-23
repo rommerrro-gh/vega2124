@@ -43,6 +43,45 @@ class SharedRequestsFlowTest {
     @Autowired SharedRequestService shared;
     @Autowired ProblemIntakeService intake;
 
+    @Test
+    void publicSummaryHasNoPrivateMemberMaterialsEvenForResidentWithStaffRoles() throws Exception {
+        var c = create(input(), A);
+        var view = shared.publicView(c.sharedRequestId(), A);
+        assertEquals(HOUSE, view.houseId());
+        assertEquals(c.id(), view.myCaseId());
+        assertTrue(shared.publicList(HOUSE, A).stream().anyMatch(g -> g.id().equals(view.id())));
+        mvc.perform(
+                        org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get(
+                                        "/v1/shared-problems/" + view.id())
+                                .header("X-Demo-Session", "true"))
+                .andExpect(
+                        org.springframework.test.web.servlet.result.MockMvcResultMatchers.status()
+                                .isOk())
+                .andExpect(
+                        org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath(
+                                        "$.members")
+                                .doesNotExist())
+                .andExpect(
+                        org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath(
+                                        "$.work")
+                                .doesNotExist())
+                .andExpect(
+                        org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath(
+                                        "$.documents")
+                                .doesNotExist())
+                .andExpect(
+                        org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath(
+                                        "$.workflowCaseId")
+                                .doesNotExist());
+        mvc.perform(
+                        org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get(
+                                        "/v1/houses/other-house/shared-problems")
+                                .header("X-Demo-Session", "true"))
+                .andExpect(
+                        org.springframework.test.web.servlet.result.MockMvcResultMatchers.status()
+                                .isNotFound());
+    }
+
     @BeforeEach
     void neighbour() {
         db.update(
@@ -51,6 +90,15 @@ class SharedRequestsFlowTest {
         db.update(
                 "INSERT OR IGNORE INTO house_memberships(house_id,user_id,role,verification_status,access_status) VALUES (?,?,'RESIDENT','VERIFIED','ACTIVE')",
                 HOUSE,
+                B);
+    }
+
+    @org.junit.jupiter.api.AfterEach
+    void restoreMemberships() {
+        db.update(
+                "UPDATE house_memberships SET access_status='ACTIVE' WHERE house_id=? AND user_id IN (?,?) AND role='RESIDENT'",
+                HOUSE,
+                A,
                 B);
     }
 
@@ -342,5 +390,45 @@ class SharedRequestsFlowTest {
                 .andExpect(
                         org.springframework.test.web.servlet.result.MockMvcResultMatchers.status()
                                 .isNotFound());
+    }
+
+    @Test
+    void revokedResidentDoesNotBlockConfirmationAndNeverReceivesAFakeConfirmation() {
+        var in = input();
+        var a = create(in, A);
+        intake.joinShared(a.sharedRequestId(), in, key(), B);
+        progress(a.id(), CaseStatus.RESULT_PROPOSED);
+        db.update(
+                "UPDATE house_memberships SET access_status='REVOKED' WHERE house_id=? AND user_id=? AND role='RESIDENT'",
+                HOUSE,
+                B);
+        a = cases.get(a.id(), A);
+        cases.respond(a.id(), true, null, a.revision(), A);
+        var group = shared.get(a.sharedRequestId(), STAFF);
+        assertEquals(CaseStatus.CLOSED, group.status());
+        assertEquals(1, group.confirmationParticipants());
+        assertNull(
+                db.queryForObject(
+                        "SELECT confirmed_at FROM shared_request_members WHERE request_id=? AND user_id=?",
+                        String.class,
+                        group.id(),
+                        B));
+        assertEquals(2, group.members().size());
+    }
+
+    @Test
+    void revocationAfterOthersConfirmedReconcilesCompletion() {
+        var in = input();
+        var a = create(in, A);
+        intake.joinShared(a.sharedRequestId(), in, key(), B);
+        progress(a.id(), CaseStatus.RESULT_PROPOSED);
+        a = cases.get(a.id(), A);
+        cases.respond(a.id(), true, null, a.revision(), A);
+        db.update(
+                "UPDATE house_memberships SET access_status='REVOKED' WHERE house_id=? AND user_id=? AND role='RESIDENT'",
+                HOUSE,
+                B);
+        shared.reconcileConfirmations(HOUSE, STAFF);
+        assertEquals(CaseStatus.CLOSED, shared.get(a.sharedRequestId(), STAFF).status());
     }
 }

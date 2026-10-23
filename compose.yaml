@@ -2,18 +2,18 @@ services:
   backend:
     build: .
     ports:
-      - "${HOST_BIND_IP:-0.0.0.0}:8080:8080"
+      - "${HOST_BIND_IP:-127.0.0.1}:8080:8080"
     environment:
       SPRING_PROFILES_ACTIVE: ${SPRING_PROFILES_ACTIVE:-}
       SQLITE_URL: jdbc:sqlite:/app/data/pulse-doma.db
       REDIS_HOST: redis
-      MAX_WEBHOOK_SECRET: ${MAX_WEBHOOK_SECRET:-local-dev-secret}
+      MAX_WEBHOOK_SECRET: ${MAX_WEBHOOK_SECRET:?Set MAX_WEBHOOK_SECRET}
       MAX_BOT_TOKEN: ${MAX_BOT_TOKEN:-}
       MAX_BOT_USERNAME: ${MAX_BOT_USERNAME:-}
       GUIDED_DEMO_CODE_SHA256: ${GUIDED_DEMO_CODE_SHA256:-}
       MINIO_ENDPOINT: http://minio:9000
-      MINIO_ACCESS_KEY: ${MINIO_ROOT_USER:-minioadmin}
-      MINIO_SECRET_KEY: ${MINIO_ROOT_PASSWORD:-minioadmin}
+      MINIO_ACCESS_KEY: ${MINIO_ROOT_USER:?Set MINIO_ROOT_USER}
+      MINIO_SECRET_KEY: ${MINIO_ROOT_PASSWORD:?Set MINIO_ROOT_PASSWORD}
       CONTRACT_ADAPTER_URL: http://contract-adapter:8081
     volumes:
       - sqlite-data:/app/data
@@ -43,11 +43,11 @@ services:
     image: coollabsio/minio@sha256:69b55a1c1c5dc285ce04db96689f5b2102317fc77a50680a1874ca6efd1c87f9
     command: server /data --console-address ":9001"
     environment:
-      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minioadmin}
-      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-minioadmin}
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:?Set MINIO_ROOT_USER}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:?Set MINIO_ROOT_PASSWORD}
     ports:
-      - "${HOST_BIND_IP:-0.0.0.0}:9000:9000"
-      - "${HOST_BIND_IP:-0.0.0.0}:9001:9001"
+      - "${HOST_BIND_IP:-127.0.0.1}:9000:9000"
+      - "${HOST_BIND_IP:-127.0.0.1}:9001:9001"
     volumes:
       - minio-data:/data
     healthcheck:

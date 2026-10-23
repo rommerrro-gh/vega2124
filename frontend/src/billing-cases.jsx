@@ -411,12 +411,13 @@ function ReviewEditor({ initial, item, busy, onSubmit, onCancel, role, api, noti
     </form>
   );
 }
-export function BillingCase({ item, role, api, headers, onChange }) {
-  const [data, setData] = useState(null),
+export function BillingCase({ item, role, api, headers, onChange, residentOnly = false }) {
+  const [sourceData, setData] = useState(null),
     [notice, setNotice] = useState(""),
     [busy, setBusy] = useState(false),
     [edit, setEdit] = useState(null),
     [action, setAction] = useState(null);
+  const data = residentOnly && sourceData ? { ...sourceData, canWork: false } : sourceData;
   useEffect(() => {
     let active = true;
     setNotice("");
