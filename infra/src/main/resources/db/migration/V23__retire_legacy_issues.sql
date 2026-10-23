@@ -1,0 +1,27 @@
+-- The application has no production users; obsolete issue/report test data was approved for deletion.
+DROP TRIGGER IF EXISTS reports_fts_insert;
+DROP TRIGGER IF EXISTS reports_fts_delete;
+DROP TRIGGER IF EXISTS reports_fts_update;
+DROP TRIGGER IF EXISTS issues_fts_insert;
+DROP TRIGGER IF EXISTS issues_fts_delete;
+DROP TRIGGER IF EXISTS issues_fts_update;
+DROP TABLE IF EXISTS reports_fts;
+DROP TABLE IF EXISTS issues_fts;
+DROP TABLE IF EXISTS problem_join_requests;
+DROP TABLE IF EXISTS issue_planned_date_events;
+DROP TABLE IF EXISTS issue_verification_responses;
+DROP TABLE IF EXISTS notification_outbox;
+DROP TABLE IF EXISTS attachments;
+DROP TABLE IF EXISTS status_events;
+DROP TABLE IF EXISTS comments;
+DROP TABLE IF EXISTS external_tickets;
+DROP TABLE IF EXISTS incident_issues;
+DROP TABLE IF EXISTS incidents;
+DROP TABLE IF EXISTS issue_participants;
+DROP TABLE IF EXISTS issue_reports;
+DROP TABLE IF EXISTS reports;
+DROP TABLE IF EXISTS issues;
+DROP TABLE IF EXISTS max_processed_messages;
+UPDATE resident_cases SET kind='PROBLEM' WHERE kind='GENERAL';
+CREATE TRIGGER resident_case_kind_insert BEFORE INSERT ON resident_cases WHEN NEW.kind='GENERAL' BEGIN SELECT RAISE(ABORT,'Retired case kind'); END;
+CREATE TRIGGER resident_case_kind_update BEFORE UPDATE OF kind ON resident_cases WHEN NEW.kind='GENERAL' BEGIN SELECT RAISE(ABORT,'Retired case kind'); END;

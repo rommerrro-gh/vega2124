@@ -66,13 +66,6 @@ public class GuidedDemoService {
 
     private void deactivate(String userId, String houseId) {
         jdbc.update("""
-                UPDATE notification_outbox SET cancelled_at = ?
-                WHERE recipient_user_id = ? AND sent_at IS NULL AND cancelled_at IS NULL
-                  AND issue_id IN (SELECT id FROM issues WHERE house_id IN
-                    (SELECT dh.house_id FROM guided_demo_houses dh JOIN guided_demo_sessions s ON s.id = dh.session_id
-                     WHERE s.user_id = ? AND s.house_id = ? AND s.active = 1))
-                """, Instant.now().toString(), userId, userId, houseId);
-        jdbc.update("""
                 UPDATE house_memberships SET access_status = 'REVOKED'
                 WHERE user_id = ? AND role IN ('RESIDENT', 'DISPATCHER', 'HOUSE_ADMIN') AND house_id IN
                   (SELECT dh.house_id FROM guided_demo_houses dh JOIN guided_demo_sessions s ON s.id = dh.session_id
@@ -185,26 +178,6 @@ public class GuidedDemoService {
                 """, secondPoll, secondHouse, Instant.now().plusSeconds(30L * 86400).toString(), now);
         jdbc.update("INSERT INTO poll_options(id, poll_id, label, position) VALUES (?, ?, 'Да', 0)", UUID.randomUUID().toString(), secondPoll);
         jdbc.update("INSERT INTO poll_options(id, poll_id, label, position) VALUES (?, ?, 'Нет', 1)", UUID.randomUUID().toString(), secondPoll);
-        String report = UUID.randomUUID().toString();
-        String issue = UUID.randomUUID().toString();
-        String description = "Не работает свет в подъезде";
-        String normalized = "не работает свет в подъезд";
-        String zone = "{\"label\":\"Подъезд 1, этаж 2\",\"key\":\"подъезд 1 этаж 2\"}";
-        jdbc.update("""
-                INSERT INTO reports(id, house_id, author_id, raw_text, search_text, category, zone_json, occurred_at, correlation_id, created_at)
-                VALUES (?, ?, ?, ?, ?, 'LIGHTING', ?, ?, ?, ?)
-                """, report, house, neighbor, description, normalized, zone, now, UUID.randomUUID().toString(), now);
-        jdbc.update("""
-                INSERT INTO issues(id, house_id, category, zone_json, status, priority, organization_id, normalized_text, search_text, created_at, updated_at)
-                VALUES (?, ?, 'LIGHTING', ?, 'OPEN', 'NORMAL', ?, ?, ?, ?, ?)
-                """, issue, house, zone, org, normalized, normalized, now, now);
-        jdbc.update("INSERT INTO issue_reports(id, issue_id, report_id, link_reason, score) VALUES (?, ?, ?, 'demo-seed', 1.0)",
-                UUID.randomUUID().toString(), issue, report);
-        jdbc.update("INSERT INTO issue_participants(issue_id, user_id) VALUES (?, ?)", issue, neighbor);
-        jdbc.update("INSERT INTO status_events(id, issue_id, to_status, actor_id, reason, created_at) VALUES (?, ?, 'OPEN', ?, 'Демонстрационная заявка', ?)",
-                UUID.randomUUID().toString(), issue, userId, now);
-        jdbc.update("INSERT INTO audit_events(id, actor_id, action, entity, entity_id, created_at) VALUES (?, ?, 'GUIDED_DEMO_STARTED', 'guided_demo_session', ?, ?)",
-                UUID.randomUUID().toString(), userId, session, now);
         scenarios.refresh(house,userId,userId,org);
         return new DemoView(true, true, house, address);
     }

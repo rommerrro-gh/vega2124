@@ -16,7 +16,7 @@ public class CaseBotNotifications {
         jdbc.update("""
             INSERT INTO max_bot_outbox(id,user_id,house_id,case_id,kind,body_json,next_attempt_at,created_at)
             SELECT ?,c.author_id,c.house_id,c.id,'CASE_EVENT','{}',?,? FROM resident_cases c
-            JOIN users u ON u.id=c.author_id WHERE c.id=? AND c.author_id!=?
+            JOIN users u ON u.id=c.author_id WHERE c.id=? AND c.internal_work=0 AND c.author_id!=?
             AND u.status='ACTIVE' AND u.max_user_id IS NOT NULL AND trim(u.max_user_id)!=''
             AND NOT EXISTS (SELECT 1 FROM max_bot_outbox o WHERE o.case_id=c.id AND o.kind='CASE_EVENT'
                 AND o.sent_at IS NULL AND o.cancelled_at IS NULL)

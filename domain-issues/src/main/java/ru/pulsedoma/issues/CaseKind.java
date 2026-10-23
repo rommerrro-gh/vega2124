@@ -1,3 +1,3 @@
 package ru.pulsedoma.issues;
 
-public enum CaseKind { GENERAL, PROBLEM, PAYMENT, WARRANTY }
+public enum CaseKind { PROBLEM, PAYMENT, WARRANTY }

@@ -54,9 +54,9 @@ class ResidentCasesFlowTest {
     ResidentCaseService.CaseView create(CaseKind kind){return cases.create("demo-house-1",kind,"Не знаю, почему мокнет стена",null,UUID.randomUUID().toString(),"demo-resident-1");}
     JsonNode json(byte[] bytes)throws Exception{return mapper.readTree(bytes);}
 
-    @Test void freeTextNeedsNoCategoryLocationRecipientOrDocumentAndRetriesDoNotDuplicate() throws Exception {
+    @Test void freeTextWithOtherNeedsNoLocationRecipientOrDocumentAndRetriesDoNotDuplicate() throws Exception {
         String key=UUID.randomUUID().toString();
-        String body=mapper.writeValueAsString(Map.of("houseId","demo-house-1","description","Мокнет стена, не знаю почему","clientRequestId",key));
+        String body=mapper.writeValueAsString(Map.of("houseId","demo-house-1","description","Мокнет стена, не знаю почему","clientRequestId",key,"kind","PROBLEM","category","OTHER"));
         var first=json(mvc.perform(post("/v1/cases").header("X-Demo-Session","true").contentType("application/json").content(body))
             .andExpect(status().isCreated()).andReturn().getResponse().getContentAsByteArray());
         var second=json(mvc.perform(post("/v1/cases").header("X-Demo-Session","true").contentType("application/json").content(body))
@@ -102,7 +102,7 @@ class ResidentCasesFlowTest {
         assertThrows(RuntimeException.class,()->cases.permission("demo-house-1","demo-resident-1",true,"demo-resident-1"));
     }
     @Test void staffRequestsClarificationResidentRepliesAndConfirmsOrReopensResult() {
-        var c=create(CaseKind.GENERAL);
+        var c=create(CaseKind.PROBLEM);
         c=cases.update(c.id(),CaseKind.PROBLEM,CaseStatus.WAITING_RESIDENT,"Уточните, где заметили. Можно ответить, что не знаете",null,"demo-dispatcher-1",c.revision(),"demo-dispatcher-1");
         String id=c.id(),reply=UUID.randomUUID().toString();
         c=cases.message(id,"Не могу определить",reply,"demo-resident-1");

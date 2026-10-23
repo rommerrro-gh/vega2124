@@ -9,10 +9,11 @@ import org.springframework.jdbc.core.JdbcTemplate;
 @Configuration
 @Profile("demo")
 public class DemoDataConfig {
+    interface OrderedRunner extends ApplicationRunner,org.springframework.core.Ordered {default int getOrder(){return 0;}}
     @Bean
-    @org.springframework.core.annotation.Order(0)
-    ApplicationRunner demoData(JdbcTemplate jdbc) {
+    OrderedRunner demoData(JdbcTemplate jdbc) {
         return args -> {
+            jdbc.update("INSERT OR IGNORE INTO users(id,display_name,status) VALUES ('demo-recipient-1','Получатель · демо','ACTIVE')");
             jdbc.update("INSERT OR IGNORE INTO users(id, display_name, status) VALUES ('demo-resident-1', 'Демо-житель', 'ACTIVE')");
             jdbc.update("INSERT OR IGNORE INTO users(id, display_name, status) VALUES ('demo-dispatcher-1', 'Демо-диспетчер', 'ACTIVE')");
             jdbc.update("INSERT OR IGNORE INTO users(id, display_name, status) VALUES ('demo-admin-1', 'Демо-администратор', 'ACTIVE')");

@@ -16,7 +16,7 @@ public class SharedRequestRegistry {
     private final CaseBotNotifications bot;
     public SharedRequestRegistry(JdbcTemplate db,TextNormalizer normalizer,CaseBotNotifications bot){this.db=db;this.normalizer=normalizer;this.bot=bot;}
     private String now(){return Instant.now().toString();}
-    public Map<String,Object> group(String caseId){var rows=db.queryForList("SELECT s.* FROM shared_request_members m JOIN shared_requests s ON s.id=m.request_id WHERE m.case_id=?",caseId);return rows.isEmpty()?null:rows.getFirst();}
+    public Map<String,Object> group(String caseId){var rows=db.queryForList("SELECT DISTINCT s.* FROM shared_requests s LEFT JOIN shared_request_members m ON s.id=m.request_id WHERE m.case_id=? OR s.root_case_id=?",caseId,caseId);return rows.isEmpty()?null:rows.getFirst();}
     public String root(String caseId){var g=group(caseId);return g==null?caseId:(String)g.get("root_case_id");}
     public boolean withdrawn(String caseId){return db.queryForObject("SELECT count(*) FROM shared_request_members WHERE case_id=? AND withdrawn_at IS NOT NULL",Integer.class,caseId)>0;}
     public boolean confirmed(String caseId){return db.queryForObject("SELECT count(*) FROM shared_request_members WHERE case_id=? AND confirmed_at IS NOT NULL",Integer.class,caseId)>0;}
@@ -25,9 +25,11 @@ public class SharedRequestRegistry {
         if(group(caseId)!=null)return;
         var c=db.queryForMap("SELECT * FROM resident_cases WHERE id=?",caseId);
         if("PAYMENT".equals(c.get("kind")))return;
-        db.update("INSERT INTO shared_requests(id,house_id,root_case_id,title,category,location,normalized_text,status,next_step,due_at,responsible_user_id,created_at,updated_at) VALUES (?,?,?,?,'OTHER',?,?,?,?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET merged_into=NULL,status=excluded.status,next_step=excluded.next_step,updated_at=excluded.updated_at",caseId,c.get("house_id"),caseId,((String)c.get("description")).substring(0,Math.min(160,((String)c.get("description")).length())),c.get("location"),normalizer.normalize((String)c.get("description")),c.get("status"),c.get("next_step"),c.get("due_at"),c.get("responsible_user_id"),now(),now());
-        db.update("INSERT INTO shared_request_members(case_id,request_id,user_id,joined_at) VALUES (?,?,?,?)",caseId,caseId,c.get("author_id"),now());
-        history(caseId,actor,Action.CREATED,"Зарегистрирована общая заявка");
+        String group=UUID.randomUUID().toString(),work=UUID.randomUUID().toString();
+        db.update("INSERT INTO resident_cases(id,house_id,author_id,kind,status,description,location,client_request_id,request_hash,next_step,created_at,updated_at,internal_work) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,1)",work,c.get("house_id"),actor,c.get("kind"),c.get("status"),c.get("description"),c.get("location"),"shared-work:"+work,"shared-work:"+work,c.get("next_step"),now(),now());
+        db.update("INSERT INTO shared_requests(id,house_id,root_case_id,title,category,location,normalized_text,status,next_step,due_at,responsible_user_id,created_at,updated_at) VALUES (?,?,?,?,'OTHER',?,?,?,?,?,?,?,?)",group,c.get("house_id"),work,((String)c.get("description")).substring(0,Math.min(160,((String)c.get("description")).length())),c.get("location"),normalizer.normalize((String)c.get("description")),c.get("status"),c.get("next_step"),c.get("due_at"),c.get("responsible_user_id"),now(),now());
+        db.update("INSERT INTO shared_request_members(case_id,request_id,user_id,joined_at) VALUES (?,?,?,?)",caseId,group,c.get("author_id"),now());
+        history(group,actor,Action.CREATED,"Зарегистрирована общая заявка");
     }
     public void configure(String caseId,ReportCategory category,String features,String location){
         var g=group(caseId);if(g==null)return;

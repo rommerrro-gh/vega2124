@@ -11,20 +11,17 @@ import java.util.*;
 
 @Service
 public class ProblemIntakeService {
-    public enum Source { ISSUE, OWN_ISSUE, OWN_CASE, SHARED, OWN_SHARED }
+    public enum Source { SHARED, OWN_SHARED }
     public record Input(String houseId, String description, ReportCategory category, String location, LocationFeatures locationFeatures) {}
     public record Match(Source source,String id,String description,String location,double score,List<String> reasons, String caseId, int participants) {}
     private final JdbcTemplate jdbc;
     private final ResidentCaseService cases;
-    private final CandidateRetriever retriever;
     private final TextNormalizer normalizer;
-    private final MiniAppService issues;
-    private final ReportService reports;
     private final ObjectMapper mapper;
     private final SharedRequestService shared;
     private final SharedRequestRegistry registry;
-    public ProblemIntakeService(JdbcTemplate jdbc,ResidentCaseService cases,CandidateRetriever retriever,TextNormalizer normalizer,MiniAppService issues,ReportService reports,ObjectMapper mapper,SharedRequestService shared,SharedRequestRegistry registry) {
-        this.jdbc=jdbc;this.cases=cases;this.retriever=retriever;this.normalizer=normalizer;this.issues=issues;this.reports=reports;this.mapper=mapper;this.shared=shared;this.registry=registry;
+    public ProblemIntakeService(JdbcTemplate jdbc,ResidentCaseService cases,TextNormalizer normalizer,ObjectMapper mapper,SharedRequestService shared,SharedRequestRegistry registry) {
+        this.jdbc=jdbc;this.cases=cases;this.normalizer=normalizer;this.mapper=mapper;this.shared=shared;this.registry=registry;
     }
     private void check(Input input,String user) {
         Integer n=jdbc.queryForObject("SELECT count(*) FROM house_memberships m JOIN users u ON u.id=m.user_id WHERE m.house_id=? AND m.user_id=? AND m.role='RESIDENT' AND m.verification_status='VERIFIED' AND m.access_status='ACTIVE' AND u.status='ACTIVE'",Integer.class,input.houseId(),user);
@@ -40,13 +37,11 @@ public class ProblemIntakeService {
     private LocationFeatures features(String value){try{return value==null?null:mapper.readValue(value,LocationFeatures.class);}catch(Exception e){throw new IllegalStateException(e);}}
     public List<Match> search(Input input,String user) {
         check(input,user);
+        if(input.category()==null)throw new BusinessException("INVALID_CASE","Выберите категорию, если не уверены — Другое");
         String normalized=normalizer.normalize(input.description());
         String category=input.category()==null||input.category()==ReportCategory.OTHER?null:input.category().name();
         Instant since=Instant.now().minus(Duration.ofDays(30));
-        var found=input.locationFeatures()==null ? retriever.findCandidates(input.houseId(),normalized,category,input.location()==null?null:normalizer.normalize(input.location()),since)
-            : retriever.findCandidates(input.houseId(),normalized,category,input.locationFeatures(),since);
         List<Match> matches=new ArrayList<>();
-        for(var item:found)if(item.score()>=.65){var summary=issues.candidateSummary(item.issueId(),user);boolean own=jdbc.queryForObject("SELECT count(*) FROM issue_participants WHERE issue_id=? AND user_id=?",Integer.class,item.issueId(),user)>0;matches.add(new Match(own?Source.OWN_ISSUE:Source.ISSUE,item.issueId(),summary.description(),summary.location(),item.score(),item.reasons(),null,summary.participants()));}
         for(var row:jdbc.queryForList("SELECT s.*,strftime('%s',s.created_at) AS created_epoch FROM shared_requests s WHERE s.house_id=? AND s.merged_into IS NULL AND s.status<>'CLOSED' AND EXISTS(SELECT 1 FROM shared_request_members m WHERE m.request_id=s.id AND m.withdrawn_at IS NULL) AND datetime(s.created_at)>=datetime(?) AND datetime(s.created_at)<=datetime('now') ORDER BY s.updated_at DESC LIMIT 500",input.houseId(),since.toString())) {
             String storedCategory=(String)row.get("category");
             if(category!=null&&!"OTHER".equals(storedCategory)&&!category.equals(storedCategory))continue;
@@ -69,7 +64,8 @@ public class ProblemIntakeService {
     @Transactional
     public ResidentCaseService.CaseView create(Input input,CaseKind kind,String requestId,String user) {
         check(input,user);
-        if(kind==CaseKind.GENERAL||kind==null)kind=CaseKind.PROBLEM;
+        if(kind==null)throw new BusinessException("INVALID_CASE","Укажите тип обращения");
+        if(kind!=CaseKind.PAYMENT&&input.category()==null)throw new BusinessException("INVALID_CASE","Выберите категорию, если не уверены — Другое");
         if(kind!=CaseKind.PROBLEM&&(input.category()!=null||input.locationFeatures()!=null))throw new BusinessException("INVALID_CASE","Уточнения темы доступны для проблемы дома");
         String location=input.locationFeatures()==null?input.location():input.locationFeatures().label();
         var result=cases.create(input.houseId(),kind,input.description(),location,requestId,user);
@@ -86,18 +82,5 @@ public class ProblemIntakeService {
         if(!jdbc.queryForList("SELECT case_id FROM shared_request_commands WHERE user_id=? AND client_request_id=?",user,requestId).isEmpty())return shared.join(id,input,requestId,user);
         if(search(input,user).stream().noneMatch(m->m.id().equals(id)&&(m.source()==Source.SHARED||m.source()==Source.OWN_SHARED)))throw new BusinessException("ISSUE_NOT_ACTIVE","Совпадение изменилось. Повторите поиск");
         return shared.join(id,input,requestId,user);
-    }
-    public record Joined(String reportId,MiniAppService.IssueView issue) {}
-    @Transactional
-    public Joined join(Input input,String issueId,String requestId,String user) {
-        check(input,user);String body=json(List.of(input,issueId));
-        var existing=jdbc.queryForList("SELECT * FROM problem_join_requests WHERE user_id=? AND request_id=?",user,requestId);
-        if(!existing.isEmpty()){var row=existing.get(0);if(!body.equals(row.get("request_body")))throw new BusinessException("CASE_CONFLICT","Повторный запрос содержит другое обращение");return new Joined((String)row.get("report_id"),issues.issue((String)row.get("issue_id"),user));}
-        if(search(input,user).stream().noneMatch(m->m.source()==Source.ISSUE&&m.id().equals(issueId)))throw new BusinessException("ISSUE_NOT_ACTIVE","Заявка изменилась. Повторите поиск");
-        String location=input.locationFeatures()==null?input.location():input.locationFeatures().label();
-        var report=reports.createReport(new CreateReportCommand(input.houseId(),user,input.description(),input.category()==null?ReportCategory.OTHER.name():input.category().name(),location,null,input.locationFeatures()));
-        var issue=issues.joinIssue(issueId,report.id,user);
-        jdbc.update("INSERT INTO problem_join_requests(user_id,request_id,request_body,issue_id,report_id) VALUES (?,?,?,?,?)",user,requestId,body,issueId,report.id);
-        return new Joined(report.id,issue);
     }
 }

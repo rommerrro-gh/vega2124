@@ -1,119 +1,18 @@
 package ru.pulsedoma.api;
-
-import com.fasterxml.jackson.databind.ObjectMapper;
-import java.util.List;
-import org.junit.jupiter.api.AfterEach;
-import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Test;
-import org.springframework.http.MediaType;
+import org.junit.jupiter.api.*;
 import org.springframework.test.web.servlet.MockMvc;
-import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder;
 import org.springframework.validation.beanvalidation.LocalValidatorFactoryBean;
-import ru.pulsedoma.common.WebhookQueue;
-import ru.pulsedoma.issues.Report;
-import ru.pulsedoma.issues.ReportService;
-import ru.pulsedoma.issues.MiniAppService;
-import ru.pulsedoma.house.HousePassportService;
-import ru.pulsedoma.house.HousePollService;
-
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.when;
-
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
-import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+import ru.pulsedoma.issues.*;
+import static org.mockito.Mockito.*;
 import static org.springframework.test.web.servlet.setup.MockMvcBuilders.standaloneSetup;
-
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 class ControllerContractTest {
-    private MockMvc mvc;
-    private LocalValidatorFactoryBean validator;
-    private ReportService reportService;
-    private MiniAppService miniApp;
-
-    @BeforeEach
-    void setUp() {
-        validator = new LocalValidatorFactoryBean();
-        validator.afterPropertiesSet();
-        WebhookQueue queue = payload -> {};
-        reportService = mock(ReportService.class);
-        miniApp = mock(MiniAppService.class);
-        Report report = new Report();
-        report.id = "report-id";
-        report.correlationId = "correlation-id";
-        when(reportService.createReport(any())).thenReturn(report);
-        mvc = standaloneSetup(new MaxWebhookController(new ObjectMapper(), queue, "test-secret"),
-                new IdentityController(miniApp), new ReportsController(reportService, miniApp), new IssuesController(miniApp),
-                new IncidentsController(), new HousesController(mock(HousePassportService.class),
-                mock(HousePollService.class)), new ConnectorsController())
-                .setValidator(validator)
-                .build();
-    }
-
-    @AfterEach
-    void tearDown() {
-        validator.close();
-    }
-
-    @Test
-    void everyPendingOpenApiRouteIsMapped() throws Exception {
-        List<MockHttpServletRequestBuilder> requests = List.of(
-                get("/v1/issues/candidates").param("houseId", "house").param("query", "light"),
-                json(post("/v1/issues/issue/comments"), "{\"text\":\"test\"}"),
-                json(post("/v1/incidents"), "{\"houseId\":\"house\",\"type\":\"FIRE\",\"description\":\"test\"}"),
-                get("/v1/houses/house/events"),
-                json(post("/v1/connectors/FIAS/sync"), "{\"houseId\":\"house\"}")
-        );
-        for (MockHttpServletRequestBuilder request : requests) {
-            mvc.perform(request).andExpect(status().isNotImplemented());
-        }
-    }
-
-    @Test
-    void activeHouseRouteIsMapped() throws Exception {
-        mvc.perform(json(put("/v1/me/active-house"), "{\"houseId\":\"house\"}")
-                .principal(() -> "user")).andExpect(status().isOk());
-    }
-
-    @Test
-    void reorganizationRoutesAreMapped() throws Exception {
-        mvc.perform(json(post("/v1/reports/report/withdraw"), "{\"reason\":\"duplicate\"}")
-                .principal(() -> "user")).andExpect(status().isNoContent());
-        mvc.perform(json(post("/v1/issues/issue/merge"), "{\"targetIssueId\":\"target\"}")
-                .principal(() -> "dispatcher")).andExpect(status().isOk());
-        mvc.perform(json(post("/v1/issues/issue/split"), "{\"reportId\":\"report\",\"reason\":\"test\"}")
-                .principal(() -> "dispatcher")).andExpect(status().isOk());
-    }
-
-    @Test
-    void invalidInputIsRejectedBeforePendingWorkflow() throws Exception {
-        mvc.perform(json(post("/v1/reports"), "{\"houseId\":\"\",\"authorId\":\"\",\"text\":\"\"}"))
-                .andExpect(status().isBadRequest());
-        mvc.perform(json(patch("/v1/issues/issue/status"), "{\"status\":\"UNKNOWN\",\"reason\":\"test\"}"))
-                .andExpect(status().isBadRequest());
-    }
-
-    @Test
-    void createReportReturnsCreated() throws Exception {
-        mvc.perform(json(post("/v1/reports"),
-                "{\"houseId\":\"house\",\"text\":\"test\",\"category\":\"OTHER\",\"location\":\"Двор\",\"occurredAt\":\"2026-09-20T10:00:00Z\"}").principal(() -> "author"))
-                .andExpect(status().isCreated());
-    }
-
-    @Test
-    void webhookChecksSecretAndPayload() throws Exception {
-        mvc.perform(json(post("/webhooks/max"), "{\"update_type\":\"bot_started\"}"))
-                .andExpect(status().isUnauthorized());
-        mvc.perform(json(post("/webhooks/max").header("X-Max-Bot-Api-Secret", "test-secret"), "{}"))
-                .andExpect(status().isBadRequest());
-        mvc.perform(json(post("/webhooks/max").header("X-Max-Bot-Api-Secret", "test-secret"),
-                "{\"update_type\":\"bot_started\"}"))
-                .andExpect(status().isOk());
-    }
-
-    private static MockHttpServletRequestBuilder json(MockHttpServletRequestBuilder request, String body) {
-        return request.contentType(MediaType.APPLICATION_JSON).content(body);
-    }
+ MockMvc mvc;LocalValidatorFactoryBean validator;
+ @BeforeEach void setup(){validator=new LocalValidatorFactoryBean();validator.afterPropertiesSet();mvc=standaloneSetup(new ResidentCasesController(mock(ResidentCaseService.class),mock(ProblemIntakeService.class)),new SharedRequestsController(mock(SharedRequestService.class),mock(ResidentCaseService.class),mock(ProblemIntakeService.class)),new IdentityController(mock(ResidentIdentityService.class))).setValidator(validator).build();}
+ @AfterEach void close(){validator.close();}
+ @Test void retiredRoutesAreAbsent()throws Exception{for(String p:new String[]{"/v1/reports","/v1/issues","/v1/incidents"})mvc.perform(post(p).contentType("application/json").content("{}")).andExpect(status().isNotFound());}
+ @Test void categoryAndKindAreRequired()throws Exception{mvc.perform(post("/v1/cases").contentType("application/json").content("{}")).andExpect(status().isBadRequest());mvc.perform(post("/v1/cases/similar-problems").contentType("application/json").content("{\"houseId\":\"h\",\"description\":\"Проблема\"}")).andExpect(status().isBadRequest());}
+ @Test void splitRequiresExplicitWorkAllocation()throws Exception{mvc.perform(post("/v1/shared-requests/g/split").contentType("application/json").content("{\"caseId\":\"c\",\"revision\":0,\"reason\":\"Другая проблема\"}")).andExpect(status().isBadRequest());}
+ @Test void identityRouteRemains()throws Exception{mvc.perform(get("/v1/me/houses").principal(()->"u")).andExpect(status().isOk());}
 }

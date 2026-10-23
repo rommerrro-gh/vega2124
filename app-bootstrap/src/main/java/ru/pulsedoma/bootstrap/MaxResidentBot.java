@@ -22,13 +22,13 @@ public class MaxResidentBot {
     private final ObjectMapper mapper;
     private final ResidentCaseService cases;
     private final ProblemIntakeService intake;
-    private final MiniAppService app;
+    private final ResidentIdentityService app;
     private final HouseTariffService tariffs;
     private final BillingCaseService billing;
     private final MaxBotMessages messages;
     private final MaxBotMedia media;
     private final TransactionTemplate tx;
-    public MaxResidentBot(JdbcTemplate jdbc,ObjectMapper mapper,ResidentCaseService cases,MiniAppService app,
+    public MaxResidentBot(JdbcTemplate jdbc,ObjectMapper mapper,ResidentCaseService cases,ResidentIdentityService app,
                           MaxBotMessages messages,MaxBotMedia media,PlatformTransactionManager manager,HouseTariffService tariffs,BillingCaseService billing,ProblemIntakeService intake) {
         this.intake=intake;this.billing=billing;this.tariffs=tariffs;this.jdbc=jdbc;this.mapper=mapper;this.cases=cases;this.app=app;this.messages=messages;this.media=media;this.tx=new TransactionTemplate(manager);
     }
@@ -77,8 +77,6 @@ public class MaxResidentBot {
     }
     private void process(JsonNode update,String maxId,JsonNode sender,String key,boolean start,Map<String,MaxBotMedia.File> loaded) {
         if(!mark(key))return;
-        // Do not replay old messages already consumed by the legacy worker.
-        if(!start&&jdbc.queryForObject("SELECT count(*) FROM max_processed_messages WHERE message_id=?",Integer.class,update.path("message").path("body").path("mid").asText())>0)return;
         String user=actor(maxId,sender);if(user==null)return;
         expire(user);
         Session s=session(user);
@@ -282,7 +280,7 @@ public class MaxResidentBot {
         if(ids.isEmpty())throw invalid("Обращение недоступно. Откройте «Мои обращения».");return own(ids.get(0),user);
     }
     private ResidentCaseService.CaseView own(String id,String user){var c=cases.get(id,user);if(!c.isAuthor())throw invalid("Обращение недоступно.");return c;}
-    private List<MiniAppService.HouseView> residentHouses(String user){return app.houses(user).stream().filter(h->h.memberships().stream().anyMatch(m->m.role()==ru.pulsedoma.identity.MembershipRole.RESIDENT)).limit(25).toList();}
+    private List<ResidentIdentityService.HouseView> residentHouses(String user){return app.houses(user).stream().filter(h->h.memberships().stream().anyMatch(m->m.role()==ru.pulsedoma.identity.MembershipRole.RESIDENT)).limit(25).toList();}
     private String activeHouse(String user){var houses=residentHouses(user);String active=app.activeHouse(user);if(houses.stream().anyMatch(h->h.id().equals(active)))return active;if(houses.size()==1){app.setActiveHouse(houses.get(0).id(),user);return houses.get(0).id();}return null;}
     private String address(String id){return jdbc.queryForObject("SELECT address FROM houses WHERE id=?",String.class,id);}
     private boolean hasDraft(Session s){return s.state()==State.COMPOSE||s.state()==State.REVIEW;}

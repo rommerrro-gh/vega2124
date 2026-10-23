@@ -47,4 +47,6 @@ public class MinioAttachmentStore implements AttachmentStore {
             throw new IllegalStateException("Could not read attachment", e);
         }
     }
+    @Override public java.util.List<String> keys(){try{if(!minio.bucketExists(BucketExistsArgs.builder().bucket(bucket).build()))return java.util.List.of();var keys=new java.util.ArrayList<String>();for(var value:minio.listObjects(io.minio.ListObjectsArgs.builder().bucket(bucket).recursive(true).build())){var item=value.get();if(!item.isDir())keys.add(item.objectName());}return java.util.List.copyOf(keys);}catch(Exception e){throw new IllegalStateException("Could not list attachments",e);}}
+    @Override public void delete(String key){try{minio.removeObject(io.minio.RemoveObjectArgs.builder().bucket(bucket).object(key).build());}catch(Exception e){throw new IllegalStateException("Could not remove attachment",e);}}
 }

@@ -21,6 +21,23 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class MaxInitDataFilterTest {
     @Test
+    void demoRoleHeadersNeverAuthenticateInMaxProfile() throws Exception {
+        SingleConnectionDataSource dataSource = new SingleConnectionDataSource("jdbc:sqlite::memory:", true);
+        MaxInitDataFilter filter = new MaxInitDataFilter(new JdbcTemplate(dataSource), new ObjectMapper(),
+                new MockEnvironment(), "test-bot-token", "resident", "dispatcher", "admin");
+        for (String role : java.util.List.of("true", "dispatcher", "admin", "recipient", "engineer")) {
+            MockHttpServletRequest request = new MockHttpServletRequest("GET", "/v1/me/houses");
+            request.addHeader("X-Demo-Session", role);
+            MockHttpServletResponse response = new MockHttpServletResponse();
+            AtomicBoolean called = new AtomicBoolean();
+            filter.doFilter(request, response, (req, res) -> called.set(true));
+            assertEquals(401, response.getStatus(), role);
+            assertTrue(!called.get(), role);
+        }
+        dataSource.destroy();
+    }
+
+    @Test
     void acceptsSignedInitDataAndRejectsTampering() throws Exception {
         SingleConnectionDataSource dataSource = new SingleConnectionDataSource("jdbc:sqlite::memory:", true);
         JdbcTemplate jdbc = new JdbcTemplate(dataSource);

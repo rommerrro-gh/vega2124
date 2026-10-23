@@ -17,3 +17,37 @@
 :root[data-theme] .problem-precision{display:flex;align-items:center;gap:10px;font-weight:500}:root[data-theme] .problem-precision input{width:22px;height:22px;flex:none}:root[data-theme] [aria-label="Похожие проблемы"] .case-next{margin:14px 0}
 
 :root[data-theme] .shared-request-panel{border-top:1px solid var(--border);border-bottom:1px solid var(--border);padding:18px 0;margin:20px 0}:root[data-theme] .shared-request-panel h3{margin:0 0 12px}:root[data-theme] .shared-request-panel details{padding:12px 0}:root[data-theme] .home-poll{border-top:1px solid var(--border);border-bottom:1px solid var(--border);padding:0}:root[data-theme] .home-poll-row{width:100%;display:flex;gap:16px;align-items:center;padding:22px 0;background:transparent;border:0;color:var(--text);text-align:left;min-height:80px}:root[data-theme] .home-poll-row span{display:grid;gap:3px;flex:1}:root[data-theme] .home-poll-row strong{font-size:20px}:root[data-theme] .home-poll-row small{font-size:15px;font-weight:400;color:var(--text-muted)}:root[data-theme] .home-information-toggle{background:transparent;color:var(--text-muted);border:0;text-align:left;font-size:13px;min-height:44px;padding:14px 0}:root[data-theme] .resident-shell .case-progress-summary .case-secondary{width:100%;justify-content:center}:root[data-theme] .resident-shell .case-list-on-home{display:none}
+
+/* Selected emerald reference: common tokens across the resident and staff cabinets. */
+:root[data-theme="light"]{--page:#fff;--surface:#fff;--surface-soft:#f4f7f5;--text:#0a0d16;--text-muted:#768091;--accent:#00875c;--accent-ink:#00805a;--accent-soft:#e9f5ef;--border:#e0e5e9;--line:#e0e5e9}
+:root[data-theme="dark"]{--page:#0e1814;--surface:#0e1814;--surface-soft:#192820;--text:#f5f7f6;--text-muted:#abbdb5;--accent:#168252;--accent-ink:#57d79f;--border:#2c4036}
+:root[data-theme] .role-menu summary{width:44px;height:44px;padding:5px;border-radius:50%;justify-content:center}
+:root[data-theme] .role-menu summary .profile-icon{width:34px;height:34px;fill:currentColor;stroke:none}
+:root[data-theme] .role-menu-label{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%)}
+:root[data-theme] .resident-shell .case-start>button:first-child{background:var(--accent)!important}
+:root[data-theme] .case-progress-summary .case-summary-date{display:flex;gap:12px;align-items:center;font-weight:550}
+:root[data-theme] .case-progress-summary .case-summary-date svg{flex:none;color:var(--text)}
+:root[data-theme] .case-progress-summary .is-current:after{content:"";position:absolute;left:11px;top:29px;bottom:5px;border-left:2px dotted var(--border)}
+:root[data-theme] .case-progress-summary .is-future{opacity:1}:root[data-theme] .case-progress-summary .is-future>svg{color:var(--text-muted)}
+:root[data-theme] .case-workspace fieldset{border:1px solid var(--border);border-radius:10px;margin:20px 0;padding:16px;min-width:0}
+:root[data-theme] .case-workspace legend{color:var(--text);font-weight:650;padding:0 6px}
+:root[data-theme] .case-workspace button:focus-visible,:root[data-theme] .home-poll-row:focus-visible{outline:3px solid var(--focus);outline-offset:3px}
+:root[data-theme] .case-workspace button:disabled{cursor:default;opacity:.5}
+:root[data-theme] .shell:not(.resident-shell) .hero{background:transparent;min-height:150px;padding:24px 0;margin-bottom:24px}
+:root[data-theme] .shell:not(.resident-shell) .hero h1{font-size:clamp(28px,4vw,42px);letter-spacing:-.035em}
+:root[data-theme] .case-editor>summary,:root[data-theme] .case-documents>summary,:root[data-theme] .case-panel>summary,:root[data-theme] .shared-request-panel summary{font-weight:650;line-height:1.4;min-height:44px;cursor:pointer}
+@media(max-width:600px){:root[data-theme] .resident-shell .home-address h1{font-size:34px}:root[data-theme] .resident-shell .case-start>button:first-child strong{font-size:19px}:root[data-theme] .role-menu summary{width:40px;height:40px}:root[data-theme] .home-header-long .home-address h1{font-size:28px}:root[data-theme] .case-workspace fieldset{padding:12px}}
+@media(max-width:360px){:root[data-theme] .resident-shell .case-start>button:first-child strong{font-size:16px}:root[data-theme] .resident-shell .home-address h1{font-size:29px}}
+
+:root[data-theme] .resident-shell .case-featured .case-heading{margin-bottom:10px}
+:root[data-theme] .resident-shell .case-featured .case-heading h2{margin:0}
+:root[data-theme] .resident-shell .case-featured h3{margin-top:0;margin-bottom:16px;font-weight:450;color:var(--text-muted)}
+:root[data-theme] .case-progress-summary p{margin:5px 0 9px}
+:root[data-theme] .case-progress-summary .case-summary-date{margin:8px 0 10px}
+:root[data-theme] .case-progress-summary small{line-height:1.4}
+:root[data-theme] .case-progress-summary button{font-size:16px;line-height:22px;padding:10px 16px;min-height:44px}
+:root[data-theme] .case-progress-summary li{padding-bottom:20px}
+:root[data-theme] .case-progress-summary li:last-child{padding-bottom:0}
+:root[data-theme] .resident-shell .case-featured{padding-bottom:20px!important}
+
+:root[data-theme] .resident-shell .case-featured .case-heading{min-height:0;gap:0}:root[data-theme] .resident-shell .case-featured h3{line-height:1.4}

@@ -26,10 +26,11 @@ public class SharedRequestsController {
     @PostMapping("/v1/shared-requests/{id}/merge")
     public SharedRequestService.View merge(@PathVariable String id,@Valid @RequestBody Merge request,Principal user){return shared.merge(id,request.targetId(),request.revision(),request.targetRevision(),request.reason(),user.getName());}
     @PostMapping("/v1/shared-requests/{id}/split")
-    public SharedRequestService.View split(@PathVariable String id,@Valid @RequestBody Split request,Principal user){return shared.split(id,request.caseId(),request.revision(),request.reason(),user.getName());}
+    public SharedRequestService.View split(@PathVariable String id,@Valid @RequestBody Split request,Principal user){return shared.split(id,request.caseId(),request.revision(),request.reason(),request.decisions(),user.getName());}
     public record Join(@NotNull @Valid ResidentCasesController.Search problem,@NotBlank @Size(max=80) String clientRequestId){}
     public record Withdraw(@NotNull @Min(0) Integer revision,@NotBlank @Size(max=1000) String reason){}
     public record Classification(@NotBlank @Size(max=160) String title,@NotNull ReportCategory category,@Size(max=160) String location,@NotNull @Min(0) Integer revision,@NotBlank @Size(max=1000) String reason){}
     public record Merge(@NotBlank String targetId,@NotNull @Min(0) Integer revision,@NotNull @Min(0) Integer targetRevision,@NotBlank @Size(max=1000) String reason){}
-    public record Split(@NotBlank String caseId,@NotNull @Min(0) Integer revision,@NotBlank @Size(max=1000) String reason){}
+    public record Split(@NotBlank String caseId,@NotNull @Min(0) Integer revision,@NotBlank @Size(max=1000) String reason,@NotNull @Size(max=200) List<@Valid WorkAllocation> allocation) {public List<SharedWorkRegistry.Allocation> decisions(){return allocation.stream().map(a->new SharedWorkRegistry.Allocation(a.kind(),a.id(),a.revision(),a.move())).toList();}}
+    public record WorkAllocation(@NotNull SharedWorkRegistry.Kind kind,@NotBlank String id,@NotNull @Min(0) Integer revision,@NotNull Boolean move){}
 }

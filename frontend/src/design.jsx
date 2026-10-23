@@ -1,8 +1,8 @@
 import React,{useEffect,useState} from 'react';
-import {House,ChatCircleDots,CalendarBlank,NotePencil,Receipt,ArrowRight,Question,CheckCircle,Clock} from '@phosphor-icons/react';
+import {House,ChatCircleDots,CalendarBlank,NotePencil,Receipt,ArrowRight,Question,CheckCircle,Clock,Circle} from '@phosphor-icons/react';
 import {housePresentation,resolveAppearance} from './design-model.mjs';
 export {housePresentation} from './design-model.mjs';
-export {NotePencil,Receipt,ArrowRight,Question,CheckCircle,Clock};
+export {NotePencil,Receipt,ArrowRight,Question,CheckCircle,Clock,Circle,CalendarBlank};
 
 const KEY='pulse-appearance';
 function savedTheme(){try{const value=localStorage.getItem(KEY);return ['light','dark'].includes(value)?value:'system';}catch{return 'system';}}

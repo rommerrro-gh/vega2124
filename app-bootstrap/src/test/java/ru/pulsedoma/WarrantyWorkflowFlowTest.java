@@ -204,7 +204,7 @@ class WarrantyWorkflowFlowTest {
         assertEquals(3,view().handoffs().get(0).events().size());assertTrue(flow.printHandoff(h.id(),ADMIN).contains("не означает отправку"));
     }
     @Test void fileFromAnotherCaseCannotProveHandoffOrInspection(){
-        var other=cases.create(HOUSE,CaseKind.GENERAL,"Другое дело",null,UUID.randomUUID().toString(),RESIDENT);var withFile=cases.upload(other.id(),null,"Файл","%PDF-1.4 test\n%%EOF".getBytes(),"application/pdf",0,RESIDENT);String evidence=withFile.documents().get(0).versions().get(0).id();
+        var other=cases.create(HOUSE,CaseKind.PROBLEM,"Другое дело",null,UUID.randomUUID().toString(),RESIDENT);var withFile=cases.upload(other.id(),null,"Файл","%PDF-1.4 test\n%%EOF".getBytes(),"application/pdf",0,RESIDENT);String evidence=withFile.documents().get(0).versions().get(0).id();
         assertThrows(BusinessException.class,()->flow.review(caseId,new WorkflowRequests.Review(null,ReviewOutcome.NEED_INFORMATION,null,"Основание","Вопрос",evidence,revision()),DISPATCHER));
     }
     @Test void dispatcherCanAssignExecutorButCannotGrantWarrantyAuthority(){

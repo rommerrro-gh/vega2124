@@ -15,8 +15,6 @@ import org.springframework.test.context.DynamicPropertySource;
 import ru.pulsedoma.common.BusinessException;
 import ru.pulsedoma.house.GuidedDemoService;
 import ru.pulsedoma.house.AccessActivationService;
-import ru.pulsedoma.issues.CreateReportCommand;
-import ru.pulsedoma.issues.ReportService;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -43,10 +41,9 @@ class GuidedDemoFlowTest {
 
     @Autowired GuidedDemoService demos;
     @Autowired AccessActivationService access;
-    @Autowired ReportService reports;
     @Autowired ru.pulsedoma.issues.ProblemIntakeService intake;
     @Autowired JdbcTemplate jdbc;
-    @Autowired ru.pulsedoma.issues.MiniAppService miniApp;
+    @Autowired ru.pulsedoma.issues.ResidentIdentityService miniApp;
 
     @Test
     void isolatesRepeatableDemoAndPreservesCandidatePath() {

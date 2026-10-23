@@ -69,6 +69,10 @@ public class MaxInitDataFilter extends OncePerRequestFilter {
             } else if (environment.acceptsProfiles(Profiles.of("demo")) && !demoAdminId.isBlank()
                     && "admin".equals(request.getHeader("X-Demo-Session"))) {
                 userId = demoAdminId;
+            } else if(environment.acceptsProfiles(Profiles.of("demo"))&&"recipient".equals(request.getHeader("X-Demo-Session"))){
+                userId="demo-recipient-1";
+            } else if(environment.acceptsProfiles(Profiles.of("demo"))&&"engineer".equals(request.getHeader("X-Demo-Session"))){
+                userId="scenario-"+java.util.UUID.nameUUIDFromBytes("pulse-final-v3:demo-house-1:worker".getBytes(java.nio.charset.StandardCharsets.UTF_8));
             } else {
                 VerifiedMaxUser maxUser = verify(request.getHeader("X-Max-Init-Data"));
                 jdbc.update("""

@@ -7,6 +7,7 @@ import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 import ru.pulsedoma.issues.*;
+import ru.pulsedoma.duplicates.LocationFeatures;
 
 import java.io.IOException;
 import java.security.Principal;
@@ -30,8 +31,6 @@ public class ResidentCasesController {
     }
     @PostMapping("/v1/cases/similar-problems")
     public List<ProblemIntakeService.Match> similar(@Valid @RequestBody Search request,Principal user) { return intake.search(request.input(),user.getName()); }
-    @PostMapping("/v1/cases/join-problem")
-    public ProblemIntakeService.Joined join(@Valid @RequestBody Join request,Principal user) { return intake.join(request.problem().input(),request.issueId(),request.clientRequestId(),user.getName()); }
     @GetMapping("/v1/cases/{id}")
     public ResidentCaseService.CaseView get(@PathVariable @NotBlank String id,Principal user) { return service.get(id,user.getName()); }
 
@@ -80,16 +79,22 @@ public class ResidentCasesController {
             .header("Content-Disposition",ContentDisposition.attachment().filename("document."+ext).build().toString())
             .body(file.bytes());
     }
-    public record Create(@NotBlank String houseId,CaseKind kind,@NotBlank @Size(max=4000) String description,
+    public record Create(@NotBlank String houseId,@NotNull CaseKind kind,@NotBlank @Size(max=4000) String description,
                          @Size(max=160) String location,@NotBlank @Size(max=80) String clientRequestId,
-                         ReportCategory category,@Valid ReportsController.LocationRequest locationFeatures) {
+                         ReportCategory category,@Valid LocationRequest locationFeatures) {
         ProblemIntakeService.Input input(){return new ProblemIntakeService.Input(houseId,description,category,location,locationFeatures==null?null:locationFeatures.features());}
     }
-    public record Search(@NotBlank String houseId,@NotBlank @Size(max=4000) String description,ReportCategory category,
-                         @Size(max=160) String location,@Valid ReportsController.LocationRequest locationFeatures) {
+    public record Search(@NotBlank String houseId,@NotBlank @Size(max=4000) String description,@NotNull ReportCategory category,
+                         @Size(max=160) String location,@Valid LocationRequest locationFeatures) {
         ProblemIntakeService.Input input(){return new ProblemIntakeService.Input(houseId,description,category,location,locationFeatures==null?null:locationFeatures.features());}
     }
-    public record Join(@NotNull @Valid Search problem,@NotBlank String issueId,@NotBlank @Size(max=80) String clientRequestId) {}
+    public record LocationRequest(@NotNull LocationFeatures.Area area,
+                                  @Min(1) @Max(100) Integer entrance, @Min(1) @Max(200) Integer floor,
+                                  LocationFeatures.LiftType liftType, @Min(1) @Max(100) Integer liftNumber,
+                                  LocationFeatures.Coverage coverage, LocationFeatures.OutdoorObject object,
+                                  @Min(1) @Max(100) Integer site, @Size(max = 160) String details) {
+        LocationFeatures features() { return new LocationFeatures(area, entrance, floor, liftType, liftNumber, coverage, object, site, details); }
+    }
     public record Update(@NotNull CaseKind kind,@NotNull CaseStatus status,@NotBlank @Size(max=600) String nextStep,
                          Instant dueAt,@Size(max=80) String responsibleUserId,@NotNull @Min(0) Integer revision,@Size(max=1000) String reason) {}
     public record Message(@NotBlank @Size(max=4000) String text,@NotBlank @Size(max=80) String clientRequestId) {}

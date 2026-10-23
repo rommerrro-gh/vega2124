@@ -21,48 +21,10 @@ class ProblemIntakeFlowTest {
     static Path temp(){try{return Files.createTempFile("intake-",".db");}catch(Exception e){throw new IllegalStateException(e);}}
     @DynamicPropertySource static void properties(DynamicPropertyRegistry r){r.add("spring.datasource.url",()->"jdbc:sqlite:"+DB);r.add("operations.scheduler-enabled",()->false);}
     @Autowired MockMvc mvc;@Autowired ObjectMapper mapper;@Autowired JdbcTemplate jdbc;
-    @Autowired ReportService reports;@Autowired MiniAppService issues;@Autowired ResidentCaseService cases;
-    Map<String,Object> input(){return new HashMap<>(Map.of("houseId","demo-house-1","description","Не горит свет в подъезде","category","LIGHTING","locationFeatures",Map.of("area","ENTRANCE","entrance",1,"floor",2)));}
-    JsonNode postJson(String path,Object body,int code)throws Exception{return mapper.readTree(mvc.perform(post(path).header("X-Demo-Session","true").contentType("application/json").content(mapper.writeValueAsString(body))).andExpect(status().is(code)).andReturn().getResponse().getContentAsByteArray());}
-    @BeforeEach void neighbour(){
-        jdbc.update("INSERT OR IGNORE INTO users(id,display_name,status) VALUES ('intake-neighbour','Сосед','ACTIVE')");
-        jdbc.update("INSERT OR IGNORE INTO house_memberships(house_id,user_id,role,verification_status,access_status) VALUES ('demo-house-1','intake-neighbour','RESIDENT','VERIFIED','ACTIVE')");
+    @Autowired ProblemIntakeService intake;@Autowired ResidentCaseService cases;
+    @Test void categoryRequiredOnServerAndRetiredKindRejected()throws Exception{
+      for(String kind:List.of("PROBLEM","GENERAL"))mvc.perform(post("/v1/cases").header("X-Demo-Session","true").contentType("application/json").content(mapper.writeValueAsString(Map.of("houseId","demo-house-1","description","Протечка","kind",kind,"clientRequestId",UUID.randomUUID().toString())))).andExpect(status().isBadRequest());
     }
-    @Test void searchHasNoWritesFiltersPlacesAndJoinIsIdempotent()throws Exception {
-        var place=new ru.pulsedoma.duplicates.LocationFeatures(ru.pulsedoma.duplicates.LocationFeatures.Area.ENTRANCE,1,2,null,null,null,null,null,null);
-        var report=reports.createReport(new CreateReportCommand("demo-house-1","intake-neighbour","Не горит свет в подъезде","LIGHTING",null,null,place));
-        var issue=issues.createIssue(report.id,"intake-neighbour");
-        int before=jdbc.queryForObject("SELECT count(*) FROM reports",Integer.class);
-        var found=postJson("/v1/cases/similar-problems",input(),200);
-        assertTrue(found.toString().contains(issue.id()));
-        assertEquals(before,jdbc.queryForObject("SELECT count(*) FROM reports",Integer.class));
-        var different=input();different.put("locationFeatures",Map.of("area","ENTRANCE","entrance",2,"floor",2));
-        assertFalse(postJson("/v1/cases/similar-problems",different,200).toString().contains(issue.id()));
-        postJson("/v1/cases/join-problem",Map.of("problem",different,"issueId",issue.id(),"clientRequestId",UUID.randomUUID().toString()),409);
-        assertEquals(before,jdbc.queryForObject("SELECT count(*) FROM reports",Integer.class));
-        String key=UUID.randomUUID().toString();var join=new HashMap<String,Object>(Map.of("problem",input(),"issueId",issue.id(),"clientRequestId",key));
-        var first=postJson("/v1/cases/join-problem",join,200);var retry=postJson("/v1/cases/join-problem",join,200);
-        assertEquals(first.path("reportId"),retry.path("reportId"));assertEquals(before+1,jdbc.queryForObject("SELECT count(*) FROM reports",Integer.class));
-        assertTrue(postJson("/v1/cases/similar-problems",input(),200).toString().contains("OWN_ISSUE"));
-        join.put("problem",different);postJson("/v1/cases/join-problem",join,409);
-    }
-    @Test void newSharedCaseRemainsInSearchAndNeighbourMaterialsAndPaymentCasesDoNotLeak()throws Exception {
-        var create=input();create.put("kind","PROBLEM");create.put("clientRequestId",UUID.randomUUID().toString());
-        var first=postJson("/v1/cases",create,201);var second=postJson("/v1/cases",create,201);assertEquals(first.path("id"),second.path("id"));assertEquals("LIGHTING",first.path("category").asText());
-        jdbc.update("UPDATE resident_cases SET created_at=datetime('now') WHERE id=?",first.path("id").asText());
-        assertTrue(postJson("/v1/cases/similar-problems",input(),200).toString().contains(first.path("id").asText()));
-        create.put("category","OTHER");create.remove("locationFeatures");postJson("/v1/cases",create,409);
-        jdbc.update("INSERT OR IGNORE INTO users(id,display_name,status) VALUES ('intake-neighbour','Сосед','ACTIVE')");
-        jdbc.update("INSERT OR IGNORE INTO house_memberships(house_id,user_id,role,verification_status,access_status) VALUES ('demo-house-1','intake-neighbour','RESIDENT','VERIFIED','ACTIVE')");
-        var neighbour=cases.create("demo-house-1",CaseKind.PROBLEM,"Не горит свет в подъезде",null,UUID.randomUUID().toString(),"intake-neighbour");
-        var payment=cases.create("demo-house-1",CaseKind.PAYMENT,"Не горит свет в подъезде",null,UUID.randomUUID().toString(),"demo-resident-1");
-        String found=postJson("/v1/cases/similar-problems",input(),200).toString();assertTrue(found.contains(neighbour.sharedRequestId()));assertThrows(RuntimeException.class,()->cases.get(neighbour.id(),"demo-resident-1"));assertFalse(found.contains(payment.id()));
-    }
-    @Test void unknownFieldsAreOptionalAndBadOrForeignRequestsRejected()throws Exception {
-        var unknown=new HashMap<String,Object>(Map.of("houseId","demo-house-1","description","Мокнет стена, не знаю почему"));
-        postJson("/v1/cases/similar-problems",unknown,200);unknown.put("kind","PROBLEM");unknown.put("clientRequestId",UUID.randomUUID().toString());postJson("/v1/cases",unknown,201);
-        var invalid=input();invalid.put("locationFeatures",Map.of("area","ENTRANCE","entrance",0,"floor",2));postJson("/v1/cases/similar-problems",invalid,400);
-        var foreign=input();foreign.put("houseId","not-my-house");postJson("/v1/cases/similar-problems",foreign,403);
-        mvc.perform(post("/v1/cases/similar-problems").contentType("application/json").content(mapper.writeValueAsString(input()))).andExpect(status().isUnauthorized());
-    }
+    @Test void searchDoesNotCreateReportsAndMatchesOwnSharedCase(){String text="Не горит свет "+UUID.randomUUID();var input=new ProblemIntakeService.Input("demo-house-1",text,ReportCategory.LIGHTING,null,null);var c=intake.create(input,CaseKind.PROBLEM,UUID.randomUUID().toString(),"demo-resident-1");int before=jdbc.queryForObject("SELECT count(*) FROM resident_cases",Integer.class);assertTrue(intake.search(input,"demo-resident-1").stream().anyMatch(m->m.id().equals(c.sharedRequestId())&&m.source()==ProblemIntakeService.Source.OWN_SHARED));assertEquals(before,jdbc.queryForObject("SELECT count(*) FROM resident_cases",Integer.class));}
+    @Test void privateCasesRemainPrivateAndPublicDescriptionIsShared(){jdbc.update("INSERT OR IGNORE INTO users(id,display_name,status) VALUES ('intake-neighbour','Сосед','ACTIVE')");jdbc.update("INSERT OR IGNORE INTO house_memberships(house_id,user_id,role,verification_status,access_status) VALUES ('demo-house-1','intake-neighbour','RESIDENT','VERIFIED','ACTIVE')");var input=new ProblemIntakeService.Input("demo-house-1","Протечка в подъезде",ReportCategory.WATER,null,null);var c=intake.create(input,CaseKind.PROBLEM,UUID.randomUUID().toString(),"intake-neighbour");assertThrows(RuntimeException.class,()->cases.get(c.id(),"demo-resident-1"));assertTrue(intake.search(input,"demo-resident-1").stream().anyMatch(m->m.id().equals(c.sharedRequestId())));assertThrows(RuntimeException.class,()->cases.get(c.workflowCaseId(),"intake-neighbour"));}
 }

@@ -113,36 +113,6 @@ paths:
         '400': {description: Некорректная тема или признаки места}
         '401': {description: Требуется вход}
         '403': {description: Нет доступа жителя к дому}
-  /v1/cases/join-problem:
-    post:
-      operationId: joinSimilarProblem
-      summary: По явному решению жителя присоединить его сообщение к общей заявке; повтор ключа идемпотентен
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              required: [problem, issueId, clientRequestId]
-              properties:
-                problem: {$ref: '#/components/schemas/ProblemSearch'}
-                issueId: {type: string, minLength: 1}
-                clientRequestId: {type: string, minLength: 1, maxLength: 80}
-      responses:
-        '200':
-          description: Присоединено; файлы JPEG/PNG можно добавить существующим маршрутом вложений reportId
-          content:
-            application/json:
-              schema:
-                type: object
-                required: [reportId, issue]
-                properties:
-                  reportId: {type: string}
-                  issue: {$ref: '#/components/schemas/IssueView'}
-        '400': {description: Неверные данные}
-        '401': {description: Требуется вход}
-        '403': {description: Нет доступа жителя к дому}
-        '409': {description: Тот же ключ использован с другим содержимым или заявка более не подходит для присоединения}
   /v1/shared-requests/{id}:
     parameters:
       - {name: id, in: path, required: true, schema: {type: string}}
@@ -593,19 +563,6 @@ paths:
         '400':
           description: Invalid request
         '401': {description: Missing or invalid MAX initData}
-  /v1/me/issues:
-    get:
-      operationId: getMyIssues
-      summary: List issues joined by the current resident
-      responses:
-        '200':
-          description: Current resident's issues
-          content:
-            application/json:
-              schema:
-                type: array
-                items: {$ref: '#/components/schemas/IssueView'}
-        '401': {description: Missing or invalid MAX initData}
   /v1/me/dispatcher-houses:
     get:
       operationId: getDispatcherHouses
@@ -641,400 +598,6 @@ paths:
           description: Invalid request
         '403':
           description: Нет подтверждённого доступа к дому
-  /v1/reports:
-    post:
-      operationId: createReport
-      summary: createReport
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/CreateReportRequest'
-      responses:
-        '201':
-          description: Report saved and duplicate candidates returned; no issue is created until user decision
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/CreateReportResponse'
-        '400':
-          description: Invalid request
-        '401': {description: Missing or invalid MAX initData}
-  /v1/reports/{id}/withdraw:
-    post:
-      operationId: withdrawReport
-      summary: Withdraw the current user's report and detach it from an active issue
-      parameters:
-        - name: id
-          in: path
-          required: true
-          schema:
-            type: string
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/WithdrawReportRequest'
-      responses:
-        '204': {description: Report withdrawn and hidden from active issue}
-        '400': {description: Invalid request}
-        '401': {description: Missing or invalid MAX initData}
-        '404': {description: Report is not owned by the current user}
-        '409': {description: Already withdrawn or issue verification has begun}
-  /v1/reports/{reportId}/attachments:
-    post:
-      operationId: uploadReportAttachment
-      summary: Add a private JPEG or PNG photo to the current user's unlinked report
-      description: Only JPEG and PNG photos up to 10 MB are accepted, at most five per report. Previously stored files remain readable.
-      parameters:
-        - name: reportId
-          in: path
-          required: true
-          schema: {type: string}
-      requestBody:
-        required: true
-        content:
-          multipart/form-data:
-            schema:
-              type: object
-              required: [file]
-              properties:
-                file: {type: string, format: binary}
-      responses:
-        '200':
-          description: Attachment saved
-          content:
-            application/json:
-              schema: {$ref: '#/components/schemas/AttachmentView'}
-        '400': {description: Invalid format, size, count or report access}
-        '401': {description: Missing or invalid MAX initData}
-  /v1/attachments/{id}:
-    get:
-      operationId: readAttachment
-      summary: Download an attachment as its author, issue participant or house dispatcher
-      parameters:
-        - name: id
-          in: path
-          required: true
-          schema: {type: string}
-      responses:
-        '200':
-          description: Private attachment content
-          content:
-            image/jpeg: {schema: {type: string, format: binary}}
-            image/png: {schema: {type: string, format: binary}}
-            video/mp4: {schema: {type: string, format: binary}}
-            application/pdf: {schema: {type: string, format: binary}}
-        '400': {description: Attachment not available}
-        '401': {description: Missing or invalid MAX initData}
-  /v1/issues/candidates:
-    get:
-      operationId: getIssueCandidates
-      summary: getIssueCandidates
-      parameters:
-        - name: houseId
-          in: query
-          required: true
-          schema: {type: string, minLength: 1}
-        - name: query
-          in: query
-          required: true
-          schema: {type: string, minLength: 1}
-      responses:
-        '200':
-          description: Accepted or returned
-        '400':
-          description: Invalid request
-        '403':
-          description: Access denied until JWT and house scope are implemented
-        '501':
-          description: Scaffold endpoint pending implementation
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-  /v1/issues:
-    post:
-      operationId: createIssue
-      summary: createIssue
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/CreateIssueRequest'
-      responses:
-        '200':
-          description: New draft issue created from the current user's unlinked report
-          content:
-            application/json:
-              schema: {$ref: '#/components/schemas/IssueView'}
-        '400':
-          description: Invalid request
-        '401': {description: Missing or invalid MAX initData}
-  /v1/issues/{id}:
-    get:
-      operationId: getIssue
-      summary: Issue card for a verified member of its house
-      parameters:
-        - name: id
-          in: path
-          required: true
-          schema: {type: string}
-      responses:
-        '200':
-          description: Issue card
-          content:
-            application/json:
-              schema: {$ref: '#/components/schemas/IssueView'}
-        '401': {description: Missing or invalid MAX initData}
-  /v1/issues/{id}/join:
-    post:
-      operationId: joinIssue
-      summary: joinIssue
-      parameters:
-        - name: id
-          in: path
-          required: true
-          schema:
-            type: string
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/JoinIssueRequest'
-      responses:
-        '200':
-          description: Current user's unlinked report joined to an active issue in the same house
-          content:
-            application/json:
-              schema: {$ref: '#/components/schemas/IssueView'}
-        '400':
-          description: Invalid request
-        '401': {description: Missing or invalid MAX initData}
-  /v1/issues/{id}/merge:
-    post:
-      operationId: mergeIssues
-      summary: Move active reports from this issue into another issue in the same house as dispatcher
-      parameters:
-        - name: id
-          in: path
-          required: true
-          schema:
-            type: string
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/MergeIssueRequest'
-      responses:
-        '200':
-          description: Target issue after merge
-          content:
-            application/json:
-              schema: {$ref: '#/components/schemas/IssueView'}
-        '400': {description: Invalid request or different houses}
-        '401': {description: Missing or invalid MAX initData}
-        '403': {description: Verified dispatcher role required for the source house}
-        '404': {description: Issue not found}
-        '409': {description: Inactive issue or target is at an earlier work stage}
-  /v1/issues/{id}/split:
-    post:
-      operationId: splitIssue
-      summary: Detach one report into a new draft issue as dispatcher
-      parameters:
-        - name: id
-          in: path
-          required: true
-          schema:
-            type: string
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/SplitIssueRequest'
-      responses:
-        '200':
-          description: New draft issue containing the detached report
-          content:
-            application/json:
-              schema: {$ref: '#/components/schemas/IssueView'}
-        '400': {description: Invalid request or issue has fewer than two active reports}
-        '401': {description: Missing or invalid MAX initData}
-        '403': {description: Verified dispatcher role required for the issue house}
-        '404': {description: Issue or report not found}
-        '409': {description: Issue is no longer active}
-  /v1/issues/{id}/status:
-    patch:
-      operationId: changeIssueStatus
-      summary: changeIssueStatus
-      parameters:
-        - name: id
-          in: path
-          required: true
-          schema:
-            type: string
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/ChangeStatusRequest'
-      responses:
-        '200':
-          description: Dispatcher changed status and wrote a status event
-          content:
-            application/json:
-              schema: {$ref: '#/components/schemas/IssueView'}
-        '400':
-          description: Invalid request
-        '401': {description: Missing or invalid MAX initData}
-        '403': {description: Dispatcher house access required}
-  /v1/issues/{id}/planned-date:
-    patch:
-      operationId: setIssuePlannedDate
-      summary: Set or change the planned completion date for an issue
-      description: Verified dispatcher of the house may set a date without a time. Changes require a reason, are kept in history, and notify participants with MAX IDs.
-      parameters:
-        - name: id
-          in: path
-          required: true
-          schema: {type: string}
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema: {$ref: '#/components/schemas/SetPlannedDateRequest'}
-      responses:
-        '200':
-          description: Updated issue with planned date history
-          content:
-            application/json:
-              schema: {$ref: '#/components/schemas/IssueView'}
-        '400': {description: Date is in the past or reason is missing for a change}
-        '401': {description: Missing or invalid MAX initData}
-        '403': {description: Verified dispatcher role required}
-        '404': {description: Issue unavailable}
-        '409': {description: Issue is no longer editable or date is unchanged}
-  /v1/dispatcher/issues:
-    get:
-      operationId: listDispatcherIssues
-      summary: Queue of issues for a dispatcher in one house
-      parameters:
-        - name: houseId
-          in: query
-          required: true
-          schema: {type: string, minLength: 1}
-      responses:
-        '200':
-          description: Issue queue
-          content:
-            application/json:
-              schema:
-                type: array
-                items: {$ref: '#/components/schemas/IssueView'}
-        '403': {description: Dispatcher house access required}
-        '401': {description: Missing or invalid MAX initData}
-  /v1/dispatcher/issues/{id}:
-    get:
-      operationId: getDispatcherIssue
-      summary: Issue card for a dispatcher
-      parameters:
-        - name: id
-          in: path
-          required: true
-          schema: {type: string}
-      responses:
-        '200':
-          description: Issue card
-          content:
-            application/json:
-              schema: {$ref: '#/components/schemas/IssueView'}
-        '403': {description: Dispatcher house access required}
-        '401': {description: Missing or invalid MAX initData}
-  /v1/issues/{id}/verify:
-    post:
-      operationId: verifyIssue
-      summary: verifyIssue
-      parameters:
-        - name: id
-          in: path
-          required: true
-          schema:
-            type: string
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/VerifyIssueRequest'
-      responses:
-        '200':
-          description: Verification recorded; the issue closes when all participants confirm or reopens after a rejection
-          content:
-            application/json:
-              schema: {$ref: '#/components/schemas/IssueView'}
-        '400':
-          description: Invalid request, duplicate response or expired verification window
-        '401': {description: Missing or invalid MAX initData}
-        '404': {description: Issue unavailable to the current user}
-  /v1/issues/{id}/comments:
-    post:
-      operationId: addIssueComment
-      summary: addIssueComment
-      parameters:
-        - name: id
-          in: path
-          required: true
-          schema:
-            type: string
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/AddCommentRequest'
-      responses:
-        '200':
-          description: Accepted or returned
-        '400':
-          description: Invalid request
-        '403':
-          description: Access denied until JWT and house scope are implemented
-        '501':
-          description: Scaffold endpoint pending implementation
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-  /v1/incidents:
-    post:
-      operationId: createIncident
-      summary: createIncident
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/CreateIncidentRequest'
-      responses:
-        '200':
-          description: Accepted or returned
-        '400':
-          description: Invalid request
-        '403':
-          description: Access denied until JWT and house scope are implemented
-        '501':
-          description: Scaffold endpoint pending implementation
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
   /v1/houses/{id}:
     get:
       operationId: getHouse
@@ -1775,63 +1338,6 @@ components:
         fetchedAt: {type: string, format: date-time}
         validAt: {type: [string, 'null'], format: date-time}
         confidence: {type: [number, 'null'], minimum: 0, maximum: 1}
-    IssueView:
-      type: object
-      required: [id, houseId, address, status, description, participants, attachments, reports, plannedDateHistory, mergedForMe]
-      properties:
-        id: {type: string}
-        houseId: {type: string}
-        address: {type: string}
-        category: {type: string, nullable: true}
-        status: {type: string}
-        description: {type: string}
-        location: {type: string, nullable: true}
-        occurredAt: {type: string, format: date-time, nullable: true}
-        verificationDueAt: {type: string, format: date-time, nullable: true}
-        plannedDate: {type: [string, 'null'], format: date, description: Completion target in Europe/Moscow calendar dates}
-        dispatcherComment:
-          type: object
-          nullable: true
-          description: Latest nonempty dispatcher comment on a status change
-          properties:
-            text: {type: string}
-            status: {type: string}
-            changedAt: {type: string, format: date-time}
-        plannedDateHistory:
-          type: array
-          items: {$ref: '#/components/schemas/PlannedDateChange'}
-        participants: {type: integer}
-        mergedForMe: {type: boolean, description: The current resident has an active report moved here by a dispatcher merge}
-        attachments:
-          type: array
-          items: {$ref: '#/components/schemas/AttachmentView'}
-        reports:
-          type: array
-          description: Active reports visible to the current user; residents see only their own, dispatchers see all
-          items: {$ref: '#/components/schemas/LinkedReportView'}
-    LinkedReportView:
-      type: object
-      required: [id, description, author, createdAt]
-      properties:
-        id: {type: string}
-        description: {type: string}
-        author: {type: string}
-        createdAt: {type: string}
-    PlannedDateChange:
-      type: object
-      required: [newDate, previousDateMissed, changedAt]
-      properties:
-        previousDate: {type: [string, 'null'], format: date}
-        newDate: {type: string, format: date}
-        previousDateMissed: {type: boolean}
-        reason: {type: [string, 'null']}
-        changedAt: {type: string, format: date-time}
-    AttachmentView:
-      type: object
-      required: [id, mime]
-      properties:
-        id: {type: string}
-        mime: {type: string}
     ErrorResponse:
       type: object
       required: [code, message, details, correlationId]
@@ -1851,19 +1357,6 @@ components:
       required: [houseId]
       properties:
         houseId: {type: string, minLength: 1}
-    CreateReportRequest:
-      type: object
-      required: [houseId, text, category]
-      anyOf:
-        - required: [locationFeatures]
-        - required: [location]
-      properties:
-        houseId: {type: string, minLength: 1}
-        text: {type: string, minLength: 1, maxLength: 4000}
-        category: {type: string, enum: [LIGHTING, WATER, HEATING, ELEVATOR, ENTRANCE_CLEANING, YARD_CLEANING, WASTE_REMOVAL, PLAYGROUND, OTHER]}
-        location: {type: string, minLength: 1, maxLength: 160, description: Legacy free text place}
-        locationFeatures: {$ref: '#/components/schemas/LocationFeatures'}
-        occurredAt: {type: string, format: date-time, description: Optional occurrence time; defaults to server receipt time}
     LocationFeatures:
       type: object
       required: [area]
@@ -1878,92 +1371,6 @@ components:
         object: {type: [string, 'null'], enum: [SWING, SLIDE, SANDBOX, OTHER, WHOLE_PLAYGROUND, null]}
         site: {type: [integer, 'null'], minimum: 1, maximum: 100}
         details: {type: [string, 'null'], maxLength: 160}
-    CreateReportResponse:
-      type: object
-      required: [reportId, correlationId, candidates]
-      properties:
-        reportId: {type: string, format: uuid}
-        correlationId: {type: string, format: uuid}
-        candidates:
-          type: array
-          items:
-            type: object
-            required: [issueId, score, reasons]
-            properties:
-              issue:
-                type: object
-                description: Preview for a verified resident of the same house, without attachments or author data
-                properties:
-                  id: {type: string}
-                  houseId: {type: string}
-                  address: {type: string}
-                  category: {type: string}
-                  description: {type: string}
-                  location: {type: string}
-                  participants: {type: integer}
-              issueId: {type: string}
-              score: {type: number, format: double}
-              reasons:
-                type: array
-                items: {type: string}
-    WithdrawReportRequest:
-      type: object
-      required: [reason]
-      properties:
-        reason: {type: string, minLength: 1, maxLength: 1000}
-    CreateIssueRequest:
-      type: object
-      required: [reportId]
-      properties:
-        reportId: {type: string, minLength: 1}
-    JoinIssueRequest:
-      type: object
-      required: [reportId]
-      properties:
-        reportId: {type: string, minLength: 1}
-    MergeIssueRequest:
-      type: object
-      required: [targetIssueId]
-      properties:
-        targetIssueId: {type: string, minLength: 1}
-    SplitIssueRequest:
-      type: object
-      required: [reportId, reason]
-      properties:
-        reportId: {type: string, minLength: 1}
-        reason: {type: string, minLength: 1}
-    ChangeStatusRequest:
-      type: object
-      required: [status, reason]
-      properties:
-        status:
-          type: string
-          enum: [DRAFT, OPEN, ASSIGNED, IN_PROGRESS, RESOLVED, VERIFICATION_72H, CLOSED_CONFIRMED, CLOSED_UNCONFIRMED, REVIEW_REQUIRED, REOPENED, WITHDRAWN, REJECTED]
-        reason: {type: string, minLength: 1}
-    SetPlannedDateRequest:
-      type: object
-      required: [date]
-      properties:
-        date: {type: string, format: date}
-        reason: {type: string, maxLength: 1000, description: Required when changing an existing date}
-    VerifyIssueRequest:
-      type: object
-      required: [confirmed]
-      properties:
-        confirmed: {type: boolean}
-        comment: {type: string, maxLength: 2000}
-    AddCommentRequest:
-      type: object
-      required: [text]
-      properties:
-        text: {type: string, minLength: 1, maxLength: 2000}
-    CreateIncidentRequest:
-      type: object
-      required: [houseId, type, description]
-      properties:
-        houseId: {type: string, minLength: 1}
-        type: {type: string, minLength: 1}
-        description: {type: string, minLength: 1, maxLength: 4000}
     CreatePollRequest:
       type: object
       required: [question, options, closesAt]
@@ -1984,15 +1391,21 @@ components:
 
     CreateResidentCase:
       type: object
-      required: [houseId, description, clientRequestId]
+      required: [houseId, kind, description, clientRequestId]
       properties:
         houseId: {type: string, minLength: 1}
-        kind: {type: string, enum: [GENERAL, PROBLEM, PAYMENT], default: PROBLEM, description: "GENERAL принимается для совместимости и преобразуется в PROBLEM"}
+        kind: {type: string, enum: [PROBLEM, PAYMENT]}
         description: {type: string, minLength: 1, maxLength: 4000}
         location: {type: [string, 'null'], maxLength: 160}
         category: {type: [string, 'null'], enum: [LIGHTING, WATER, HEATING, ELEVATOR, ENTRANCE_CLEANING, YARD_CLEANING, WASTE_REMOVAL, PLAYGROUND, OTHER, null]}
         locationFeatures: {$ref: '#/components/schemas/LocationFeatures'}
         clientRequestId: {type: string, minLength: 1, maxLength: 80}
+      allOf:
+        - if:
+            properties: {kind: {const: PROBLEM}}
+          then:
+            required: [category]
+            properties: {category: {$ref: '#/components/schemas/ProblemCategory'}}
     ProblemCategory:
       type: string
       enum: [LIGHTING, WATER, HEATING, ELEVATOR, ENTRANCE_CLEANING, YARD_CLEANING, WASTE_REMOVAL, PLAYGROUND, OTHER]
@@ -2006,14 +1419,30 @@ components:
         reason: {type: string, minLength: 1, maxLength: 1000}
     SharedRequestSplit:
       type: object
-      required: [caseId, revision, reason]
+      required: [caseId, revision, reason, allocation]
       properties:
         caseId: {type: string, minLength: 1}
         revision: {type: integer, minimum: 0}
         reason: {type: string, minLength: 1, maxLength: 1000}
+        allocation: {type: array, maxItems: 200, items: {$ref: '#/components/schemas/SharedWorkAllocation'}}
+    SharedWorkAllocation:
+      type: object
+      required: [kind, id, revision, move]
+      properties:
+        kind: {type: string, enum: [WORK_ORDER, INSPECTION, HANDOFF, EXCHANGE]}
+        id: {type: string, minLength: 1}
+        revision: {type: integer, minimum: 0}
+        move: {type: boolean, description: Перенести в выделяемую заявку; false — оставить в исходной}
+    SharedWorkItem:
+      type: object
+      properties:
+        kind: {type: string, enum: [WORK_ORDER, INSPECTION, HANDOFF, EXCHANGE]}
+        id: {type: string}
+        title: {type: string}
+        revision: {type: integer, minimum: 0}
     SharedRequest:
       type: object
-      required: [id, title, category, status, nextStep, participants, confirmedCount, revision, canManage, members, history]
+      required: [id, title, category, status, nextStep, participants, confirmedCount, revision, canManage, members, history, work]
       properties:
         id: {type: string}
         title: {type: string}
@@ -2024,6 +1453,8 @@ components:
         dueAt: {type: [string, 'null']}
         responsibleName: {type: string}
         participants: {type: integer, minimum: 0}
+        workflowCaseId: {type: string, description: Служебная карточка общей работы; чтение требует полномочий сотрудника}
+        work: {type: array, description: Общие работы доступны только сотрудникам, items: {$ref: '#/components/schemas/SharedWorkItem'}}
         confirmedCount: {type: integer, minimum: 0}
         revision: {type: integer, minimum: 0}
         myCaseId: {type: [string, 'null']}
@@ -2050,18 +1481,18 @@ components:
               createdAt: {type: string}
     ProblemSearch:
       type: object
-      required: [houseId, description]
+      required: [houseId, description, category]
       properties:
         houseId: {type: string, minLength: 1}
         description: {type: string, minLength: 1, maxLength: 4000}
-        category: {type: [string, 'null'], enum: [LIGHTING, WATER, HEATING, ELEVATOR, ENTRANCE_CLEANING, YARD_CLEANING, WASTE_REMOVAL, PLAYGROUND, OTHER, null]}
+        category: {type: string, enum: [LIGHTING, WATER, HEATING, ELEVATOR, ENTRANCE_CLEANING, YARD_CLEANING, WASTE_REMOVAL, PLAYGROUND, OTHER]}
         location: {type: [string, 'null'], maxLength: 160}
         locationFeatures: {$ref: '#/components/schemas/LocationFeatures'}
     ProblemMatch:
       type: object
       required: [source, id, description, score, reasons]
       properties:
-        source: {type: string, enum: [ISSUE, OWN_ISSUE, OWN_CASE, SHARED, OWN_SHARED]}
+        source: {type: string, enum: [SHARED, OWN_SHARED]}
         id: {type: string}
         description: {type: string}
         location: {type: [string, 'null']}
@@ -2073,7 +1504,7 @@ components:
       type: object
       required: [kind, status, nextStep, revision]
       properties:
-        kind: {type: string, enum: [GENERAL, PROBLEM, PAYMENT, WARRANTY]}
+        kind: {type: string, enum: [PROBLEM, PAYMENT, WARRANTY]}
         status: {type: string, enum: [IN_REVIEW, WAITING_RESIDENT, IN_PROGRESS, RESULT_PROPOSED]}
         nextStep: {type: string, minLength: 1, maxLength: 600}
         reason: {type: string, maxLength: 1000, description: Обязательна при переносе известного срока или смене назначенного ответственного}
@@ -2095,7 +1526,7 @@ components:
         visitOffered: {type: boolean}
         author: {type: [string, 'null']}
         category: {type: [string, 'null'], enum: [LIGHTING, WATER, HEATING, ELEVATOR, ENTRANCE_CLEANING, YARD_CLEANING, WASTE_REMOVAL, PLAYGROUND, OTHER, null]}
-        kind: {type: string, enum: [GENERAL, PROBLEM, PAYMENT, WARRANTY]}
+        kind: {type: string, enum: [PROBLEM, PAYMENT, WARRANTY]}
         status: {type: string, enum: [RECEIVED, IN_REVIEW, WAITING_RESIDENT, IN_PROGRESS, RESULT_PROPOSED, CLOSED, REOPENED]}
         description: {type: string}
         location: {type: [string, 'null']}

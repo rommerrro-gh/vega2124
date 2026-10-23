@@ -81,7 +81,7 @@ public class ResidentCaseService {
         return dispatcher(str(r,"house_id"),user) || access.assigned(str(r,"id"),str(r,"house_id"),user,CaseFunction.COORDINATOR,CaseFunction.WARRANTY,CaseFunction.BILLING);
     }
     private boolean owns(Map<String,Object> row, String user) {
-        return user.equals(str(row,"author_id")) && resident(str(row,"house_id"),user);
+        return !Integer.valueOf(1).equals(row.get("internal_work")) && user.equals(str(row,"author_id")) && resident(str(row,"house_id"),user);
     }
     private Map<String,Object> row(String id) {
         var rows = jdbc.queryForList("SELECT * FROM resident_cases WHERE id=?", id);
@@ -121,7 +121,7 @@ public class ResidentCaseService {
     @Transactional
     public CaseView create(String house,CaseKind kind,String text,String location,String requestId,String user) {
         if (!resident(house,user)) throw denied();
-        if (kind==null||kind==CaseKind.GENERAL) kind=CaseKind.PROBLEM;
+        if (kind==null) throw invalid("Укажите тип обращения");
         if (kind==CaseKind.WARRANTY) throw invalid("Гарантийный процесс определяет сотрудник после рассмотрения");
         text=clean(text,4000); location=optional(location,160);
         if (requestId==null || requestId.isBlank() || requestId.length()>80) throw invalid("Не удалось определить запрос. Повторите отправку");
@@ -143,7 +143,7 @@ public class ResidentCaseService {
         return get(id,user);
     }
     public List<CaseView> mine(String user) {
-        return jdbc.query("SELECT id FROM resident_cases WHERE author_id=? ORDER BY number DESC",(rs,n)->rs.getString(1),user)
+        return jdbc.query("SELECT id FROM resident_cases WHERE author_id=? AND internal_work=0 ORDER BY number DESC",(rs,n)->rs.getString(1),user)
             .stream().filter(id->owns(row(id),user)).map(id->get(id,user)).toList();
     }
     public List<CaseView> queue(String house,String user) {
@@ -153,8 +153,14 @@ public class ResidentCaseService {
             WHERE c.house_id=? AND a.user_id=?
             """,house,user)) throw denied();
         if(!member(house,user) && !manager(house,user) && !access.staff(house,user)) throw denied();
-        return jdbc.query("SELECT id FROM resident_cases WHERE house_id=? ORDER BY number DESC",(rs,n)->rs.getString(1),house)
-            .stream().filter(id->{var g=shared.group(id);return g==null||id.equals(g.get("root_case_id"))&&(!shared.activeCases((String)g.get("id")).isEmpty()||!"CLOSED".equals(row(id).get("status")));}).filter(id->intakeWorker||work(row(id),user)).map(id->view(row(id),user)).toList();
+        var result=new ArrayList<CaseView>();var seen=new HashSet<String>();
+        for(String id:jdbc.query("SELECT id FROM resident_cases WHERE house_id=? ORDER BY number DESC",(rs,n)->rs.getString(1),house)){
+            var g=shared.group(id);String selected=id,key=id;
+            if(g!=null){if(g.get("merged_into")!=null)continue;key=(String)g.get("id");var active=shared.activeCases(key);String root=(String)g.get("root_case_id");if(active.isEmpty()&&"CLOSED".equals(row(root).get("status")))continue;
+                if(intakeWorker||work(row(root),user))selected=active.size()==1&&work(row(active.getFirst()),user)?active.getFirst():root;
+            }
+            if(!seen.contains(key)&&(intakeWorker||work(row(selected),user))){seen.add(key);result.add(view(row(selected),user));}
+        }return result;
     }
     public CaseView get(String id,String user) { return view(readable(id,user),user); }
     private CaseView view(Map<String,Object> r,String user) {
@@ -167,7 +173,7 @@ public class ResidentCaseService {
         String responsibleName=responsible==null ? "Первичное рассмотрение" : jdbc.queryForObject("SELECT display_name FROM users WHERE id=?",String.class,responsible);
         return new CaseView(id,((Number)r.get("number")).longValue(),house,address,
             full ? jdbc.queryForObject("SELECT display_name FROM users WHERE id=?",String.class,str(r,"author_id")) : null,
-            CaseKind.GENERAL.name().equals(str(r,"kind"))?CaseKind.PROBLEM:CaseKind.valueOf(str(r,"kind")),author&&(withdrawn||confirmed)?CaseStatus.CLOSED:CaseStatus.valueOf(str(r,"status")),
+            CaseKind.PROBLEM.name().equals(str(r,"kind"))?CaseKind.PROBLEM:CaseKind.valueOf(str(r,"kind")),author&&(withdrawn||confirmed)?CaseStatus.CLOSED:CaseStatus.valueOf(str(r,"status")),
             full?str(r,"description"):"Содержание доступно только участникам обработки с необходимыми полномочиями",
             full?str(r,"location"):null, responsible,responsibleName,
             author&&withdrawn?"Вы отозвали своё обращение":author&&confirmed?"Вы подтвердили результат":full?str(r,"next_step"):"Сотрудник с необходимым доступом рассматривает вопрос",full?str(r,"due_at"):null,
@@ -177,10 +183,11 @@ public class ResidentCaseService {
                 WHERE e.case_id=? ORDER BY e.rowid
                 """,(rs,n)->new Event(rs.getString("id"),rs.getString("display_name"),CaseEventType.valueOf(rs.getString("type")),rs.getString("text"),rs.getString("created_at")),id):List.of(),
             full?documents(id):List.of(),
-            full?jdbc.queryForObject("SELECT count(*) FROM case_work_orders WHERE case_id=? AND state NOT IN ('ACCEPTED','CANCELLED')",Integer.class,id):0,
-            full?jdbc.queryForObject("SELECT count(*) FROM case_work_orders WHERE case_id=? AND state NOT IN ('ACCEPTED','CANCELLED') AND due_at IS NOT NULL AND datetime(due_at)<datetime('now')",Integer.class,id):0,
-            full?jdbc.query("SELECT category FROM case_problem_details WHERE case_id=?",(rs,n)->rs.getString(1)==null?null:ReportCategory.valueOf(rs.getString(1)),id).stream().filter(Objects::nonNull).findFirst().orElse(null):null,sharedGroup==null?null:(String)sharedGroup.get("id"),sharedGroup==null?1:shared.participants((String)sharedGroup.get("id")),withdrawn,shared.root(id),full&&count("SELECT count(*) FROM case_visits WHERE case_id=? AND state='OFFERED'",id));
+            full?workCount(id,false):0,
+            full?workCount(id,true):0,
+            full&&sharedGroup!=null?ReportCategory.valueOf((String)sharedGroup.get("category")):full?jdbc.query("SELECT category FROM case_problem_details WHERE case_id=?",(rs,n)->rs.getString(1)==null?null:ReportCategory.valueOf(rs.getString(1)),id).stream().filter(Objects::nonNull).findFirst().orElse(null):null,sharedGroup==null?null:(String)sharedGroup.get("id"),sharedGroup==null?1:shared.participants((String)sharedGroup.get("id")),withdrawn,shared.root(id),full&&count("SELECT count(*) FROM case_visits WHERE case_id=? AND state='OFFERED'",id));
     }
+    private int workCount(String caseId,boolean overdue){var group=shared.group(caseId);var ids=new HashSet<String>();ids.add(caseId);if(group!=null){ids.addAll(shared.allCases((String)group.get("id")));ids.add((String)group.get("root_case_id"));}return ids.stream().mapToInt(id->jdbc.queryForObject("SELECT count(*) FROM case_work_orders WHERE case_id=? AND state NOT IN ('ACCEPTED','CANCELLED')"+(overdue?" AND due_at IS NOT NULL AND datetime(due_at)<datetime('now')":""),Integer.class,id)).sum();}
     @Transactional
     public CaseView update(String id,CaseKind kind,CaseStatus status,String nextStep,Instant due,
                            String responsible,int revision,String user) {
@@ -191,7 +198,6 @@ public class ResidentCaseService {
                            String responsible,int revision,String reason,String user) {
         var r=row(id);requireWork(r,user);
         if(status==CaseStatus.RESULT_PROPOSED){completion.requireComplete(id);var g=shared.group(id);if(g!=null){for(String member:shared.allCases((String)g.get("id")))completion.requireComplete(member);completion.requireComplete(shared.root(id));}}
-        if(kind==CaseKind.GENERAL)kind=CaseKind.PROBLEM;
         if(kind==CaseKind.PAYMENT&&shared.group(id)!=null)throw invalid("Вопрос по квитанции рассматривается отдельно от общей заявки");
         if (status==CaseStatus.RECEIVED || status==CaseStatus.CLOSED || status==CaseStatus.REOPENED) throw invalid("Используйте рассмотрение или предложите результат жителю");
         if (CaseStatus.CLOSED.name().equals(str(r,"status"))) throw invalid("Сначала нужно повторное обращение жителя");
@@ -258,7 +264,8 @@ public class ResidentCaseService {
         var r=readable(id,user);
         if(!owns(r,user))throw denied();
         if(shared.respond(id,confirmed,comment,revision,user,completion)){
-            event(id,user,confirmed?CaseEventType.CONFIRMED:CaseEventType.REOPENED,confirmed?"Вы подтвердили результат":"Вы сообщили, что проблема осталась"+(comment==null?"":": "+clean(comment,2000)),null);
+            String note=optional(comment,2000);
+            event(id,user,confirmed?CaseEventType.CONFIRMED:CaseEventType.REOPENED,confirmed?"Вы подтвердили результат":"Вы сообщили, что проблема осталась"+(note==null?"":": "+note),null);
             return get(id,user);
         }
         String current=str(r,"status");
@@ -318,7 +325,8 @@ public class ResidentCaseService {
             SELECT v.storage_key,v.mime,d.case_id FROM case_document_versions v JOIN case_documents d ON d.id=v.document_id WHERE v.id=?
             """,version);
         if(rows.isEmpty())throw missing();
-        var v=rows.get(0);readable(str(v,"case_id"),user);
+        var v=rows.get(0);var original=row(str(v,"case_id"));
+        if(!owns(original,user)&&!work(original,user)&&jdbc.query("SELECT case_id FROM shared_work_document_access WHERE version_id=?",(rs,n)->rs.getString(1),version).stream().noneMatch(id->work(row(id),user)))throw missing();
         return new FileData(store.get(str(v,"storage_key")),str(v,"mime"));
     }
     public static boolean validDocument(byte[] b,String mime) {
@@ -334,7 +342,7 @@ public class ResidentCaseService {
     @Transactional
     public void workflowEvent(String id,String actor,int revision,String text,String nextStep) {
         var c=get(id,actor);
-        if(c.status()==CaseStatus.CLOSED)throw invalid("Для продолжения работы житель должен запросить повторное рассмотрение");
+        if("CLOSED".equals(row(id).get("status")))throw invalid("Для продолжения работы житель должен запросить повторное рассмотрение");
         if(jdbc.update("UPDATE resident_cases SET revision=revision+1,updated_at=?,next_step=coalesce(?,next_step),status=CASE WHEN ? IS NOT NULL THEN 'IN_PROGRESS' ELSE status END WHERE id=? AND revision=?",
             now(),nextStep,nextStep,id,revision)!=1)throw conflict();
         event(id,actor,CaseEventType.UPDATED,text,null);

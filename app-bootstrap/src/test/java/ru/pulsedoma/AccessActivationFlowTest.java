@@ -11,7 +11,7 @@ import org.springframework.test.context.DynamicPropertySource;
 import ru.pulsedoma.common.BusinessException;
 import ru.pulsedoma.house.AccessActivationService;
 import ru.pulsedoma.identity.AccessRole;
-import ru.pulsedoma.issues.MiniAppService;
+import ru.pulsedoma.issues.ResidentIdentityService;
 import org.springframework.test.web.servlet.MockMvc;
 
 import java.nio.file.Files;
@@ -49,7 +49,7 @@ class AccessActivationFlowTest {
     }
 
     @Autowired AccessActivationService access;
-    @Autowired MiniAppService miniApp;
+    @Autowired ResidentIdentityService miniApp;
     @Autowired JdbcTemplate jdbc;
     @Autowired MockMvc mvc;
 

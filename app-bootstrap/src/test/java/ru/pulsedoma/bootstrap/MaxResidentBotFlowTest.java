@@ -49,7 +49,7 @@ class MaxResidentBotFlowTest {
     }
     void say(String text)throws Exception{bot.handle(update(UUID.randomUUID().toString(),text,null));}
     String last(){return jdbc.queryForObject("SELECT body_json FROM max_bot_outbox WHERE kind='REPLY' ORDER BY rowid DESC LIMIT 1",String.class);}
-    ResidentCaseService.CaseView create(){return cases.create(HOUSE,CaseKind.GENERAL,"Вопрос "+UUID.randomUUID(),null,UUID.randomUUID().toString(),USER);}
+    ResidentCaseService.CaseView create(){return cases.create(HOUSE,CaseKind.PROBLEM,"Вопрос "+UUID.randomUUID(),null,UUID.randomUUID().toString(),USER);}
     void review(ResidentCaseService.CaseView c,CaseStatus status){cases.update(c.id(),c.kind(),status,"Уточните, когда заметили проблему",Instant.now().plusSeconds(3600),null,c.revision(),"Обновлён следующий шаг","demo-dispatcher-1");}
     MaxBotDelivery delivery(){return new MaxBotDelivery(jdbc,mapper,cases,messages,max,"test-token");}
     @Test void financialQuestionCanBeAnsweredWithoutKnowledgeOrDocument()throws Exception{
