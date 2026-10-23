@@ -157,7 +157,7 @@ public class ResidentCaseService {
         for(String id:jdbc.query("SELECT id FROM resident_cases WHERE house_id=? ORDER BY number DESC",(rs,n)->rs.getString(1),house)){
             var g=shared.group(id);String selected=id,key=id;
             if(g!=null){if(g.get("merged_into")!=null)continue;key=(String)g.get("id");var active=shared.activeCases(key);String root=(String)g.get("root_case_id");if(active.isEmpty()&&"CLOSED".equals(row(root).get("status")))continue;
-                if(intakeWorker||work(row(root),user))selected=active.size()==1&&work(row(active.getFirst()),user)?active.getFirst():root;
+                if(intakeWorker||work(row(root),user))selected=intakeWorker&&active.size()==1&&work(row(active.getFirst()),user)?active.getFirst():root;
             }
             if(!seen.contains(key)&&(intakeWorker||work(row(selected),user))){seen.add(key);result.add(view(row(selected),user));}
         }return result;
