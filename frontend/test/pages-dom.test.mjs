@@ -10,7 +10,7 @@ const temp = new URL(`./.pages-${process.pid}.mjs`, import.meta.url);
 await build({
   stdin: {
     contents:
-      'export {ResidentCases} from "./src/resident-cases.jsx";export {AccountPages} from "./src/account-pages.jsx";export {useRoute,go} from "./src/navigation.jsx";',
+      'export {ResidentCases,CaseDetail} from "./src/resident-cases.jsx";export {AccountPages} from "./src/account-pages.jsx";export {CommonProblems} from "./src/common-problems.jsx";export {CaseWorkflow} from "./src/warranty-workflow.jsx";export {useRoute,go} from "./src/navigation.jsx";',
     resolveDir: fileURLToPath(new URL("../", import.meta.url)),
     loader: "jsx",
   },
@@ -45,7 +45,8 @@ function env(path) {
 const initialDom = env("/miniapp/home");
 globalThis.matchMedia = () => ({ matches: false, addEventListener() {}, removeEventListener() {} });
 const { createRoot } = await import("react-dom/client");
-const { ResidentCases, AccountPages, useRoute, go } = await import(temp.href);
+const { ResidentCases, CaseDetail, AccountPages, CommonProblems, CaseWorkflow, useRoute, go } =
+  await import(temp.href);
 initialDom.window.close();
 const house = { id: "h", address: "Казань, ул. Баумана, 12" };
 const ctx = {
@@ -57,6 +58,224 @@ const ctx = {
 };
 const flush = () => new Promise((r) => setTimeout(r, 0));
 try {
+  await test("resident visit page shows warranty inspections and confirms time without exposing staff controls", async () => {
+    const dom = env("/miniapp/cases/c/visits");
+    const item = {
+      id: "c",
+      number: 42,
+      houseId: "h",
+      status: "WAITING_RESIDENT",
+      kind: "WARRANTY",
+      revision: 7,
+      documents: [],
+      events: [],
+      isAuthor: true,
+      fullAccess: true,
+      description: "Мокнет стена",
+    };
+    const inspection = {
+      id: "i",
+      state: "PROPOSED",
+      startsAt: new Date(Date.now() + 86400000).toISOString(),
+      endsAt: new Date(Date.now() + 93600000).toISOString(),
+      inspectorId: "engineer",
+      inspector: "Инженер",
+      location: "Подъезд 1",
+      participants: "Житель и инженер",
+      revision: 0,
+      residentAvailability: "UNKNOWN",
+      acts: [],
+      responses: [],
+    };
+    const workspace = {
+      revision: 7,
+      isAuthor: true,
+      canCoordinate: true,
+      canInspect: true,
+      canReviewWarranty: true,
+      staff: [{ id: "engineer", name: "Инженер" }],
+      reviews: [],
+      inspections: [inspection],
+      orders: [],
+      handoffs: [],
+      history: [],
+    };
+    let sent;
+    const api = async (role, path, options = {}) => {
+      if (path.endsWith("/workflow")) return workspace;
+      if (path.endsWith("/visits")) return { visits: [] };
+      if (path === "/v1/inspections/i/response") {
+        sent = JSON.parse(options.body);
+        return {
+          ...workspace,
+          inspections: [{ ...inspection, residentAvailability: "CONFIRMED" }],
+        };
+      }
+      if (path === "/v1/cases/c") return item;
+      throw Error(path);
+    };
+    const root = createRoot(document.getElementById("root"));
+    await act(async () => {
+      root.render(
+        React.createElement(CaseDetail, {
+          item,
+          api,
+          role: "true",
+          headers: () => ({}),
+          onChange: () => {},
+          residentOnly: true,
+          section: "visits",
+        }),
+      );
+      await flush();
+    });
+    assert.match(document.body.textContent, /Осмотры и акты · 1/);
+    assert.equal(document.body.textContent.includes("Перенести осмотр"), false);
+    assert.equal(document.body.textContent.includes("Назначить инженера"), false);
+    assert.equal(document.body.textContent.includes("Предложить осмотр"), false);
+    await act(async () => {
+      [...document.querySelectorAll("button")]
+        .find((b) => b.textContent === "Это время подходит")
+        .click();
+      await flush();
+    });
+    assert.deepEqual(sent, { action: "CONFIRM_TIME", revision: 0, caseRevision: 7 });
+    assert.equal(document.body.textContent.includes("Это время подходит"), false);
+    await act(async () => root.unmount());
+    dom.window.close();
+  });
+  await test("inspection form sends native date input values and the selected engineer", async () => {
+    const dom = env("/dispatcher/queue");
+    const item = { id: "c", houseId: "h", status: "IN_PROGRESS", revision: 7, documents: [] };
+    const workspace = {
+      revision: 7,
+      isAuthor: false,
+      canCoordinate: true,
+      canInspect: false,
+      canReviewWarranty: false,
+      staff: [{ id: "engineer", name: "Инженер" }],
+      reviews: [],
+      inspections: [],
+      orders: [],
+      handoffs: [],
+      history: [],
+    };
+    let sent;
+    const api = async (role, path, options = {}) => {
+      if (path.endsWith("/inspections")) {
+        sent = JSON.parse(options.body);
+        return workspace;
+      }
+      if (path.endsWith("/workflow")) return workspace;
+      if (path.endsWith("/warranties")) return [];
+      if (path === "/v1/cases/c") return item;
+      throw Error(path);
+    };
+    const root = createRoot(document.getElementById("root"));
+    await act(async () => {
+      root.render(
+        React.createElement(CaseWorkflow, { item, role: "dispatcher", api, onChange: () => {} }),
+      );
+      await flush();
+    });
+    const form = [...document.querySelectorAll("form")].find((f) =>
+      f.textContent.includes("Начало интервала"),
+    );
+    const fields = [...form.querySelectorAll("input,textarea,select")];
+    const input = async (label, value) => {
+      const field = fields.find((f) => f.parentElement.textContent.startsWith(label));
+      await act(async () => {
+        field.value = value;
+        field.dispatchEvent(
+          new dom.window.Event(field.tagName === "SELECT" ? "change" : "input", { bubbles: true }),
+        );
+        await flush();
+      });
+    };
+    await input("Инженер — участник обращения", "engineer");
+    await input("Где провести осмотр", "Подъезд 1");
+    await input("Планируемые участники", "Житель и инженер");
+    await input("Начало интервала", "2026-10-25T14:00");
+    await input("Конец интервала", "2026-10-25T16:00");
+    await act(async () => {
+      form.dispatchEvent(new dom.window.Event("submit", { bubbles: true, cancelable: true }));
+      await flush();
+    });
+    assert.equal(sent.inspectorId, "engineer");
+    assert.equal(sent.location, "Подъезд 1");
+    assert.equal(sent.participants, "Житель и инженер");
+    assert.equal(sent.startsAt, new Date("2026-10-25T14:00").toISOString());
+    assert.equal(sent.endsAt, new Date("2026-10-25T16:00").toISOString());
+    assert.equal(sent.caseRevision, 7);
+    await act(async () => root.unmount());
+    dom.window.close();
+  });
+  await test("joining a known common problem needs confirmation, preserves another draft and safely retries after reload", async () => {
+    const dom = env("/miniapp/shared/shared-1?demoSession=admin");
+    const savedDraft = JSON.stringify({ description: "Другой незавершённый вопрос" });
+    sessionStorage.setItem("pulse-case-v2:u:h", savedDraft);
+    const calls = [];
+    const shared = {
+      id: "shared-1",
+      houseId: "h",
+      title: "Сломаны качели",
+      category: "PLAYGROUND",
+      location: "Детская площадка",
+      status: "IN_PROGRESS",
+      participants: 1,
+      history: [],
+    };
+    const api = async (role, path, options = {}) => {
+      if (path === "/v1/shared-problems/shared-1") return shared;
+      if (path.endsWith("/case-context")) return { actorId: "u" };
+      if (path.endsWith("/join")) {
+        calls.push(JSON.parse(options.body));
+        if (calls.length === 1) throw Error("Соединение прервано");
+        return { id: "joined" };
+      }
+      throw Error(path);
+    };
+    const render = async () => {
+      const root = createRoot(document.getElementById("root"));
+      await act(async () => {
+        root.render(
+          React.createElement(CommonProblems, { id: "shared-1", houseId: "h", role: "admin", api }),
+        );
+        await flush();
+      });
+      return root;
+    };
+    const click = async (text) => {
+      await act(async () => {
+        [...document.querySelectorAll("button")].find((b) => b.textContent === text).click();
+        await flush();
+      });
+    };
+    let root = await render();
+    await click("У меня такая же проблема");
+    assert.equal(calls.length, 0);
+    assert.match(document.body.textContent, /Повторять описание не нужно/);
+    await click("Да, присоединиться");
+    assert.match(document.querySelector('[role="alert"]').textContent, /копия не создастся/);
+    await act(async () => root.unmount());
+    root = await render();
+    await click("У меня такая же проблема");
+    await click("Да, присоединиться");
+    assert.equal(calls.length, 2);
+    assert.equal(calls[0].clientRequestId, calls[1].clientRequestId);
+    assert.deepEqual(calls[1].problem, {
+      houseId: "h",
+      description: "Сломаны качели",
+      category: "PLAYGROUND",
+      location: "Детская площадка",
+    });
+    assert.equal(sessionStorage.getItem("pulse-case-v2:u:h"), savedDraft);
+    assert.equal(sessionStorage.getItem("pulse-common-join:u:h:shared-1"), null);
+    assert.equal(location.pathname, "/miniapp/cases/joined");
+    assert.equal(location.search, "?demoSession=admin");
+    await act(async () => root.unmount());
+    dom.window.close();
+  });
   await test("resident form saves a draft across navigation; required category and actual matching/join flow", async () => {
     const dom = env("/miniapp/home");
     const calls = [];

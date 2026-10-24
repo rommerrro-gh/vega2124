@@ -223,7 +223,6 @@ export function AccountPages({
       {route.page === "settings" && (
         <>
           <PageTitle>Настройки</PageTitle>
-          <h2>Настройки</h2>
 
           <section className="settings-section">
             <h3>Оформление</h3>

@@ -71,7 +71,8 @@
   font-size: 19px;
   margin: 28px 0 8px;
 }
-:root[data-theme] .page-row {
+:root[data-theme] .page-row,
+:root[data-theme] .case-workspace .page-row {
   display: flex;
   align-items: center;
   gap: 16px;
@@ -86,7 +87,8 @@
   line-height: 1.35;
   box-shadow: none;
 }
-:root[data-theme] button.page-row:hover {
+:root[data-theme] button.page-row:hover,
+:root[data-theme] .case-workspace button.page-row:hover {
   background: var(--surface-soft);
 }
 :root[data-theme] .page-row > .row-icon {
@@ -254,6 +256,27 @@
   background: var(--accent-soft);
   color: var(--accent-ink);
   font-size: 13px;
+}
+:root[data-theme] .common-join button {
+  min-height: 48px;
+  width: 100%;
+  margin: 8px 0;
+  padding: 12px 18px;
+  border: 1px solid var(--accent-ink);
+  border-radius: 12px;
+  background: var(--accent-ink);
+  color: var(--surface);
+  font: inherit;
+  font-weight: 650;
+  cursor: pointer;
+}
+:root[data-theme] .common-join button.common-join-cancel {
+  background: transparent;
+  color: var(--accent-ink);
+}
+:root[data-theme] .common-join button:disabled {
+  opacity: 0.6;
+  cursor: wait;
 }
 :root[data-theme] .resident-shell .home-header {
   height: auto;

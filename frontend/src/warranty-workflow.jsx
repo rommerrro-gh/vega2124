@@ -126,7 +126,7 @@ function Form({ fields, initial = {}, onSubmit, label = "Сохранить", bu
             <select
               value={data[f.name]}
               required={f.required !== false}
-              onChange={(e) => setData({ ...data, [f.name]: e.target.value })}
+              onChange={(e) => setData((previous) => ({ ...previous, [f.name]: e.target.value }))}
             >
               {f.required === false && <option value="">Не указано</option>}
               {f.options?.map((o) => (
@@ -142,7 +142,8 @@ function Form({ fields, initial = {}, onSubmit, label = "Сохранить", bu
               maxLength={f.max || 4000}
               rows={3}
               placeholder={f.placeholder}
-              onChange={(e) => setData({ ...data, [f.name]: e.target.value })}
+              onInput={(e) => setData((previous) => ({ ...previous, [f.name]: e.target.value }))}
+              onChange={(e) => setData((previous) => ({ ...previous, [f.name]: e.target.value }))}
             />
           ) : (
             <input
@@ -153,7 +154,8 @@ function Form({ fields, initial = {}, onSubmit, label = "Сохранить", bu
               min={f.min}
               max={f.max}
               placeholder={f.placeholder}
-              onChange={(e) => setData({ ...data, [f.name]: e.target.value })}
+              onInput={(e) => setData((previous) => ({ ...previous, [f.name]: e.target.value }))}
+              onChange={(e) => setData((previous) => ({ ...previous, [f.name]: e.target.value }))}
             />
           )}
         </label>
@@ -538,13 +540,25 @@ export function WorkflowStaff({ houseId, role, api }) {
   );
 }
 
-export function CaseWorkflow({ item, role, api, headers, onChange }) {
+export function CaseWorkflow({
+  item,
+  role,
+  api,
+  headers,
+  onChange,
+  residentOnly = false,
+  section = "history",
+}) {
   const [data, setData] = useState(null),
     [registry, setRegistry] = useState([]),
     [notice, setNotice] = useState(""),
     [busy, setBusy] = useState(false);
+  const view = (value) =>
+    residentOnly
+      ? { ...value, canCoordinate: false, canInspect: false, canReviewWarranty: false, staff: [] }
+      : value;
   async function load() {
-    setData(await api(role, `/v1/cases/${item.id}/workflow`));
+    setData(view(await api(role, `/v1/cases/${item.id}/workflow`)));
   }
   useEffect(() => {
     let active = true;
@@ -553,8 +567,8 @@ export function CaseWorkflow({ item, role, api, headers, onChange }) {
     api(role, `/v1/cases/${item.id}/workflow`)
       .then((d) => {
         if (active) {
-          setData(d);
-          if (d.canCoordinate || d.canReviewWarranty)
+          setData(view(d));
+          if (!residentOnly && (d.canCoordinate || d.canReviewWarranty))
             api(role, `/v1/houses/${item.houseId}/warranties`)
               .then((r) => {
                 if (active) setRegistry(r);
@@ -568,12 +582,12 @@ export function CaseWorkflow({ item, role, api, headers, onChange }) {
     return () => {
       active = false;
     };
-  }, [item.id, item.revision, role]);
+  }, [item.id, item.revision, role, residentOnly]);
   async function act(path, body, method = "POST") {
     setBusy(true);
     setNotice("");
     try {
-      setData(await api(role, path, { method, body: JSON.stringify(body) }));
+      setData(view(await api(role, path, { method, body: JSON.stringify(body) })));
       onChange(await api(role, `/v1/cases/${item.id}`));
     } catch (e) {
       setNotice(e.message);
@@ -618,7 +632,8 @@ export function CaseWorkflow({ item, role, api, headers, onChange }) {
     );
   const editable = item.status !== "CLOSED";
   const staffView =
-    !data.isAuthor || data.canCoordinate || data.canInspect || data.canReviewWarranty;
+    !residentOnly &&
+    (!data.isAuthor || data.canCoordinate || data.canInspect || data.canReviewWarranty);
   if (
     !staffView &&
     !data.reviews.length &&
@@ -637,26 +652,28 @@ export function CaseWorkflow({ item, role, api, headers, onChange }) {
   ];
   return (
     <section className="case-workflow">
-      <div className="case-heading">
-        <div>
-          <small>ОДНО ОБРАЩЕНИЕ · ВСЕ ШАГИ</small>
-          <h3>Рассмотрение, осмотры и работы</h3>
+      {!residentOnly && (
+        <div className="case-heading">
+          <div>
+            <small>ОДНО ОБРАЩЕНИЕ · ВСЕ ШАГИ</small>
+            <h3>Рассмотрение, осмотры и работы</h3>
+          </div>
+          <button
+            type="button"
+            className="case-link"
+            disabled={busy}
+            onClick={() => {
+              load().catch((e) => setNotice(e.message));
+              onChange &&
+                api(role, `/v1/cases/${item.id}`)
+                  .then(onChange)
+                  .catch(() => {});
+            }}
+          >
+            Обновить
+          </button>
         </div>
-        <button
-          type="button"
-          className="case-link"
-          disabled={busy}
-          onClick={() => {
-            load().catch((e) => setNotice(e.message));
-            onChange &&
-              api(role, `/v1/cases/${item.id}`)
-                .then(onChange)
-                .catch(() => {});
-          }}
-        >
-          Обновить
-        </button>
-      </div>
+      )}
       <Notice>{notice}</Notice>
       {editable && data.canCoordinate && (
         <details className="case-editor">
@@ -690,7 +707,7 @@ export function CaseWorkflow({ item, role, api, headers, onChange }) {
           />
         </details>
       )}
-      {(staffView || data.reviews.length > 0) && (
+      {(!residentOnly || section !== "visits") && (staffView || data.reviews.length > 0) && (
         <details className="workflow-section" open={!!data.reviews.length}>
           <summary>Гарантийное рассмотрение · {data.reviews.length}</summary>
           {data.reviews.map((r) => (
@@ -1013,7 +1030,7 @@ export function CaseWorkflow({ item, role, api, headers, onChange }) {
           )}
         </details>
       )}
-      {(staffView || data.orders.length > 0) && (
+      {(!residentOnly || section === "history") && (staffView || data.orders.length > 0) && (
         <details className="workflow-section" open={!!data.orders.length}>
           <summary>Работы и проверка отчёта · {data.orders.length}</summary>
           {data.orders.map((o) => (
@@ -1170,7 +1187,7 @@ export function CaseWorkflow({ item, role, api, headers, onChange }) {
           )}
         </details>
       )}
-      {data.handoffs.length > 0 && (
+      {(!residentOnly || section !== "visits") && data.handoffs.length > 0 && (
         <details className="workflow-section">
           <summary>Передача материалов · {data.handoffs.length}</summary>
           <p className="muted">
@@ -1245,7 +1262,7 @@ export function CaseWorkflow({ item, role, api, headers, onChange }) {
           ))}
         </details>
       )}
-      {data.history.length > 0 && (
+      {(!residentOnly || section === "history") && data.history.length > 0 && (
         <details className="workflow-section">
           <summary>История этапов · {data.history.length}</summary>
           {data.history.map((h, n) => (

@@ -376,9 +376,18 @@ export function CaseDetail({
               residentOnly={residentOnly}
             />
           )}
-          {!residentOnly && item.fullAccess && item.kind !== "PAYMENT" && (
-            <CaseWorkflow item={item} role={role} api={api} headers={headers} onChange={onChange} />
-          )}
+          {(!residentOnly || ["visits", "documents", "history"].includes(section)) &&
+            item.kind !== "PAYMENT" && (
+              <CaseWorkflow
+                item={item}
+                role={role}
+                api={api}
+                headers={headers}
+                onChange={onChange}
+                residentOnly={residentOnly}
+                section={section}
+              />
+            )}
           {(!residentOnly || ["messages", "history"].includes(section)) && (
             <>
               <h3>{section === "messages" ? "Переписка" : "История и ответы"}</h3>
