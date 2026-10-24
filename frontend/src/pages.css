@@ -683,7 +683,8 @@
 :root[data-theme] .resident-navigation {
   width: min(calc(100% - 24px), 680px);
   min-height: 64px;
-  bottom: calc(10px + env(safe-area-inset-bottom));
+  /* Keep the floating bar close to the bottom on iPhones as well. */
+  bottom: max(8px, calc(env(safe-area-inset-bottom, 0px) - 16px));
   padding: 5px;
   gap: 2px;
   border: 1px solid var(--border);
