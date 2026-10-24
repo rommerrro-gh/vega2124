@@ -110,7 +110,7 @@ export function AppearancePicker({ variant = "select" }) {
   );
 }
 
-export function ResidentHeader({ house, houses = [], disabled, onChange, loading = false }) {
+export function ResidentHeader({ house, loading = false }) {
   const { resolved } = useAppearance(),
     view = housePresentation(house);
   return (
@@ -128,23 +128,6 @@ export function ResidentHeader({ house, houses = [], disabled, onChange, loading
         <span className="eyebrow">Ваш дом</span>
         <h1 id="home-address">{loading ? "Загружаем дом…" : view.street || "Добро пожаловать"}</h1>
         {view.city && <p>{view.city}</p>}
-        {houses.length > 1 && (
-          <label className="home-house-choice">
-            <span>Сменить дом</span>
-            <select
-              aria-label="Выбранный дом"
-              value={house?.id || ""}
-              disabled={disabled}
-              onChange={(e) => onChange(e.target.value)}
-            >
-              {houses.map((h) => (
-                <option key={h.id} value={h.id}>
-                  {h.address}
-                </option>
-              ))}
-            </select>
-          </label>
-        )}
         {!loading && !house && <p>Подключите свой дом, чтобы видеть обращения и события.</p>}
       </div>
     </section>

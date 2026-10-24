@@ -17,6 +17,30 @@
   display: grid;
   gap: 7px;
 }
+:root[data-theme] .tariff-section .tariff-toolbar {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: end;
+}
+:root[data-theme] .tariff-section .tariff-toolbar > label {
+  margin: 0;
+  min-width: 0;
+}
+:root[data-theme] .tariff-section .tariff-toolbar input,
+:root[data-theme] .tariff-section .tariff-toolbar > button {
+  height: 48px;
+  min-height: 48px;
+  box-sizing: border-box;
+  margin: 0;
+}
+@media (max-width: 360px) {
+  :root[data-theme] .tariff-section .tariff-toolbar {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  :root[data-theme] .tariff-section .tariff-toolbar > button {
+    width: 100%;
+  }
+}
 .tariff-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(min(100%, 320px), 1fr));

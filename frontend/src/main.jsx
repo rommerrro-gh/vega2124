@@ -208,25 +208,29 @@ function Brand({ role }) {
           {route.workspace !== "miniapp" && <small className="workspace-caption">{role}</small>}
         </span>
       </button>
-      <OperationsInbox
-        api={api}
-        role={session}
-        onOpen={(n) =>
-          go(
-            route.workspace === "miniapp"
-              ? `/miniapp/cases/${encodeURIComponent(n.case_id)}`
-              : `/work/queue?houseId=${encodeURIComponent(n.house_id)}&caseId=${encodeURIComponent(n.case_id)}`,
-          )
-        }
-      />
-      <button
-        type="button"
-        className="profile-button icon-button"
-        aria-label="Мой профиль"
-        onClick={() => go(`/${route.workspace}/profile`)}
-      >
-        <UserCircle size={34} />
-      </button>
+      {route.workspace !== "miniapp" && (
+        <OperationsInbox
+          api={api}
+          role={session}
+          onOpen={(n) =>
+            go(
+              route.workspace === "miniapp"
+                ? `/miniapp/cases/${encodeURIComponent(n.case_id)}`
+                : `/work/queue?houseId=${encodeURIComponent(n.house_id)}&caseId=${encodeURIComponent(n.case_id)}`,
+            )
+          }
+        />
+      )}
+      {route.workspace !== "miniapp" && (
+        <button
+          type="button"
+          className="profile-button icon-button"
+          aria-label="Мой профиль"
+          onClick={() => go(`/${route.workspace}/profile`)}
+        >
+          <UserCircle size={34} />
+        </button>
+      )}
     </header>
   );
 }
@@ -790,13 +794,7 @@ function Resident() {
     <main className={`shell resident-shell resident-view-${route.page}`}>
       {route.root && <Brand role="Житель" />}
       <Notice message={notice} />
-      {route.page === "home" && (
-        <ResidentHeader
-          house={selectedHouse}
-          houses={houses}
-          onChange={(id) => selectHouse(id).catch(fail)}
-        />
-      )}
+      {route.page === "home" && <ResidentHeader house={selectedHouse} />}
       {account && (
         <AccountPages
           route={route}

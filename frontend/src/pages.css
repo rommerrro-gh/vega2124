@@ -681,14 +681,91 @@
   height: 30px;
 }
 :root[data-theme] .resident-navigation {
-  min-height: 84px;
+  width: min(calc(100% - 24px), 680px);
+  min-height: 64px;
+  bottom: calc(10px + env(safe-area-inset-bottom));
+  padding: 5px;
+  gap: 2px;
+  border: 1px solid var(--border);
+  border-radius: 36px;
+  background: var(--surface);
+  background: color-mix(in srgb, var(--surface) 94%, transparent);
+  -webkit-backdrop-filter: blur(18px);
+  backdrop-filter: blur(18px);
+  box-shadow: 0 6px 24px #00000012;
 }
 :root[data-theme] .resident-navigation svg {
-  width: 29px;
-  height: 29px;
+  width: 23px;
+  height: 23px;
 }
 :root[data-theme] .resident-navigation button {
-  font-size: 13px;
+  min-height: 52px;
+  padding: 5px 2px;
+  gap: 3px;
+  border-radius: 28px;
+  font-size: 11px;
+}
+:root[data-theme] .resident-navigation button[aria-current="page"] {
+  background: var(--accent-soft);
+  color: var(--accent-ink);
+  font-weight: 650;
+}
+:root[data-theme] .resident-navigation button[aria-current="page"]::after {
+  content: none;
+}
+:root[data-theme] .account-page .page-list .page-row {
+  width: calc(100% + 24px);
+  margin-inline: -12px;
+  padding: 19px 12px;
+  border: 0;
+  border-radius: 16px;
+  transition: background-color 140ms ease;
+}
+:root[data-theme] .account-page .page-list .page-row:active {
+  background: var(--accent-soft);
+}
+:root[data-theme] .notification-switch {
+  flex: 0 0 58px;
+  width: 58px;
+  height: 44px;
+  min-height: 44px;
+  border: 0;
+  padding: 6px 2px;
+  background: transparent;
+  cursor: pointer;
+  border-radius: 24px;
+  touch-action: manipulation;
+}
+:root[data-theme] .notification-switch-track {
+  display: block;
+  position: relative;
+  width: 54px;
+  height: 32px;
+  border-radius: 18px;
+  background: var(--border);
+  pointer-events: none;
+  transition: background-color 140ms ease;
+}
+:root[data-theme] .notification-switch-track > span {
+  position: absolute;
+  left: 3px;
+  top: 3px;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 1px 4px #0003;
+  transition: transform 140ms ease;
+}
+:root[data-theme] .notification-switch[aria-checked="true"] .notification-switch-track {
+  background: var(--accent-ink);
+}
+:root[data-theme] .notification-switch[aria-checked="true"] .notification-switch-track > span {
+  transform: translateX(22px);
+}
+:root[data-theme] .notification-switch:disabled {
+  cursor: default;
+  opacity: 0.5;
 }
 :root[data-theme] .staff-shell .case-list-item > strong,
 :root[data-theme] .staff-shell .case-list-item > span {

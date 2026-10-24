@@ -10,7 +10,7 @@ const temp = new URL(`./.pages-${process.pid}.mjs`, import.meta.url);
 await build({
   stdin: {
     contents:
-      'export {ResidentCases,CaseDetail} from "./src/resident-cases.jsx";export {AccountPages} from "./src/account-pages.jsx";export {CommonProblems} from "./src/common-problems.jsx";export {CaseWorkflow} from "./src/warranty-workflow.jsx";export {useRoute,go} from "./src/navigation.jsx";',
+      'export {ResidentCases,CaseDetail} from "./src/resident-cases.jsx";export {AccountPages} from "./src/account-pages.jsx";export {OperationsInbox} from "./src/operations.jsx";export {CommonProblems} from "./src/common-problems.jsx";export {CaseWorkflow} from "./src/warranty-workflow.jsx";export {useRoute,go} from "./src/navigation.jsx";',
     resolveDir: fileURLToPath(new URL("../", import.meta.url)),
     loader: "jsx",
   },
@@ -45,8 +45,16 @@ function env(path) {
 const initialDom = env("/miniapp/home");
 globalThis.matchMedia = () => ({ matches: false, addEventListener() {}, removeEventListener() {} });
 const { createRoot } = await import("react-dom/client");
-const { ResidentCases, CaseDetail, AccountPages, CommonProblems, CaseWorkflow, useRoute, go } =
-  await import(temp.href);
+const {
+  ResidentCases,
+  CaseDetail,
+  AccountPages,
+  OperationsInbox,
+  CommonProblems,
+  CaseWorkflow,
+  useRoute,
+  go,
+} = await import(temp.href);
 initialDom.window.close();
 const house = { id: "h", address: "Казань, ул. Баумана, 12" };
 const ctx = {
@@ -58,6 +66,97 @@ const ctx = {
 };
 const flush = () => new Promise((r) => setTimeout(r, 0));
 try {
+  await test("notification controls toggle all four settings and retain server values after remount", async () => {
+    const dom = env("/miniapp/notifications");
+    let prefs = { caseUpdates: false },
+      subscription = { mass_problems: false, notices: false, payments: false };
+    const api = async (role, path, options = {}) => {
+      if (path === "/v1/me/preferences") {
+        if (options.method === "PUT") prefs = JSON.parse(options.body);
+        return prefs;
+      }
+      if (path.endsWith("/operations/subscription")) {
+        const body = JSON.parse(options.body);
+        subscription = {
+          mass_problems: body.massProblems,
+          notices: body.notices,
+          payments: body.payments,
+        };
+        return subscription;
+      }
+      if (path.endsWith("/operations")) return { subscription };
+      return {
+        "/v1/me/profile": { displayName: "Житель" },
+        "/v1/access/me": [{ role: "RESIDENT" }],
+        "/v1/access/config": { demoMode: false },
+        "/v1/guided-demo": { active: false },
+        "/v1/workflow/houses": [],
+        "/v1/exchange/inbox": [],
+      }[path];
+    };
+    function Harness() {
+      return React.createElement(AccountPages, {
+        route: useRoute(),
+        api,
+        role: "true",
+        houses: [house],
+        selectedHouseId: "h",
+      });
+    }
+    const render = async () => {
+      const root = createRoot(document.getElementById("root"));
+      await act(async () => {
+        root.render(React.createElement(Harness));
+        await flush();
+      });
+      return root;
+    };
+    let root = await render();
+    assert.equal(document.querySelectorAll('[role="switch"]').length, 4);
+    for (const control of document.querySelectorAll('[role="switch"]')) {
+      assert.equal(control.tagName, "BUTTON");
+      await act(async () => {
+        control.click();
+        await flush();
+      });
+      assert.equal(control.getAttribute("aria-checked"), "true");
+    }
+    assert.deepEqual(prefs, { caseUpdates: true });
+    assert.deepEqual(subscription, { mass_problems: true, notices: true, payments: true });
+    await act(async () => root.unmount());
+    root = await render();
+    assert.equal(document.querySelectorAll('[role="switch"][aria-checked="true"]').length, 4);
+    await act(async () => root.unmount());
+    dom.window.close();
+  });
+  await test("staff reminders close on outside pointer and Escape, but not a click inside", async () => {
+    const dom = env("/dispatcher/queue");
+    const root = createRoot(document.getElementById("root"));
+    await act(async () => {
+      root.render(
+        React.createElement(OperationsInbox, {
+          api: async () => [],
+          role: "dispatcher",
+          onOpen: () => {},
+        }),
+      );
+      await flush();
+    });
+    const popup = document.querySelector("details");
+    popup.open = true;
+    popup.querySelector("p").dispatchEvent(new dom.window.Event("pointerdown", { bubbles: true }));
+    assert.equal(popup.open, true);
+    document.body.dispatchEvent(new dom.window.Event("pointerdown", { bubbles: true }));
+    assert.equal(popup.open, false);
+    popup.open = true;
+    document.dispatchEvent(
+      new dom.window.KeyboardEvent("keydown", { key: "Escape", bubbles: true }),
+    );
+    assert.equal(popup.open, false);
+    assert.equal(document.activeElement, popup.querySelector("summary"));
+    await act(async () => root.unmount());
+    dom.window.close();
+  });
   await test("resident visit page shows warranty inspections and confirms time without exposing staff controls", async () => {
     const dom = env("/miniapp/cases/c/visits");
     const item = {

@@ -1,7 +1,7 @@
 import { PageRow } from "./account-pages.jsx";
 import { go } from "./navigation.jsx";
 import { Bell } from "@phosphor-icons/react";
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import "./operations.css";
 const date = (v) =>
   v
@@ -1348,6 +1348,24 @@ export function OperationsManagement({ houseId, role, api }) {
 export function OperationsInbox({ api, role, onOpen }) {
   const [items, setItems] = useState([]),
     [notice, setNotice] = useState("");
+  const popup = useRef(null);
+  useEffect(() => {
+    const outside = (event) => {
+      if (popup.current?.open && !popup.current.contains(event.target)) popup.current.open = false;
+    };
+    const escape = (event) => {
+      if (event.key === "Escape" && popup.current?.open) {
+        popup.current.open = false;
+        popup.current.querySelector("summary")?.focus();
+      }
+    };
+    document.addEventListener("pointerdown", outside);
+    document.addEventListener("keydown", escape);
+    return () => {
+      document.removeEventListener("pointerdown", outside);
+      document.removeEventListener("keydown", escape);
+    };
+  }, []);
   async function load() {
     setItems(await api(role, "/v1/operations-notifications"));
   }
@@ -1355,7 +1373,7 @@ export function OperationsInbox({ api, role, onOpen }) {
     load().catch(() => {});
   }, [role]);
   return (
-    <details className="case-panel case-workspace ops-inbox">
+    <details ref={popup} className="case-panel case-workspace ops-inbox">
       <summary
         aria-label={`Напоминания и обновления · ${items.filter((i) => !i.read_at).length} непрочитанных`}
       >

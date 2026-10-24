@@ -1,4 +1,3 @@
-import { Switch } from "@maxhub/max-ui";
 import React, { useEffect, useState } from "react";
 import {
   ArrowLeft,
@@ -17,6 +16,23 @@ import {
 } from "@phosphor-icons/react";
 import { AppearancePicker, housePresentation } from "./design.jsx";
 import { go, back } from "./navigation.jsx";
+function NotificationSwitch({ label, checked, disabled, onChange }) {
+  return (
+    <button
+      className="notification-switch"
+      type="button"
+      role="switch"
+      aria-label={label}
+      aria-checked={checked}
+      disabled={disabled}
+      onClick={() => onChange(!checked)}
+    >
+      <span className="notification-switch-track" aria-hidden="true">
+        <span />
+      </span>
+    </button>
+  );
+}
 export function PageTitle({ children, subtitle, root = false }) {
   return (
     <>
@@ -352,13 +368,12 @@ export function AccountPages({
             title="Обновления по моим обращениям"
             subtitle="Ответы сотрудников и следующие шаги"
           >
-            <Switch
-              role="switch"
-              aria-label="Обновления по моим обращениям"
+            <NotificationSwitch
+              label="Обновления по моим обращениям"
               checked={!!prefs?.caseUpdates}
               disabled={busy || !prefs}
-              onChange={(e) =>
-                update("/v1/me/preferences", { caseUpdates: e.target.checked }, setPrefs)
+              onChange={(checked) =>
+                update("/v1/me/preferences", { caseUpdates: checked }, setPrefs)
               }
             />
           </PageRow>
@@ -369,13 +384,12 @@ export function AccountPages({
             ["payments", "Изменения тарифов"],
           ].map(([key, label]) => (
             <PageRow key={key} icon={Bell} title={label}>
-              <Switch
-                role="switch"
-                aria-label={label}
+              <NotificationSwitch
+                label={label}
                 checked={!!subscription?.[key]}
                 disabled={busy || !subscription}
-                onChange={(e) => {
-                  const next = { ...subscription, [key]: e.target.checked };
+                onChange={(checked) => {
+                  const next = { ...subscription, [key]: checked };
                   update(
                     `/v1/houses/${selectedHouseId}/operations/subscription`,
                     {
