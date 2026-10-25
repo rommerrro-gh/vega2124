@@ -22,7 +22,7 @@ class CaseMigrationUpgradeTest {
                     "INSERT INTO resident_cases(id,house_id,author_id,kind,status,description,client_request_id,request_hash,next_step,due_at,revision,created_at,updated_at) VALUES ('c','demo-house-1','demo-resident-1','PAYMENT','WAITING_RESIDENT','Мой вопрос','r','hash','Нужна квитанция','2026-11-01T10:00:00Z',7,'2026-10-21','2026-10-21')");
         }
         assertEquals(
-                1, Flyway.configure().dataSource(url, "", "").load().migrate().migrationsExecuted);
+                2, Flyway.configure().dataSource(url, "", "").load().migrate().migrationsExecuted);
         try (var c = DriverManager.getConnection(url);
                 var st = c.createStatement()) {
             try (var r =
@@ -62,7 +62,7 @@ class CaseMigrationUpgradeTest {
                     "INSERT INTO resident_cases(id,house_id,author_id,kind,status,description,client_request_id,request_hash,next_step,created_at,updated_at) VALUES ('c','h','u','PROBLEM','IN_PROGRESS','Личные сведения','r','hash','Осмотр','2026-10-21','2026-10-21')");
         }
         assertEquals(
-                5, Flyway.configure().dataSource(url, "", "").load().migrate().migrationsExecuted);
+                6, Flyway.configure().dataSource(url, "", "").load().migrate().migrationsExecuted);
         try (var c = DriverManager.getConnection(url);
                 var s = c.createStatement()) {
             for (String table : new String[] {"max_bot_outbox"})
@@ -99,7 +99,7 @@ class CaseMigrationUpgradeTest {
                     "INSERT INTO resident_cases(id,house_id,author_id,kind,status,description,client_request_id,request_hash,next_step,created_at,updated_at) VALUES ('c','h','u','PROBLEM','IN_PROGRESS','Исходные сведения','r','hash','Осмотр','2026-10-21','2026-10-21')");
         }
         assertEquals(
-                6, Flyway.configure().dataSource(url, "", "").load().migrate().migrationsExecuted);
+                7, Flyway.configure().dataSource(url, "", "").load().migrate().migrationsExecuted);
         try (var c = DriverManager.getConnection(url);
                 var st = c.createStatement()) {
             try (var r = st.executeQuery("SELECT description FROM resident_cases WHERE id='c'")) {
@@ -129,7 +129,7 @@ class CaseMigrationUpgradeTest {
         String url = "jdbc:sqlite:" + Files.createTempFile("pulse-exchange-upgrade-", ".db");
         Flyway.configure().dataSource(url, "", "").target("17").load().migrate();
         assertEquals(
-                7, Flyway.configure().dataSource(url, "", "").load().migrate().migrationsExecuted);
+                8, Flyway.configure().dataSource(url, "", "").load().migrate().migrationsExecuted);
         try (var c = DriverManager.getConnection(url);
                 var st = c.createStatement()) {
             for (String table :
@@ -172,7 +172,7 @@ class CaseMigrationUpgradeTest {
                     "INSERT INTO max_bot_draft_files(id,user_id,draft_id,title,mime,content,created_at) VALUES ('file','resident','draft','Квитанция','application/pdf',X'010203','2026-10-21')");
         }
         assertEquals(
-                8, Flyway.configure().dataSource(url, "", "").load().migrate().migrationsExecuted);
+                9, Flyway.configure().dataSource(url, "", "").load().migrate().migrationsExecuted);
         try (var c = DriverManager.getConnection(url);
                 var st = c.createStatement()) {
             try (var r =
@@ -223,7 +223,7 @@ class CaseMigrationUpgradeTest {
                     "INSERT INTO house_warranties(id,house_id,title,object_type,state,basis,created_at,updated_at) VALUES ('w','house','Объект','OTHER','DRAFT','Документ','2026-10-20','2026-10-20')");
         }
         assertEquals(
-                9, Flyway.configure().dataSource(url, "", "").load().migrate().migrationsExecuted);
+                10, Flyway.configure().dataSource(url, "", "").load().migrate().migrationsExecuted);
         try (var c = DriverManager.getConnection(url);
                 var st = c.createStatement()) {
             for (String table :
@@ -259,7 +259,7 @@ class CaseMigrationUpgradeTest {
                     "INSERT INTO case_collaborators(case_id,user_id,function,assigned_by,created_at) VALUES ('case','engineer','ENGINEER','resident','2026-10-20')");
         }
         assertEquals(
-                10, Flyway.configure().dataSource(url, "", "").load().migrate().migrationsExecuted);
+                11, Flyway.configure().dataSource(url, "", "").load().migrate().migrationsExecuted);
         try (var c = DriverManager.getConnection(url);
                 var s = c.createStatement()) {
             s.execute(
@@ -295,7 +295,7 @@ class CaseMigrationUpgradeTest {
                     "INSERT INTO case_events(id,case_id,actor_id,type,text,created_at) VALUES ('event','case','resident','MESSAGE','История сохранена','2026-10-20')");
         }
         assertEquals(
-                11, Flyway.configure().dataSource(url, "", "").load().migrate().migrationsExecuted);
+                12, Flyway.configure().dataSource(url, "", "").load().migrate().migrationsExecuted);
         try (var c = DriverManager.getConnection(url);
                 var s = c.createStatement();
                 var r =
@@ -322,7 +322,7 @@ class CaseMigrationUpgradeTest {
                     "INSERT INTO reports(id,house_id,author_id,raw_text,created_at) VALUES ('existing-report','existing-house','existing-user','Сохранённое обращение','2026-10-01T00:00:00Z')");
         }
         var updated = Flyway.configure().dataSource(url, "", "").load();
-        assertEquals(12, updated.migrate().migrationsExecuted);
+        assertEquals(13, updated.migrate().migrationsExecuted);
         updated.validate();
         try (var c = DriverManager.getConnection(url);
                 var s = c.createStatement()) {

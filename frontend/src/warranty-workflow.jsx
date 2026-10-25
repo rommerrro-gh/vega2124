@@ -399,144 +399,18 @@ export function WarrantyRegistry({ houseId, role, api, headers, canManage = fals
   );
 }
 
-export function WorkflowStaff({ houseId, role, api }) {
-  const [staff, setStaff] = useState([]),
-    [invites, setInvites] = useState([]),
-    [token, setToken] = useState(""),
-    [username, setUsername] = useState(""),
-    [notice, setNotice] = useState(""),
-    [busy, setBusy] = useState(false);
-  async function load() {
-    const [s, i] = await Promise.all([
-      api(role, `/v1/houses/${houseId}/workflow/staff`),
-      api(role, `/v1/houses/${houseId}/workflow/invitations`),
-    ]);
-    setStaff(s);
-    setInvites(i);
-  }
-  useEffect(() => {
-    setToken("");
-    setNotice("");
-    load().catch((e) => setNotice(e.message));
-    api(role, "/v1/access/config")
-      .then((c) => setUsername(c.botUsername || ""))
-      .catch(() => {});
-  }, [houseId, role]);
-  async function action(path, body) {
-    setBusy(true);
-    setNotice("");
-    try {
-      const r = await api(role, path, {
-        method: "POST",
-        ...(body ? { body: JSON.stringify(body) } : {}),
-      });
-      if (r?.token) setToken(r.token);
-      await load();
-    } catch (e) {
-      setNotice(e.message);
-    } finally {
-      setBusy(false);
-    }
-  }
-  const link = token
-    ? username
-      ? `https://max.ru/${username}?startapp=${token}`
-      : `${location.origin}/work/index.html?invite=${token}`
-    : "";
+export function WorkflowStaff() {
   return (
-    <details className="case-panel">
-      <summary>Инженеры, гарантийная служба и исполнители</summary>
-      <p className="muted">
-        Служебное подключение не делает сотрудника жителем. Укажите согласованное участие
-        организации; материалы конкретного обращения откроются только после назначения в его
-        карточке. Это не подтверждает полномочия на юридическую подпись.
+    <section className="case-panel">
+      <h3>Команда организации</h3>
+      <p>
+        Приглашения, функции специалистов и назначение координаторов находятся в кабинете
+        администратора организации.
       </p>
-      <Notice>{notice}</Notice>
-      <button
-        disabled={busy}
-        type="button"
-        className="case-secondary"
-        onClick={() => action(`/v1/houses/${houseId}/workflow/staff/self`)}
-      >
-        Включить себе рабочую функцию координатора
+      <button className="case-link" onClick={() => go("/miniapp/roles")}>
+        Мои кабинеты
       </button>
-      <Form
-        fields={[
-          field("function", "Функция", "select", { options: opts(fn), value: "ENGINEER" }),
-          field("organizationLabel", "Организация / служба"),
-          field("authority", "Основание подключения и согласованные полномочия", "textarea", {
-            max: 1000,
-          }),
-          field("days", "Срок приглашения, дней", "number", { value: "7", min: 1, max: 14 }),
-        ]}
-        onSubmit={(d) =>
-          action(`/v1/houses/${houseId}/workflow/invitations`, { ...d, days: Number(d.days) })
-        }
-        busy={busy}
-        label="Создать приглашение"
-      />
-      {link && (
-        <div className="invite-token">
-          <strong>Ссылка для сотрудника</strong>
-          <code>{link}</code>
-          <button type="button" onClick={() => navigator.clipboard.writeText(link)}>
-            Скопировать
-          </button>
-          <p>Ссылка одноразовая. Передайте её нужному сотруднику.</p>
-        </div>
-      )}
-      {staff.map((s) => (
-        <div className="case-permission" key={`${s.userId}:${s.function}`}>
-          <span>
-            {s.name} · {fn[s.function]}
-            <small>
-              {s.organizationLabel} · {s.active ? "активен" : "доступ отозван"}
-            </small>
-          </span>
-          {s.active && (
-            <button
-              disabled={busy}
-              type="button"
-              className="case-link"
-              onClick={() =>
-                action(
-                  `/v1/houses/${houseId}/workflow/staff/${s.userId}/revoke?function=${s.function}`,
-                )
-              }
-            >
-              Отозвать
-            </button>
-          )}
-        </div>
-      ))}
-      <details>
-        <summary>Выданные приглашения · {invites.length}</summary>
-        {invites.map((i) => (
-          <div className="case-permission" key={i.id}>
-            <span>
-              {fn[i.function]} · {i.organizationLabel}
-              <small>
-                {i.revoked
-                  ? "Отозвано"
-                  : i.accepted
-                    ? "Использовано"
-                    : `Действует до ${date(i.expiresAt)}`}
-              </small>
-            </span>
-            {!i.revoked && !i.accepted && (
-              <button
-                type="button"
-                className="case-link"
-                disabled={busy}
-                onClick={() => action(`/v1/workflow/invitations/${i.id}/revoke`)}
-              >
-                Отозвать приглашение
-              </button>
-            )}
-          </div>
-        ))}
-      </details>
-    </details>
+    </section>
   );
 }
 

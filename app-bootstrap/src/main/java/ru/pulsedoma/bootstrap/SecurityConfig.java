@@ -63,7 +63,11 @@ public class SecurityConfig {
                                         .requestMatchers("/admin/**")
                                         .permitAll()
                                         .requestMatchers(
-                                                "/system/**", "/uk/**", "/work/**", "/exchange/**")
+                                                "/system/**",
+                                                "/uk/**",
+                                                "/work/**",
+                                                "/exchange/**",
+                                                "/organization/**")
                                         .permitAll()
                                         .requestMatchers(
                                                 "/actuator/health",

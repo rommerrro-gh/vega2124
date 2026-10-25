@@ -21,7 +21,8 @@ public class GlobalExceptionHandler {
     ResponseEntity<ErrorResponse> business(BusinessException e) {
         HttpStatus status =
                 switch (e.getCode()) {
-                    case "HOUSE_ACCESS_DENIED" -> HttpStatus.FORBIDDEN;
+                    case "HOUSE_ACCESS_DENIED", "ORGANIZATION_ACCESS_DENIED" ->
+                            HttpStatus.FORBIDDEN;
                     case "ISSUE_NOT_FOUND",
                                     "REPORT_NOT_FOUND",
                                     "ATTACHMENT_NOT_FOUND",

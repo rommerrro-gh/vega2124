@@ -34,7 +34,8 @@ public class ApplicationPagesController {
         admin,
         uk,
         system,
-        exchange
+        exchange,
+        organization
     }
 
     public enum WorkspacePage {
@@ -47,7 +48,16 @@ public class ApplicationPagesController {
         roles,
         notifications,
         help,
-        about
+        about,
+        overview,
+        team,
+        partners,
+        tasks,
+        documents,
+        cases,
+        access,
+        residents,
+        events
     }
 
     public enum CaseSection {
@@ -88,8 +98,9 @@ public class ApplicationPagesController {
 
     @GetMapping({
         "/{workspace:dispatcher|work}/{page:queue|work|control}",
-        "/{workspace:admin|uk|system|exchange}/{page:queue}",
-        "/{workspace:dispatcher|work|admin|uk|system|exchange}/{page:profile|settings|houses|roles|notifications|help|about}"
+        "/{workspace:organization}/{page:overview|team|partners|cases|tasks|documents|control}",
+        "/{workspace:admin|uk|system|exchange}/{page:queue|work|control|events|residents|access}",
+        "/{workspace:dispatcher|work|admin|uk|system|exchange|organization}/{page:profile|settings|houses|roles|notifications|help|about}"
     })
     public String workspace(@PathVariable Workspace workspace, @PathVariable WorkspacePage page) {
         return "forward:/" + workspace.name() + "/index.html";

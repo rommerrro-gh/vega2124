@@ -10,7 +10,7 @@ const temp = new URL(`./.pages-${process.pid}.mjs`, import.meta.url);
 await build({
   stdin: {
     contents:
-      'export {ResidentCases,CaseDetail} from "./src/resident-cases.jsx";export {AccountPages} from "./src/account-pages.jsx";export {OperationsInbox} from "./src/operations.jsx";export {CommonProblems} from "./src/common-problems.jsx";export {CaseWorkflow} from "./src/warranty-workflow.jsx";export {useRoute,go} from "./src/navigation.jsx";',
+      'export {OrganizationPortal,OrganizationNavigation} from "./src/organization-workspaces.jsx";export {ResidentCases,CaseDetail} from "./src/resident-cases.jsx";export {AccountPages} from "./src/account-pages.jsx";export {OperationsInbox} from "./src/operations.jsx";export {CommonProblems} from "./src/common-problems.jsx";export {CaseWorkflow} from "./src/warranty-workflow.jsx";export {useRoute,go} from "./src/navigation.jsx";',
     resolveDir: fileURLToPath(new URL("../", import.meta.url)),
     loader: "jsx",
   },
@@ -35,6 +35,7 @@ function env(path) {
     "Event",
     "CustomEvent",
     "HTMLElement",
+    "FormData",
   ])
     globalThis[k] = dom.window[k];
   globalThis.IS_REACT_ACT_ENVIRONMENT = true;
@@ -46,6 +47,8 @@ const initialDom = env("/miniapp/home");
 globalThis.matchMedia = () => ({ matches: false, addEventListener() {}, removeEventListener() {} });
 const { createRoot } = await import("react-dom/client");
 const {
+  OrganizationPortal,
+  OrganizationNavigation,
   ResidentCases,
   CaseDetail,
   AccountPages,
@@ -66,6 +69,91 @@ const ctx = {
 };
 const flush = () => new Promise((r) => setTimeout(r, 0));
 try {
+  await test("specialist sees actual assigned tasks and documents with four navigation tabs", async () => {
+    const dom = env("/organization/tasks?organizationId=o&workspaceRole=SPECIALIST");
+    const calls = [];
+    const api = async (role, path) => {
+      calls.push(path);
+      if (path === "/v1/organization-workspaces")
+        return [
+          {
+            id: "o",
+            name: "Стройсервис",
+            kind: "GENERAL_CONTRACTOR",
+            role: "SPECIALIST",
+            department: "Бригада",
+            functions: ["CONTRACTOR"],
+          },
+        ];
+      if (path.endsWith("/houses")) return [house];
+      if (path.includes("/cases?mode="))
+        return [
+          {
+            id: "c",
+            number: 1,
+            description: "Дверь не закрывается",
+            houseId: "h",
+            documents: [{ id: "d", title: "Акт", versions: [] }],
+          },
+        ];
+      if (path.includes("/tasks?mode="))
+        return [
+          {
+            id: "w",
+            caseId: "c",
+            kind: "WORK",
+            title: "Заменить доводчик",
+            description: "Дверь не закрывается",
+          },
+        ];
+      if (path.endsWith("case-context")) return ctx;
+      if (path === "/v1/cases/c") return { id: "c", description: "Дверь не закрывается" };
+      throw new Error(path);
+    };
+    const root = createRoot(document.getElementById("root"));
+    await act(async () => {
+      root.render(
+        React.createElement(OrganizationPortal, {
+          api,
+          renderCase: ({ item }) => React.createElement("p", null, "Карточка: " + item.description),
+        }),
+      );
+      await flush();
+      await flush();
+    });
+    assert.match(document.body.textContent, /Заменить доводчик/);
+    assert.equal(document.querySelectorAll("nav button").length, 4);
+    await act(async () => {
+      Array.from(document.querySelectorAll("button"))
+        .find((b) => b.textContent.includes("Заменить доводчик"))
+        .click();
+      await flush();
+    });
+    assert.match(document.body.textContent, /Карточка: Дверь не закрывается/);
+    assert.ok(calls.includes("/v1/organization-workspaces/o/tasks?mode=SPECIALIST"));
+    await act(async () => root.unmount());
+    dom.window.close();
+  });
+  await test("organization navigation retains its organization and selected cabinet", async () => {
+    const dom = env("/organization/team?organizationId=o&workspaceRole=ADMIN");
+    const { parseRoute } = await import("../src/page-router.mjs");
+    const root = createRoot(document.getElementById("root"));
+    await act(async () =>
+      root.render(
+        React.createElement(OrganizationNavigation, { route: parseRoute(location.href) }),
+      ),
+    );
+    const buttons = Array.from(document.querySelectorAll("button"));
+    assert.deepEqual(
+      buttons.map((b) => b.textContent),
+      ["Обзор", "Команда", "Партнёры", "Профиль"],
+    );
+    await act(async () => buttons[3].click());
+    assert.equal(location.pathname, "/organization/profile");
+    assert.equal(new URLSearchParams(location.search).get("organizationId"), "o");
+    await act(async () => root.unmount());
+    dom.window.close();
+  });
   await test("notification controls toggle all four settings and retain server values after remount", async () => {
     const dom = env("/miniapp/notifications");
     let prefs = { caseUpdates: false },

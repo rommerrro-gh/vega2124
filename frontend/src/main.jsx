@@ -1,3 +1,4 @@
+import { OrganizationPortal, OrganizationNavigation } from "./organization-workspaces.jsx";
 import { parseRoute } from "./page-router.mjs";
 import { go, goTab, useRoute, useMaxBack } from "./navigation.jsx";
 import { AccountPages, PageTitle, PageRow } from "./account-pages.jsx";
@@ -177,7 +178,7 @@ const rolePages = [
   ["RESIDENT", "Житель", "/miniapp/index.html"],
   ["DISPATCHER", "Диспетчер", "/dispatcher/index.html"],
   ["HOUSE_ADMIN", "Администратор дома", "/admin/index.html"],
-  ["UK_ADMIN", "Администратор УК", "/uk/index.html"],
+  ["UK_ADMIN", "Администратор организации", "/uk/index.html"],
   ["SYSTEM_ADMIN", "Системный администратор", "/system/index.html"],
 ];
 
@@ -196,7 +197,9 @@ function Brand({ role }) {
         type="button"
         className="brand brand-button"
         onClick={() =>
-          go(`/${route.workspace}/${route.workspace === "miniapp" ? "home" : "queue"}`)
+          go(
+            `/${route.workspace}/${route.workspace === "miniapp" ? "home" : route.workspace === "organization" ? (route.query.get("workspaceRole") === "ADMIN" ? "overview" : "cases") : "queue"}`,
+          )
         }
         aria-label="Пульс дома — главная"
       >
@@ -220,16 +223,6 @@ function Brand({ role }) {
             )
           }
         />
-      )}
-      {route.workspace !== "miniapp" && (
-        <button
-          type="button"
-          className="profile-button icon-button"
-          aria-label="Мой профиль"
-          onClick={() => go(`/${route.workspace}/profile`)}
-        >
-          <UserCircle size={34} />
-        </button>
       )}
     </header>
   );
@@ -1021,6 +1014,7 @@ function Resident() {
 }
 
 function Admin() {
+  const route = useRoute();
   const [houses, setHouses] = useState([]);
   const [houseId, setHouseId] = useState("");
   const [currentUserId, setCurrentUserId] = useState(null);
@@ -1247,294 +1241,300 @@ function Admin() {
               </select>
             </Field>
           </Card>
-          <Card>
-            <SectionHeading
-              number="02"
-              title="Контакты"
-              subtitle="Локальные сведения с датой изменения в паспорте дома"
-            />
-            <div className="item-list">
-              {contacts.map((contact) => (
-                <div className="admin-row" key={contact.id}>
-                  <div>
-                    <strong>{contact.title}</strong>
-                    <small>
-                      {contact.type === "EMERGENCY" ? "Аварийный" : "Местный"} · {contact.phone}
-                    </small>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setEditingId(contact.id);
-                      setContactType(contact.type);
-                      setTitle(contact.title);
-                      setPhone(contact.phone);
-                      setDetails(contact.details || "");
-                    }}
-                  >
-                    Изменить
-                  </button>
-                  <button type="button" disabled={busy} onClick={() => removeContact(contact.id)}>
-                    Удалить
-                  </button>
-                </div>
-              ))}
-            </div>
-            <form onSubmit={saveContact} className="admin-form">
-              <h3>{editingId ? "Изменить контакт" : "Добавить контакт"}</h3>
-              <p className="hint">Указывайте только публичные телефоны служб дома.</p>
-              <Field id="contact-type" label="Тип">
-                <select
-                  id="contact-type"
-                  value={contactType}
-                  onChange={(event) => setContactType(event.target.value)}
-                >
-                  <option value="EMERGENCY">Аварийный</option>
-                  <option value="LOCAL">Местный</option>
-                </select>
-              </Field>
-              <Field id="contact-title" label="Название">
-                <input
-                  id="contact-title"
-                  value={title}
-                  onChange={(event) => setTitle(event.target.value)}
-                  maxLength="120"
-                  required
-                />
-              </Field>
-              <Field id="contact-phone" label="Телефон">
-                <input
-                  id="contact-phone"
-                  type="tel"
-                  value={phone}
-                  onChange={(event) => setPhone(event.target.value)}
-                  maxLength="40"
-                  pattern="[+0-9() .-]{2,40}"
-                  required
-                />
-              </Field>
-              <Field id="contact-details" label="Примечание">
-                <textarea
-                  id="contact-details"
-                  value={details}
-                  onChange={(event) => setDetails(event.target.value)}
-                  maxLength="500"
-                />
-              </Field>
-              <Button
-                mode="primary"
-                className="brand-button"
-                type="submit"
-                stretched
-                disabled={busy}
-              >
-                {editingId ? "Сохранить изменения" : "Добавить контакт"}
-              </Button>
-              {editingId && (
-                <Button mode="tertiary" type="button" stretched onClick={resetContact}>
-                  Отмена
-                </Button>
-              )}
-            </form>
-          </Card>
-          <Card>
-            <SectionHeading
-              number="03"
-              title="Приглашения"
-              subtitle="Ссылка добавляет жителя только в выбранный дом"
-            />
-            <form onSubmit={createInvitation} className="admin-form">
-              <div className="field-grid">
-                <Field id="invite-days" label="Срок, дней">
-                  <input
-                    id="invite-days"
-                    type="number"
-                    min="1"
-                    max="30"
-                    value={days}
-                    onChange={(event) => setDays(event.target.value)}
-                    required
-                  />
-                </Field>
-                <Field id="invite-limit" label="Число активаций">
-                  <input
-                    id="invite-limit"
-                    type="number"
-                    min="1"
-                    max="100"
-                    value={activationLimit}
-                    onChange={(event) => setActivationLimit(event.target.value)}
-                    required
-                  />
-                </Field>
-              </div>
-              <Button
-                mode="primary"
-                className="brand-button"
-                type="submit"
-                stretched
-                disabled={busy}
-              >
-                Создать приглашение
-              </Button>
-            </form>
-            <InvitationToken token={createdToken} />
-            <div className="item-list admin-invitations">
-              {invitations
-                .filter(
-                  (invitation) =>
-                    invitation.role === "RESIDENT" &&
-                    invitation.houses.some((house) => house.id === houseId),
-                )
-                .map((invitation) => (
-                  <div className="admin-row" key={invitation.id}>
+          {route.page === "queue" && (
+            <Card>
+              <SectionHeading
+                number="02"
+                title="Контакты"
+                subtitle="Локальные сведения с датой изменения в паспорте дома"
+              />
+              <div className="item-list">
+                {contacts.map((contact) => (
+                  <div className="admin-row" key={contact.id}>
                     <div>
-                      <strong>
-                        {invitation.revokedAt
-                          ? "Отозвано"
-                          : new Date(invitation.expiresAt) < new Date()
-                            ? "Истекло"
-                            : "Активно"}
-                      </strong>
+                      <strong>{contact.title}</strong>
                       <small>
-                        До {passportDate(invitation.expiresAt)} · использовано{" "}
-                        {invitation.activationCount} из {invitation.activationLimit}
+                        {contact.type === "EMERGENCY" ? "Аварийный" : "Местный"} · {contact.phone}
                       </small>
                     </div>
-                    {!invitation.revokedAt && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setEditingId(contact.id);
+                        setContactType(contact.type);
+                        setTitle(contact.title);
+                        setPhone(contact.phone);
+                        setDetails(contact.details || "");
+                      }}
+                    >
+                      Изменить
+                    </button>
+                    <button type="button" disabled={busy} onClick={() => removeContact(contact.id)}>
+                      Удалить
+                    </button>
+                  </div>
+                ))}
+              </div>
+              <form onSubmit={saveContact} className="admin-form">
+                <h3>{editingId ? "Изменить контакт" : "Добавить контакт"}</h3>
+                <p className="hint">Указывайте только публичные телефоны служб дома.</p>
+                <Field id="contact-type" label="Тип">
+                  <select
+                    id="contact-type"
+                    value={contactType}
+                    onChange={(event) => setContactType(event.target.value)}
+                  >
+                    <option value="EMERGENCY">Аварийный</option>
+                    <option value="LOCAL">Местный</option>
+                  </select>
+                </Field>
+                <Field id="contact-title" label="Название">
+                  <input
+                    id="contact-title"
+                    value={title}
+                    onChange={(event) => setTitle(event.target.value)}
+                    maxLength="120"
+                    required
+                  />
+                </Field>
+                <Field id="contact-phone" label="Телефон">
+                  <input
+                    id="contact-phone"
+                    type="tel"
+                    value={phone}
+                    onChange={(event) => setPhone(event.target.value)}
+                    maxLength="40"
+                    pattern="[+0-9() .-]{2,40}"
+                    required
+                  />
+                </Field>
+                <Field id="contact-details" label="Примечание">
+                  <textarea
+                    id="contact-details"
+                    value={details}
+                    onChange={(event) => setDetails(event.target.value)}
+                    maxLength="500"
+                  />
+                </Field>
+                <Button
+                  mode="primary"
+                  className="brand-button"
+                  type="submit"
+                  stretched
+                  disabled={busy}
+                >
+                  {editingId ? "Сохранить изменения" : "Добавить контакт"}
+                </Button>
+                {editingId && (
+                  <Button mode="tertiary" type="button" stretched onClick={resetContact}>
+                    Отмена
+                  </Button>
+                )}
+              </form>
+            </Card>
+          )}
+          {route.page === "residents" && (
+            <Card>
+              <SectionHeading
+                number="03"
+                title="Приглашения"
+                subtitle="Ссылка добавляет жителя только в выбранный дом"
+              />
+              <form onSubmit={createInvitation} className="admin-form">
+                <div className="field-grid">
+                  <Field id="invite-days" label="Срок, дней">
+                    <input
+                      id="invite-days"
+                      type="number"
+                      min="1"
+                      max="30"
+                      value={days}
+                      onChange={(event) => setDays(event.target.value)}
+                      required
+                    />
+                  </Field>
+                  <Field id="invite-limit" label="Число активаций">
+                    <input
+                      id="invite-limit"
+                      type="number"
+                      min="1"
+                      max="100"
+                      value={activationLimit}
+                      onChange={(event) => setActivationLimit(event.target.value)}
+                      required
+                    />
+                  </Field>
+                </div>
+                <Button
+                  mode="primary"
+                  className="brand-button"
+                  type="submit"
+                  stretched
+                  disabled={busy}
+                >
+                  Создать приглашение
+                </Button>
+              </form>
+              <InvitationToken token={createdToken} />
+              <div className="item-list admin-invitations">
+                {invitations
+                  .filter(
+                    (invitation) =>
+                      invitation.role === "RESIDENT" &&
+                      invitation.houses.some((house) => house.id === houseId),
+                  )
+                  .map((invitation) => (
+                    <div className="admin-row" key={invitation.id}>
+                      <div>
+                        <strong>
+                          {invitation.revokedAt
+                            ? "Отозвано"
+                            : new Date(invitation.expiresAt) < new Date()
+                              ? "Истекло"
+                              : "Активно"}
+                        </strong>
+                        <small>
+                          До {passportDate(invitation.expiresAt)} · использовано{" "}
+                          {invitation.activationCount} из {invitation.activationLimit}
+                        </small>
+                      </div>
+                      {!invitation.revokedAt && (
+                        <button
+                          type="button"
+                          disabled={busy}
+                          onClick={() => revokeInvitation(invitation.id)}
+                        >
+                          Отозвать
+                        </button>
+                      )}
+                    </div>
+                  ))}
+              </div>
+              <h3>Жители дома</h3>
+              <p className="hint">
+                Здесь управляют только ролью жителя. Другие роли пользователя сохраняются.
+              </p>
+              <div className="item-list">
+                {residents.map((item) => (
+                  <div className="admin-row" key={item.userId}>
+                    <div>
+                      <strong>{item.displayName}</strong>
+                      <small>
+                        {item.status}
+                        {item.userId === currentUserId ? " · вы" : ""}
+                      </small>
+                    </div>
+                    {item.status === "ACTIVE" && currentUserId && item.userId !== currentUserId && (
                       <button
                         type="button"
                         disabled={busy}
-                        onClick={() => revokeInvitation(invitation.id)}
+                        onClick={() => revokeResident(item.userId)}
                       >
-                        Отозвать
+                        Отозвать роль жителя
                       </button>
                     )}
                   </div>
                 ))}
-            </div>
-            <h3>Жители дома</h3>
-            <p className="hint">
-              Здесь управляют только ролью жителя. Другие роли пользователя сохраняются.
-            </p>
-            <div className="item-list">
-              {residents.map((item) => (
-                <div className="admin-row" key={item.userId}>
-                  <div>
-                    <strong>{item.displayName}</strong>
-                    <small>
-                      {item.status}
-                      {item.userId === currentUserId ? " · вы" : ""}
-                    </small>
-                  </div>
-                  {item.status === "ACTIVE" && currentUserId && item.userId !== currentUserId && (
+              </div>
+            </Card>
+          )}
+          {route.page === "events" && (
+            <Card>
+              <SectionHeading
+                number="04"
+                title="Предварительные опросы"
+                subtitle="Узнайте мнение жителей выбранного дома"
+              />
+              <form onSubmit={createPoll} className="admin-form">
+                <Field id="poll-question" label="Вопрос">
+                  <textarea
+                    id="poll-question"
+                    value={pollQuestion}
+                    onChange={(event) => setPollQuestion(event.target.value)}
+                    maxLength="500"
+                    required
+                  />
+                </Field>
+                <div className="poll-option-editor">
+                  <strong>Варианты ответа</strong>
+                  {pollOptions.map((value, index) => (
+                    <div className="poll-option-edit-row" key={index}>
+                      <label htmlFor={`poll-option-${index}`}>{index + 1}</label>
+                      <input
+                        id={`poll-option-${index}`}
+                        value={value}
+                        maxLength="200"
+                        required
+                        placeholder={`Вариант ${index + 1}`}
+                        onChange={(event) =>
+                          setPollOptions((current) =>
+                            current.map((item, position) =>
+                              position === index ? event.target.value : item,
+                            ),
+                          )
+                        }
+                      />
+                      {pollOptions.length > 2 && (
+                        <button
+                          className="option-control option-control-remove"
+                          type="button"
+                          aria-label={`Удалить вариант ${index + 1}`}
+                          onClick={() =>
+                            setPollOptions((current) =>
+                              current.filter((_, position) => position !== index),
+                            )
+                          }
+                        >
+                          −
+                        </button>
+                      )}
+                    </div>
+                  ))}
+                  {pollOptions.length < 20 && (
                     <button
+                      className="option-control option-control-add"
                       type="button"
-                      disabled={busy}
-                      onClick={() => revokeResident(item.userId)}
+                      onClick={() => setPollOptions((current) => [...current, ""])}
                     >
-                      Отозвать роль жителя
+                      <span aria-hidden="true">+</span> Добавить вариант
                     </button>
                   )}
                 </div>
-              ))}
-            </div>
-          </Card>
-          <Card>
-            <SectionHeading
-              number="04"
-              title="Предварительные опросы"
-              subtitle="Узнайте мнение жителей выбранного дома"
-            />
-            <form onSubmit={createPoll} className="admin-form">
-              <Field id="poll-question" label="Вопрос">
-                <textarea
-                  id="poll-question"
-                  value={pollQuestion}
-                  onChange={(event) => setPollQuestion(event.target.value)}
-                  maxLength="500"
-                  required
-                />
-              </Field>
-              <div className="poll-option-editor">
-                <strong>Варианты ответа</strong>
-                {pollOptions.map((value, index) => (
-                  <div className="poll-option-edit-row" key={index}>
-                    <label htmlFor={`poll-option-${index}`}>{index + 1}</label>
-                    <input
-                      id={`poll-option-${index}`}
-                      value={value}
-                      maxLength="200"
-                      required
-                      placeholder={`Вариант ${index + 1}`}
-                      onChange={(event) =>
-                        setPollOptions((current) =>
-                          current.map((item, position) =>
-                            position === index ? event.target.value : item,
-                          ),
-                        )
-                      }
-                    />
-                    {pollOptions.length > 2 && (
-                      <button
-                        className="option-control option-control-remove"
-                        type="button"
-                        aria-label={`Удалить вариант ${index + 1}`}
-                        onClick={() =>
-                          setPollOptions((current) =>
-                            current.filter((_, position) => position !== index),
-                          )
-                        }
-                      >
-                        −
-                      </button>
-                    )}
-                  </div>
+                <Field id="poll-close" label="Закрыть опрос">
+                  <input
+                    id="poll-close"
+                    type="datetime-local"
+                    value={pollClose}
+                    onChange={(event) => setPollClose(event.target.value)}
+                    required
+                  />
+                </Field>
+                <label className="poll-check">
+                  <input
+                    type="checkbox"
+                    checked={hidePollResults}
+                    onChange={(event) => setHidePollResults(event.target.checked)}
+                  />{" "}
+                  Показывать итоги только после закрытия
+                </label>
+                <p className="hint">Опрос не заменяет официальное голосование собственников.</p>
+                <Button
+                  mode="primary"
+                  className="brand-button"
+                  type="submit"
+                  stretched
+                  disabled={busy}
+                >
+                  Создать опрос
+                </Button>
+              </form>
+              <div className="poll-list admin-poll-list">
+                {polls.map((poll) => (
+                  <PollCard key={poll.id} poll={poll} />
                 ))}
-                {pollOptions.length < 20 && (
-                  <button
-                    className="option-control option-control-add"
-                    type="button"
-                    onClick={() => setPollOptions((current) => [...current, ""])}
-                  >
-                    <span aria-hidden="true">+</span> Добавить вариант
-                  </button>
-                )}
               </div>
-              <Field id="poll-close" label="Закрыть опрос">
-                <input
-                  id="poll-close"
-                  type="datetime-local"
-                  value={pollClose}
-                  onChange={(event) => setPollClose(event.target.value)}
-                  required
-                />
-              </Field>
-              <label className="poll-check">
-                <input
-                  type="checkbox"
-                  checked={hidePollResults}
-                  onChange={(event) => setHidePollResults(event.target.checked)}
-                />{" "}
-                Показывать итоги только после закрытия
-              </label>
-              <p className="hint">Опрос не заменяет официальное голосование собственников.</p>
-              <Button
-                mode="primary"
-                className="brand-button"
-                type="submit"
-                stretched
-                disabled={busy}
-              >
-                Создать опрос
-              </Button>
-            </form>
-            <div className="poll-list admin-poll-list">
-              {polls.map((poll) => (
-                <PollCard key={poll.id} poll={poll} />
-              ))}
-            </div>
-          </Card>
+            </Card>
+          )}
         </div>
       )}
       <footer>
@@ -1698,6 +1698,30 @@ function InvitationGate() {
       }
     }
   }, [token, dismissed]);
+  useEffect(() => {
+    if (
+      token ||
+      !["/", "/miniapp/index.html"].includes(location.pathname) ||
+      new URLSearchParams(location.search).get("view") === "resident"
+    )
+      return;
+    let active = true;
+    Promise.all([api(role, "/v1/access/me"), api(role, "/v1/organization-workspaces")])
+      .then(([access, spaces]) => {
+        if (active && !access.some((a) => a.role === "RESIDENT") && spaces.length) {
+          const w = spaces[0];
+          go(
+            spaces.length === 1
+              ? `/organization/${w.role === "ADMIN" ? "overview" : "cases"}?organizationId=${encodeURIComponent(w.id)}&workspaceRole=${w.role}`
+              : "/miniapp/roles",
+          );
+        }
+      })
+      .catch(() => {});
+    return () => {
+      active = false;
+    };
+  }, [token, role]);
   if (!token) return <Resident />;
   function continueToRole() {
     if (invitation.role === "UK_ADMIN") {
@@ -2124,7 +2148,7 @@ function SystemAdmin() {
   );
 }
 
-function UkAdmin() {
+function UkAdmin({ embedded = false, fixedOrganizationId = "" }) {
   const [organizations, setOrganizations] = useState([]);
   const [organizationId, setOrganizationId] = useState("");
   const [role, setRole] = useState("DISPATCHER");
@@ -2138,13 +2162,14 @@ function UkAdmin() {
   useEffect(() => {
     Promise.all([request("/v1/access/my-organizations"), request("/v1/access/invitations")])
       .then(([list, issued]) => {
+        list = fixedOrganizationId ? list.filter((o) => o.id === fixedOrganizationId) : list;
         setOrganizations(list);
         setInvitations(issued);
         if (list.length) setOrganizationId(list[0].id);
         else setNotice("Нет доступа администратора УК.");
       })
       .catch((error) => setNotice(error.message));
-  }, []);
+  }, [fixedOrganizationId]);
   useEffect(() => {
     if (organizationId)
       request(`/v1/access/organizations/${organizationId}/assignments`)
@@ -2212,19 +2237,21 @@ function UkAdmin() {
     }
   }
   return (
-    <main className="shell staff-shell">
-      <Brand role="Администратору УК" />
-      <section className="hero">
-        <div className="hero-copy">
-          <div className="hero-kicker">
-            <span className="live-dot" /> Кабинет администратора УК
+    <div className={embedded ? "legacy-house-team" : "shell staff-shell"}>
+      {!embedded && <Brand role="Администратору УК" />}
+      {!embedded && (
+        <section className="hero">
+          <div className="hero-copy">
+            <div className="hero-kicker">
+              <span className="live-dot" /> Кабинет администратора УК
+            </div>
+            <h1>Команда УК</h1>
+            <p>Приглашайте диспетчеров и администраторов назначенных домов.</p>
           </div>
-          <h1>Команда УК</h1>
-          <p>Приглашайте диспетчеров и администраторов назначенных домов.</p>
-        </div>
-      </section>
+        </section>
+      )}
       <Notice message={notice} />
-      {org?.houses?.length > 0 && caseHouseId && (
+      {!embedded && org?.houses?.length > 0 && caseHouseId && (
         <section className="case-panel case-workspace">
           <label>
             Дом для рассмотрения обращений
@@ -2257,7 +2284,7 @@ function UkAdmin() {
       )}
       <div className="content-grid">
         <Card>
-          <SectionHeading title="Пригласить сотрудника" />
+          <SectionHeading title="Пригласить сотрудника дома" />
           <Field id="uk-org" label="Управляющая компания">
             <select
               id="uk-org"
@@ -2328,8 +2355,8 @@ function UkAdmin() {
           </div>
         </Card>
       </div>
-      <StaffNavigation route={parseCurrentRoute()} />
-    </main>
+      {!embedded && <StaffNavigation route={parseCurrentRoute()} />}
+    </div>
   );
 }
 
@@ -2373,6 +2400,28 @@ function StaffAccount({ route }) {
   );
 }
 function StaffNavigation({ route }) {
+  if (["organization", "system"].includes(route.workspace))
+    return <OrganizationNavigation route={route} system={route.workspace === "system"} />;
+  if (route.workspace === "admin")
+    return (
+      <nav className="resident-navigation" aria-label="Рабочие разделы">
+        {[
+          ["queue", "Дом", House],
+          ["residents", "Жители", Users],
+          ["events", "События", ChartBar],
+          ["profile", "Профиль", UserCircle],
+        ].map(([id, label, Icon]) => (
+          <button
+            key={id}
+            aria-current={route.page === id ? "page" : undefined}
+            onClick={() => goTab(`/admin/${id}`)}
+          >
+            <Icon size={23} />
+            <span>{label}</span>
+          </button>
+        ))}
+      </nav>
+    );
   const admin = ["admin", "uk", "system", "exchange"].includes(route.workspace);
   return (
     <nav className="resident-navigation" aria-label="Рабочие разделы">
@@ -2412,7 +2461,7 @@ function App() {
       profile: "Профиль",
       settings: "Настройки",
       houses: "Мои дома",
-      roles: "Мои роли",
+      roles: "Мои кабинеты",
       notifications: "Уведомления",
       help: "Помощь",
       about: "О приложении",
@@ -2425,7 +2474,14 @@ function App() {
       shared: "Общая проблема",
       polls: "Опрос жителей",
       notices: "Событие дома",
-      queue: "Рабочая очередь",
+      queue: route.workspace === "system" ? "Организации" : "Рабочая очередь",
+      overview: "Обзор организации",
+      team: "Команда",
+      partners: "Партнёры",
+      tasks: "Мои задачи",
+      documents: "Документы",
+      access: "Доступы",
+      residents: "Жители",
       work: "Работы дома",
       control: "Контроль",
     };
@@ -2439,6 +2495,56 @@ function App() {
     return () => window.removeEventListener("pulse-access-changed", refresh);
   }, []);
   const path = location.pathname;
+  const orgInvite = route.query.get("invite") || window.WebApp?.initDataUnsafe?.start_param || "";
+  if (
+    (route.workspace === "organization" && !route.account) ||
+    (route.workspace === "system" && (!route.account || route.page === "houses")) ||
+    (route.workspace === "uk" && !route.account) ||
+    (orgInvite.startsWith("org_") && ["/", "/miniapp/index.html"].includes(path))
+  )
+    return (
+      <MaxUI key={revision} colorScheme={appearance.resolved}>
+        <OrganizationPortal
+          api={api}
+          inviteToken={
+            ["/", "/miniapp/index.html"].includes(path) && orgInvite.startsWith("org_")
+              ? orgInvite
+              : ""
+          }
+          system={route.workspace === "system"}
+          brand={
+            <Brand
+              role={route.workspace === "system" ? "Системный администратор" : "Рабочий кабинет"}
+            />
+          }
+          renderCase={(props) => <CaseDetail {...props} api={api} headers={authHeaders} />}
+          legacyTeam={(org) => <UkAdmin key={org} embedded fixedOrganizationId={org} />}
+          legacyCases={(houseId) => (
+            <>
+              <details className="case-panel">
+                <summary>Гарантийные сведения дома</summary>
+                <WarrantyRegistry
+                  houseId={houseId}
+                  role={route.query.get("demoSession") || "admin"}
+                  api={api}
+                  headers={authHeaders}
+                  canManage
+                />
+              </details>
+              <details className="case-panel">
+                <summary>Платежи и тарифы дома</summary>
+                <HouseTariffs
+                  houseId={houseId}
+                  role={route.query.get("demoSession") || "admin"}
+                  api={api}
+                  headers={authHeaders}
+                />
+              </details>
+            </>
+          )}
+        />
+      </MaxUI>
+    );
   if (route.workspace !== "miniapp" && route.account)
     return (
       <MaxUI key={revision} colorScheme={appearance.resolved}>

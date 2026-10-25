@@ -152,12 +152,11 @@ public class ResidentCaseService {
         if (!work(r, user)) return false;
         if (CaseKind.PAYMENT.name().equals(str(r, "kind")))
             return billing(str(r, "house_id"), user);
-        return dispatcher(str(r, "house_id"), user)
+        return access.coordinator(str(r, "id"), str(r, "house_id"), user)
                 || access.assigned(
                         str(r, "id"),
                         str(r, "house_id"),
                         user,
-                        CaseFunction.COORDINATOR,
                         CaseFunction.WARRANTY,
                         CaseFunction.BILLING);
     }
@@ -546,6 +545,16 @@ public class ResidentCaseService {
                                 && !billing(house, responsible))
                         || (kind == CaseKind.PAYMENT && !billing(house, responsible))))
             throw invalid("Сотрудник не имеет необходимого доступа к этому дому и направлению");
+        if (!Objects.equals(responsible, str(r, "responsible_user_id"))
+                && access.exists(
+                        "SELECT count(*) FROM organization_case_owners WHERE case_id=?",
+                        shared.root(id))
+                && (responsible == null
+                        || !access.exists(
+                                "SELECT count(*) FROM organization_case_owners o JOIN organization_team t ON t.organization_id=o.organization_id JOIN users u ON u.id=t.user_id WHERE o.case_id=? AND t.user_id=? AND t.active=1 AND t.role IN ('COORDINATOR','SPECIALIST') AND u.status='ACTIVE'",
+                                shared.root(id),
+                                responsible)))
+            throw invalid("Выберите назначенного сотрудника текущей ответственной организации");
         boolean movedDue =
                 r.get("due_at") != null && !Objects.equals(Instant.parse(str(r, "due_at")), due);
         boolean reassigned =
@@ -625,6 +634,19 @@ public class ResidentCaseService {
                 && !(access.coordinator(id, house, actor)
                         && List.of(CaseFunction.ENGINEER, CaseFunction.CONTRACTOR)
                                 .contains(function))) throw denied();
+        if (!manager(house, actor)
+                && !dispatcher(house, actor)
+                && !access.mayAssign(id, house, actor, target, function)) throw denied();
+        if (!access.coordinator(id, house, actor)
+                && access.exists(
+                        "SELECT count(*) FROM organization_case_owners WHERE case_id=?",
+                        shared.root(id))) throw denied();
+        if (!enabled
+                && access.exists(
+                        "SELECT count(*) FROM organization_case_owners WHERE case_id=?",
+                        shared.root(id))
+                && access.hasTasks(id, target, function))
+            throw invalid("Сначала завершите или переназначьте осмотры и работы сотрудника");
         if (!access.eligible(house, target, function)
                 || (CaseKind.PAYMENT.name().equals(str(r, "kind")) && !billing(house, target)))
             throw invalid("Выберите сотрудника с необходимым доступом");

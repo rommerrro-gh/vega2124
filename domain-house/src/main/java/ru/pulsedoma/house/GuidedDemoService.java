@@ -17,13 +17,16 @@ import ru.pulsedoma.common.BusinessException;
 public class GuidedDemoService {
     private final JdbcTemplate jdbc;
     private final String codeHash;
+    private final ru.pulsedoma.issues.OrganizationDemoService organizationDemo;
     private final ru.pulsedoma.issues.DemoScenarioService scenarios;
 
     public GuidedDemoService(
             JdbcTemplate jdbc,
             @Value("${guided-demo.code-sha256:}") String codeHash,
-            ru.pulsedoma.issues.DemoScenarioService scenarios) {
+            ru.pulsedoma.issues.DemoScenarioService scenarios,
+            ru.pulsedoma.issues.OrganizationDemoService organizationDemo) {
         this.jdbc = jdbc;
+        this.organizationDemo = organizationDemo;
         this.scenarios = scenarios;
         this.codeHash = codeHash.trim().toLowerCase();
     }
@@ -79,6 +82,17 @@ public class GuidedDemoService {
     }
 
     private void deactivate(String userId, String houseId) {
+        for (String table : List.of("organization_team", "organization_work_houses"))
+            jdbc.update(
+                    "UPDATE "
+                            + table
+                            + " SET active=0 WHERE organization_id IN (SELECT o.organization_id FROM guided_demo_organizations o JOIN guided_demo_sessions s ON s.id=o.session_id WHERE s.user_id=? AND s.house_id=? AND s.active=1)",
+                    userId,
+                    houseId);
+        jdbc.update(
+                "UPDATE organization_team_invitations SET revoked=1 WHERE organization_id IN (SELECT o.organization_id FROM guided_demo_organizations o JOIN guided_demo_sessions s ON s.id=o.session_id WHERE s.user_id=? AND s.house_id=? AND s.active=1)",
+                userId,
+                houseId);
         jdbc.update(
                 """
                 UPDATE house_memberships SET access_status = 'REVOKED'
@@ -300,6 +314,7 @@ public class GuidedDemoService {
                 UUID.randomUUID().toString(),
                 secondPoll);
         scenarios.refresh(house, userId, userId, org);
+        organizationDemo.seed(house, userId, userId, org, userId, true);
         return new DemoView(true, true, house, address);
     }
 

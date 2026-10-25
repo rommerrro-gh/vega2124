@@ -11,7 +11,15 @@ const accountPages = new Set([
 export function parseRoute(url) {
   const u = new URL(url, "https://pulsedoma.ru");
   const parts = u.pathname.split("/").filter(Boolean);
-  const workspace = ["dispatcher", "work", "admin", "uk", "system", "exchange"].includes(parts[0])
+  const workspace = [
+    "dispatcher",
+    "work",
+    "admin",
+    "uk",
+    "system",
+    "exchange",
+    "organization",
+  ].includes(parts[0])
     ? parts[0]
     : "miniapp";
   let page = parts[1] || (workspace === "miniapp" ? "home" : "queue");
@@ -46,6 +54,11 @@ export function routeUrl(path, current) {
   if (next.origin !== old.origin) throw new Error("Разрешены только страницы приложения");
   if (!next.searchParams.has("demoSession") && old.searchParams.has("demoSession"))
     next.searchParams.set("demoSession", old.searchParams.get("demoSession"));
+  if (next.pathname.startsWith("/organization/") && old.pathname.startsWith("/organization/")) {
+    for (const key of ["organizationId", "workspaceRole"])
+      if (!next.searchParams.has(key) && old.searchParams.has(key))
+        next.searchParams.set(key, old.searchParams.get(key));
+  }
   if (!next.hash) next.hash = old.hash;
   return next.pathname + next.search + next.hash;
 }

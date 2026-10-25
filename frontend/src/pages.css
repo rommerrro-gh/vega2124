@@ -458,7 +458,7 @@
 :root[data-theme] [data-case-section="visits"] .case-workflow > article > button {
   width: 100%;
   margin: 22px 0 8px;
-  min-height: 52px;
+  min-height: 46px;
 }
 :root[data-theme] [data-case-section="visits"] .visit-choice {
   font-size: 17px;
@@ -682,7 +682,8 @@
 }
 :root[data-theme] .resident-navigation {
   width: min(calc(100% - 24px), 680px);
-  min-height: 64px;
+  min-height: 58px;
+  height: 58px;
   /* Keep the floating bar close to the bottom on iPhones as well. */
   bottom: max(8px, calc(env(safe-area-inset-bottom, 0px) - 16px));
   padding: 5px;
@@ -696,13 +697,15 @@
   box-shadow: 0 6px 24px #00000012;
 }
 :root[data-theme] .resident-navigation svg {
-  width: 23px;
-  height: 23px;
+  width: 21px;
+  height: 21px;
 }
 :root[data-theme] .resident-navigation button {
-  min-height: 52px;
-  padding: 5px 2px;
-  gap: 3px;
+  min-height: 46px;
+  height: 46px;
+  padding: 3px 2px;
+  gap: 2px;
+  line-height: 1.1;
   border-radius: 28px;
   font-size: 11px;
 }
@@ -714,7 +717,8 @@
 :root[data-theme] .resident-navigation button[aria-current="page"]::after {
   content: none;
 }
-:root[data-theme] .account-page .page-list .page-row {
+:root[data-theme] .page-row,
+:root[data-theme] .case-workspace .page-row {
   width: calc(100% + 24px);
   margin-inline: -12px;
   padding: 19px 12px;
@@ -722,7 +726,8 @@
   border-radius: 16px;
   transition: background-color 140ms ease;
 }
-:root[data-theme] .account-page .page-list .page-row:active {
+:root[data-theme] .page-row:is(:hover, :active),
+:root[data-theme] .case-workspace .page-row:is(:hover, :active) {
   background: var(--accent-soft);
 }
 :root[data-theme] .notification-switch {
@@ -783,4 +788,63 @@
 :root[data-theme] .account-page {
   --controls-active: var(--accent-ink);
   --states-controls-active-disabled: var(--accent-soft);
+}
+
+/* Shared interaction geometry across resident and staff workspaces. */
+:root[data-theme] .staff-shell .case-list-item,
+:root[data-theme] .resident-shell .case-list-item,
+:root[data-theme] .case-workspace .case-list-item {
+  display: grid;
+  gap: 7px;
+  width: 100%;
+  color: var(--text);
+  background: transparent;
+  text-align: left;
+  border: 0;
+  border-bottom: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 18px 16px;
+}
+:root[data-theme] .shell .case-list-item:is(:hover, :active),
+:root[data-theme] .shell button.page-row:is(:hover, :active) {
+  background: var(--accent-soft);
+}
+:root[data-theme] .staff-shell > .field {
+  margin-bottom: 16px;
+}
+:root[data-theme] .organization-shell .case-panel button:not(.case-list-item):not(.page-row) {
+  min-height: 44px;
+  padding: 10px 16px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--accent-soft);
+  color: var(--accent-ink);
+  font: inherit;
+  cursor: pointer;
+}
+:root[data-theme] .organization-shell .case-panel input[type="checkbox"] {
+  width: 20px;
+  height: 20px;
+  margin-right: 8px;
+  accent-color: var(--accent-ink);
+}
+:root[data-theme] .organization-shell .case-panel fieldset label {
+  display: flex;
+  align-items: center;
+  padding-block: 8px;
+}
+
+:root[data-theme] .case-workspace > label,
+:root[data-theme] .case-workspace > .case-panel,
+:root[data-theme] .staff-shell .case-panel + .case-panel {
+  margin-bottom: 16px;
+}
+:root[data-theme] select {
+  appearance: none;
+  -webkit-appearance: none;
+  padding-right: 48px;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23849a91' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+  background-position: right 16px center;
+  background-repeat: no-repeat;
+  background-size: 20px;
 }

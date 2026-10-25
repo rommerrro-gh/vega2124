@@ -1,3 +1,4 @@
+import { organizationPath, teamRoles, teamFunctions } from "./organization-workspaces.jsx";
 import React, { useEffect, useState } from "react";
 import {
   ArrowLeft,
@@ -76,7 +77,7 @@ const rolePages = [
   ["RESIDENT", "Житель", "/miniapp/home", "true"],
   ["DISPATCHER", "Диспетчер", "/dispatcher/queue", "dispatcher"],
   ["HOUSE_ADMIN", "Администратор дома", "/admin/queue", "admin"],
-  ["UK_ADMIN", "Администратор УК", "/uk/queue", "admin"],
+  ["UK_ADMIN", "Администратор организации", "/uk/queue", "admin"],
   ["SYSTEM_ADMIN", "Системный администратор", "/system/queue", "admin"],
 ];
 const faq = [
@@ -115,6 +116,7 @@ export function AccountPages({
     [config, setConfig] = useState(null),
     [demo, setDemo] = useState(null),
     [work, setWork] = useState(false),
+    [workspaces, setWorkspaces] = useState([]),
     [exchange, setExchange] = useState(false),
     [notice, setNotice] = useState(""),
     [busy, setBusy] = useState(false),
@@ -134,8 +136,9 @@ export function AccountPages({
       request("/v1/guided-demo"),
       request("/v1/workflow/houses").catch(() => []),
       request("/v1/exchange/inbox").catch(() => []),
+      request("/v1/organization-workspaces").catch(() => []),
     ])
-      .then(([p, a, c, d, w, x]) => {
+      .then(([p, a, c, d, w, x, spaces]) => {
         if (active) {
           setProfile(p);
           setAccess(a);
@@ -143,6 +146,7 @@ export function AccountPages({
           setDemo(d);
           setWork(w.length > 0);
           setExchange(x.length > 0);
+          setWorkspaces(spaces || []);
         }
       })
       .catch((e) => active && setNotice(e.message));
@@ -219,9 +223,11 @@ export function AccountPages({
             />
             <PageRow
               icon={Users}
-              title="Мои роли"
+              title="Мои кабинеты"
               subtitle={
-                available.find((r) => r[2].startsWith(base + "/"))?.[1] || "Доступные режимы работы"
+                (route.workspace === "organization"
+                  ? teamRoles[route.query.get("workspaceRole")]
+                  : available.find((r) => r[2].startsWith(base + "/"))?.[1]) || "Доступные кабинеты"
               }
               onClick={() => link("roles")}
             />
@@ -324,22 +330,33 @@ export function AccountPages({
       )}
       {route.page === "roles" && (
         <>
-          <PageTitle>Мои роли</PageTitle>
-          <h2>Выберите режим работы</h2>
+          <PageTitle>Мои кабинеты</PageTitle>
+          <h2>Выберите кабинет</h2>
           <p className="muted">{profile?.displayName}</p>
-          {available.map(([key, label, path, session]) => (
+          {available
+            .filter(([key]) => key !== "UK_ADMIN" || !workspaces.some((w) => w.role === "ADMIN"))
+            .map(([key, label, path, session]) => (
+              <PageRow
+                key={key}
+                icon={key === "RESIDENT" ? House : Users}
+                title={label}
+                selected={path.startsWith(base + "/")}
+                onClick={() => go(path + (config?.demoMode ? `?demoSession=${session}` : ""))}
+              />
+            ))}
+          {workspaces.map((w) => (
             <PageRow
-              key={key}
-              icon={key === "RESIDENT" ? House : Users}
-              title={label}
-              selected={path.startsWith(base + "/")}
-              onClick={() => go(path + (config?.demoMode ? `?demoSession=${session}` : ""))}
+              key={w.id + w.role}
+              icon={Buildings}
+              title={teamRoles[w.role]}
+              subtitle={`${w.name}${w.department ? ` · ${w.department}` : ""}${w.role === "SPECIALIST" ? ` · ${w.functions.map((f) => teamFunctions[f]).join(", ")}` : ""}`}
+              onClick={() => go(organizationPath(w.id, w.role))}
             />
           ))}
-          {(work || config?.demoMode) && (
+          {!workspaces.length && (work || config?.demoMode) && (
             <PageRow
               icon={Buildings}
-              title="Осмотры и работы"
+              title="Кабинет специалиста"
               onClick={() => go("/work/queue" + (config?.demoMode ? "?demoSession=engineer" : ""))}
             />
           )}
