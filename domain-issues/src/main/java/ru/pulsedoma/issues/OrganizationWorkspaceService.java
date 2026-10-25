@@ -109,7 +109,9 @@ public class OrganizationWorkspaceService {
         return exists(
                         "SELECT count(*) FROM system_administrators s JOIN users u ON u.id=s.user_id WHERE s.user_id=? AND u.status='ACTIVE'",
                         actor)
-                || demo(actor) != null;
+                || demo(actor) != null
+                        && exists(
+                                "SELECT count(*) FROM users WHERE id=? AND status='ACTIVE'", actor);
     }
 
     private void scope(String org, String actor) {
@@ -224,6 +226,13 @@ public class OrganizationWorkspaceService {
                     active ? "ACTIVE" : "SUSPENDED",
                     org);
         }
+        if (exists(
+                "SELECT count(*) FROM organizations WHERE id=? AND type='MANAGEMENT_COMPANY'", org))
+            jdbc.update(
+                    "UPDATE house_memberships SET access_status=? WHERE source_organization_id=? AND house_id=? AND role IN ('DISPATCHER','HOUSE_ADMIN') AND access_status IN ('ACTIVE','SUSPENDED')",
+                    active ? "ACTIVE" : "SUSPENDED",
+                    org,
+                    house);
         jdbc.update(
                 "INSERT INTO organization_work_houses(organization_id,house_id,active) VALUES (?,?,?) ON CONFLICT(organization_id,house_id) DO UPDATE SET active=excluded.active",
                 org,

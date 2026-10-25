@@ -157,6 +157,9 @@ export function OrganizationPortal({
     }
   }
   useEffect(() => {
+    setToken("");
+  }, [org, mode, session]);
+  useEffect(() => {
     let active = true;
     setNotice("");
     setItems([]);
@@ -186,8 +189,13 @@ export function OrganizationPortal({
         setOrganizations(o);
         setAllHouses(h);
         if (org) {
-          setHouses(await request(`${root}/${org}/houses`));
-          setInvitations(await request(`${root}/${org}/invitations`));
+          const [scopedHouses, scopedInvitations] = await Promise.all([
+            request(`${root}/${org}/houses`),
+            request(`${root}/${org}/invitations`),
+          ]);
+          if (!active) return;
+          setHouses(scopedHouses);
+          setInvitations(scopedInvitations);
         }
         return;
       }

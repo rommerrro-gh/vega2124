@@ -848,3 +848,6 @@
   background-repeat: no-repeat;
   background-size: 20px;
 }
+:root[data-theme] .organization-shell > .case-panel {
+  margin-block: 16px;
+}
