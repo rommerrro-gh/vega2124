@@ -487,6 +487,52 @@ public class OrganizationWorkspaceService {
                 actor);
     }
 
+    @Transactional
+    public int reassignCoordinator(String org, String from, String to, String actor) {
+        admin(org, actor);
+        if (from.equals(to)
+                || !role(org, to, TeamRole.COORDINATOR)
+                || !exists(
+                        "SELECT count(*) FROM organization_team WHERE organization_id=? AND user_id=? AND role='COORDINATOR'",
+                        org,
+                        from))
+            throw invalid("Выберите другого действующего координатора своей организации");
+        var ids =
+                jdbc.query(
+                        "SELECT c.id FROM resident_cases c JOIN case_collaborators a ON a.case_id=c.id JOIN organization_work_houses h ON h.house_id=c.house_id AND h.organization_id=a.source_organization_id LEFT JOIN organization_case_owners o ON o.case_id=c.id WHERE a.user_id=? AND a.function='COORDINATOR' AND a.source_organization_id=? AND h.active=1 AND c.internal_work=1 AND c.kind<>'PAYMENT' AND c.status<>'CLOSED' AND (o.organization_id IS NULL OR o.organization_id=?)",
+                        (r, n) -> r.getString(1),
+                        from,
+                        org,
+                        org);
+        for (String key : ids) {
+            jdbc.update(
+                    "INSERT INTO case_collaborators(case_id,user_id,function,assigned_by,created_at,source_organization_id) VALUES (?,?,'COORDINATOR',?,?,?) ON CONFLICT(case_id,user_id,function) DO UPDATE SET source_organization_id=excluded.source_organization_id,assigned_by=excluded.assigned_by",
+                    key,
+                    to,
+                    actor,
+                    Instant.now().toString(),
+                    org);
+            jdbc.update(
+                    "UPDATE resident_cases SET responsible_user_id=CASE WHEN responsible_user_id=? THEN ? ELSE responsible_user_id END,revision=revision+1,updated_at=? WHERE id=?",
+                    from,
+                    to,
+                    Instant.now().toString(),
+                    key);
+            jdbc.update(
+                    "DELETE FROM case_collaborators WHERE case_id=? AND user_id=? AND function='COORDINATOR' AND source_organization_id=?",
+                    key,
+                    from,
+                    org);
+            jdbc.update("DELETE FROM case_control_grants WHERE case_id=? AND user_id=?", key, from);
+            caseEvent(
+                    key,
+                    "Администратор передал незавершённое обращение другому координатору организации",
+                    actor);
+            shared.sync(key, actor);
+        }
+        return ids.size();
+    }
+
     public List<Organization> partners(String org, String actor) {
         if (!role(org, actor, TeamRole.ADMIN) && !role(org, actor, TeamRole.COORDINATOR))
             throw denied();

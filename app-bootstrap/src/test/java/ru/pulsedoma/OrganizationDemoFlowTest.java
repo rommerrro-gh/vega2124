@@ -32,6 +32,7 @@ class OrganizationDemoFlowTest {
     @Autowired OrganizationDemoService demo;
     @Autowired OrganizationWorkspaceService teams;
     @Autowired JdbcTemplate jdbc;
+    @Autowired DemoScenarioService scenarios;
 
     @Test
     void fixtureIncludesIndependentTeamsInspectionAndRepairAndIsRepeatable() {
@@ -61,5 +62,40 @@ class OrganizationDemoFlowTest {
                         .orElseThrow();
         assertEquals(1, teams.tasks(w.id(), TeamRole.SPECIALIST, worker).size());
         assertTrue(jdbc.queryForList("PRAGMA foreign_key_check").isEmpty());
+    }
+
+    @Test
+    void explicitRefreshRebuildsWorkspacesAndFutureVisitsWithoutNotifications() {
+        scenarios.refresh("demo-house-1", "demo-resident-1", "demo-dispatcher-1", "demo-uk-1");
+        String worker =
+                "scenario-"
+                        + java.util.UUID.nameUUIDFromBytes(
+                                "pulse-final-v3:demo-house-1:worker"
+                                        .getBytes(java.nio.charset.StandardCharsets.UTF_8));
+        demo.seedAfterScenarioReset(
+                "demo-house-1", "demo-resident-1", "demo-admin-1", "demo-uk-1", worker, false);
+        assertEquals(
+                2,
+                jdbc.queryForObject(
+                        "SELECT count(*) FROM organization_case_transfers", Integer.class));
+        assertEquals(
+                2, jdbc.queryForObject("SELECT count(*) FROM case_work_orders", Integer.class));
+        assertTrue(jdbc.queryForList("PRAGMA foreign_key_check").isEmpty());
+        assertEquals(
+                0,
+                jdbc.queryForObject(
+                        "SELECT count(*) FROM visit_slots WHERE julianday(starts_at)<=julianday('now')",
+                        Integer.class));
+        assertEquals(0, jdbc.queryForObject("SELECT count(*) FROM max_bot_outbox", Integer.class));
+        assertThrows(
+                IllegalStateException.class,
+                () ->
+                        demo.seedAfterScenarioReset(
+                                "demo-house-1",
+                                "demo-resident-1",
+                                "demo-admin-1",
+                                "demo-uk-1",
+                                worker,
+                                false));
     }
 }

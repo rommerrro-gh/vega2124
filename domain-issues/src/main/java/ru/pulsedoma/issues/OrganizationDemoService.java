@@ -49,6 +49,30 @@ public class OrganizationDemoService {
                 function.name());
     }
 
+    /** Used only by the explicit maintenance runner after old case fixtures were removed. */
+    @Transactional
+    public void seedAfterScenarioReset(
+            String house,
+            String resident,
+            String admin,
+            String management,
+            String worker,
+            boolean guided) {
+        if (!enabled) return;
+        if (jdbc.queryForObject(
+                        "SELECT count(*) FROM resident_cases WHERE house_id=? AND client_request_id IN (?,?,?)",
+                        Integer.class,
+                        house,
+                        key(house + ":case:0"),
+                        key(house + ":case:1"),
+                        key(house + ":contractor-work"))
+                > 0)
+            throw new IllegalStateException(
+                    "Reset case fixtures before rebuilding organization demo");
+        jdbc.update("DELETE FROM organization_demo_fixtures WHERE id=?", key(house + ":seed-v1"));
+        seed(house, resident, admin, management, worker, guided);
+    }
+
     @Transactional
     public void seed(
             String house,

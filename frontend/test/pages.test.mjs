@@ -63,3 +63,20 @@ test("professional root tabs keep MAX back hidden and fallback never targets a r
     "/organization/settings?organizationId=o&workspaceRole=SPECIALIST",
   );
 });
+
+test("organization detail retains its originating tab and native back", () => {
+  for (const page of ["cases", "tasks", "documents", "control"]) {
+    const route = parseRoute(
+      `/organization/${page}?organizationId=o&workspaceRole=SPECIALIST&caseId=c`,
+    );
+    assert.equal(isWorkspaceRoot(route), false);
+    assert.equal(parentPath(route), `/organization/${page}`);
+    assert.equal(
+      routeUrl(
+        parentPath(route),
+        `https://pulsedoma.ru/organization/${page}?organizationId=o&workspaceRole=SPECIALIST&caseId=c#WebAppData=abc`,
+      ),
+      `/organization/${page}?organizationId=o&workspaceRole=SPECIALIST#WebAppData=abc`,
+    );
+  }
+});

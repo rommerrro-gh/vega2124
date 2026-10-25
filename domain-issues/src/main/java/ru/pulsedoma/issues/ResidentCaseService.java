@@ -634,9 +634,16 @@ public class ResidentCaseService {
                 && !(access.coordinator(id, house, actor)
                         && List.of(CaseFunction.ENGINEER, CaseFunction.CONTRACTOR)
                                 .contains(function))) throw denied();
+        // This compatibility route writes management-company provenance. External coordinators
+        // must use the organization-scoped assignment route, including enable/disable replays.
         if (!manager(house, actor)
                 && !dispatcher(house, actor)
-                && !access.mayAssign(id, house, actor, target, function)) throw denied();
+                && (!access.mayAssign(id, house, actor, target, function)
+                        || !access.exists(
+                                "SELECT count(*) FROM case_collaborators a JOIN organization_houses h ON h.organization_id=a.source_organization_id AND h.house_id=? WHERE a.case_id=? AND a.user_id=? AND a.function='COORDINATOR' AND h.status='ACTIVE'",
+                                house,
+                                id,
+                                actor))) throw denied();
         if (!access.coordinator(id, house, actor)
                 && access.exists(
                         "SELECT count(*) FROM organization_case_owners WHERE case_id=?",

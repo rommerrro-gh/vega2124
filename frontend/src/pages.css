@@ -851,3 +851,100 @@
 :root[data-theme] .organization-shell > .case-panel {
   margin-block: 16px;
 }
+
+/* Work forms share the same geometry even outside a resident case wrapper. */
+:root[data-theme] .shell :is(.workflow-form, .case-panel, .legacy-house-team) {
+  min-width: 0;
+  max-width: 100%;
+}
+:root[data-theme] .shell :is(.workflow-form, .case-panel) label {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+  margin-block: 14px;
+  line-height: 1.45;
+}
+:root[data-theme]
+  .shell
+  :is(.workflow-form, .case-panel)
+  :is(input, select, textarea):not([type="checkbox"]):not([type="radio"]) {
+  display: block;
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  min-height: 46px;
+  box-sizing: border-box;
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background-color: var(--surface);
+  color: var(--text);
+  font: inherit;
+  line-height: 1.4;
+}
+:root[data-theme] .shell :is(.workflow-form, .case-panel) select {
+  padding-right: 48px;
+}
+:root[data-theme] .shell :is(.workflow-form, .case-panel) textarea {
+  min-height: 110px;
+  resize: vertical;
+}
+:root[data-theme]
+  .shell
+  :is(.workflow-form, .case-panel)
+  label:has(> input:is([type="checkbox"], [type="radio"])) {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+:root[data-theme]
+  .shell
+  :is(.workflow-form, .case-panel)
+  input:is([type="checkbox"], [type="radio"]) {
+  flex: 0 0 20px;
+  width: 20px;
+  height: 20px;
+  margin: 0;
+}
+:root[data-theme] .shell :is(.workflow-form, .case-panel) fieldset {
+  min-width: 0;
+  margin: 0;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+}
+:root[data-theme] .shell :is(.case-heading, .case-actions) {
+  flex-wrap: wrap;
+}
+:root[data-theme] .shell .case-permission {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+:root[data-theme] .shell .case-permission > * {
+  min-width: 0;
+  max-width: 100%;
+}
+:root[data-theme] .shell :is(.case-panel, .workflow-form) button {
+  max-width: 100%;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+:root[data-theme]
+  .shell
+  :is(.case-panel, .workflow-form)
+  :is(input, select, textarea, button):focus-visible {
+  outline: 2px solid var(--accent-ink);
+  outline-offset: 3px;
+}
+:root[data-theme] .shell .workflow-form button:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+
+:root[data-theme] .shell :is(.workflow-form, .case-panel) select {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23849a91' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+  background-position: right 16px center;
+  background-repeat: no-repeat;
+  background-size: 20px;
+  padding-right: 48px;
+}

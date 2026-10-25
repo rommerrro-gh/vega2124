@@ -62,6 +62,7 @@ export function parentPath(route) {
   const base = `/${route.workspace}`;
   if (route.workspace !== "miniapp" && route.page === "queue" && route.query.has("caseId"))
     return `${base}/queue`;
+  if (route.id && route.workspace === "organization") return `${base}/${route.page}`;
   if (route.id)
     return route.section !== "overview"
       ? `${base}/${route.page}/${encodeURIComponent(route.id)}`

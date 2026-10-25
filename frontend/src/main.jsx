@@ -14,7 +14,7 @@ import {
   Buildings,
 } from "@phosphor-icons/react";
 import { AppearancePicker, ResidentHeader, ResidentNavigation, useAppearance } from "./design.jsx";
-import { OperationsInbox, HouseOperations } from "./operations.jsx";
+import { HouseOperations } from "./operations.jsx";
 import { ExchangePortal } from "./case-exchange.jsx";
 import React, { useEffect, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
@@ -184,13 +184,6 @@ const rolePages = [
 
 function Brand({ role }) {
   const route = useRoute();
-  const session =
-    new URLSearchParams(location.search).get("demoSession") ||
-    (route.workspace === "dispatcher"
-      ? "dispatcher"
-      : ["admin", "uk", "system"].includes(route.workspace)
-        ? "admin"
-        : "true");
   return (
     <header className="topbar">
       <button
@@ -211,19 +204,6 @@ function Brand({ role }) {
           {route.workspace !== "miniapp" && <small className="workspace-caption">{role}</small>}
         </span>
       </button>
-      {route.workspace !== "miniapp" && (
-        <OperationsInbox
-          api={api}
-          role={session}
-          onOpen={(n) =>
-            go(
-              route.workspace === "miniapp"
-                ? `/miniapp/cases/${encodeURIComponent(n.case_id)}`
-                : `/work/queue?houseId=${encodeURIComponent(n.house_id)}&caseId=${encodeURIComponent(n.case_id)}`,
-            )
-          }
-        />
-      )}
     </header>
   );
 }

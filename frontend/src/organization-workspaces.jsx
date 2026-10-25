@@ -82,6 +82,73 @@ export function OrganizationNavigation({ route, system = false }) {
     </nav>
   );
 }
+function AssignmentForm({ members, busy, onAssign }) {
+  const [selectedFunction, setFunction] = useState("ENGINEER");
+  const eligible = (m, f) =>
+    m.active &&
+    (f === "COORDINATOR"
+      ? m.role === "COORDINATOR"
+      : m.role === "SPECIALIST" && m.functions.includes(f));
+  const available = Object.entries({ COORDINATOR: "Координатор", ...teamFunctions }).filter(([f]) =>
+    members.some((m) => eligible(m, f)),
+  );
+  const fn = available.some(([f]) => f === selectedFunction)
+    ? selectedFunction
+    : available[0]?.[0] || "";
+  const people = [
+    ...new Map(members.filter((m) => eligible(m, fn)).map((m) => [m.id, m])).values(),
+  ];
+  return (
+    <form
+      className="workflow-form"
+      onSubmit={(e) => {
+        e.preventDefault();
+        const d = new FormData(e.currentTarget);
+        onAssign({ userId: d.get("userId"), function: fn, enabled: d.get("enabled") === "true" });
+      }}
+    >
+      <label>
+        Функция
+        <select
+          name="function"
+          value={fn}
+          onChange={(e) => setFunction(e.target.value)}
+          disabled={!available.length}
+        >
+          {available.map(([f, label]) => (
+            <option key={f} value={f}>
+              {label}
+            </option>
+          ))}
+        </select>
+      </label>
+      <label>
+        Сотрудник
+        <select name="userId" key={fn} required disabled={!people.length}>
+          {people.map((m) => (
+            <option key={m.id} value={m.id}>
+              {m.name}
+            </option>
+          ))}
+        </select>
+      </label>
+      {!people.length && (
+        <p className="muted">
+          В команде нет сотрудников с подходящей рабочей функцией. Администратор может подключить их
+          в разделе «Команда».
+        </p>
+      )}
+      <label>
+        Действие
+        <select name="enabled">
+          <option value="true">Назначить</option>
+          <option value="false">Снять назначение</option>
+        </select>
+      </label>
+      <button disabled={busy || !people.length}>Применить назначение</button>
+    </form>
+  );
+}
 function InvitationResult({ token, botUsername }) {
   const [copied, setCopied] = useState(false);
   if (!token) return null;
@@ -135,6 +202,7 @@ export function OrganizationPortal({
     [busy, setBusy] = useState(false),
     [loading, setLoading] = useState(true),
     [token, setToken] = useState(""),
+    [inviteRole, setInviteRole] = useState("SPECIALIST"),
     [generation, setGeneration] = useState(0);
   const request = (path, options) => api(session, path, options),
     current = workspaces.find((w) => w.id === org && w.role === mode),
@@ -161,9 +229,11 @@ export function OrganizationPortal({
     setToken("");
   }, [org, mode, session]);
   useEffect(() => {
+    setNotice("");
+  }, [org, mode, session, route.page, route.id]);
+  useEffect(() => {
     let active = true;
     setLoading(true);
-    setNotice("");
     setItems([]);
     setDetail(null);
     setContext(null);
@@ -263,14 +333,44 @@ export function OrganizationPortal({
     houses: "Дома",
     access: "Доступы",
   };
-  async function open(c) {
-    try {
-      const ctx = await request(`/v1/houses/${c.houseId}/case-context`);
-      setContext(ctx);
-      setDetail(await request(`/v1/cases/${c.id}`));
-    } catch (e) {
-      setNotice(e.message);
+  async function refreshDetail(id) {
+    const c = await request(`/v1/cases/${encodeURIComponent(id)}`);
+    if (c.kind === "PAYMENT")
+      throw new Error("Личный вопрос по квитанции открывается в кабинете диспетчера");
+    const ctx = await request(`/v1/houses/${c.houseId}/case-context`);
+    return { c, ctx };
+  }
+  useEffect(() => {
+    let active = true;
+    setDetail(null);
+    setContext(null);
+    if (route.id && !system && mode !== "ADMIN") {
+      refreshDetail(route.id)
+        .then(({ c, ctx }) => {
+          if (active) {
+            setDetail(c);
+            setContext(ctx);
+          }
+        })
+        .catch((e) => active && setNotice(e.message));
     }
+    return () => {
+      active = false;
+    };
+  }, [route.id, org, mode, session, generation]);
+  function closeDetail() {
+    go(organizationPath(org, mode, route.page));
+  }
+  async function open(c) {
+    if (route.id === c.id) {
+      try {
+        const next = await refreshDetail(c.id);
+        setDetail(next.c);
+        setContext(next.ctx);
+      } catch (e) {
+        setNotice(e.message);
+      }
+    } else go(organizationPath(org, mode, route.page) + "&caseId=" + encodeURIComponent(c.id));
   }
   function formSubmit(event, callback) {
     event.preventDefault();
@@ -288,14 +388,18 @@ export function OrganizationPortal({
             action(`${root}/${org}/invitations`, {
               role: system ? "ADMIN" : d.get("role"),
               department: d.get("department") || "",
-              functions: d.getAll("functions"),
+              functions: !system && inviteRole === "SPECIALIST" ? d.getAll("functions") : [],
             });
           }}
         >
           {!system && (
             <label>
               Роль
-              <select name="role">
+              <select
+                name="role"
+                value={inviteRole}
+                onChange={(e) => setInviteRole(e.target.value)}
+              >
                 <option value="SPECIALIST">Специалист</option>
                 <option value="COORDINATOR">Координатор обращений</option>
                 <option value="ADMIN">Администратор организации</option>
@@ -306,7 +410,7 @@ export function OrganizationPortal({
             Подразделение
             <input name="department" maxLength={160} placeholder="Например, гарантийная служба" />
           </label>
-          {!system && (
+          {!system && inviteRole === "SPECIALIST" && (
             <fieldset>
               <legend>Функции специалиста</legend>
               {Object.entries(teamFunctions).map(([key, label]) => (
@@ -357,7 +461,13 @@ export function OrganizationPortal({
   return (
     <main className="shell staff-shell organization-shell">
       {brand}
-      <h1>{titles[route.page] || "Рабочий кабинет"}</h1>
+      <h1 tabIndex={-1}>
+        {route.id
+          ? detail
+            ? `Обращение №${detail.number}`
+            : "Обращение"
+          : titles[route.page] || "Рабочий кабинет"}
+      </h1>
       {chosen && (
         <p className="workspace-caption">
           {chosen.name} · {system ? kinds[chosen.kind] : teamRoles[mode]}
@@ -620,6 +730,64 @@ export function OrganizationPortal({
                   )}
                 </div>
               ))}
+              <h3>Замещение координатора</h3>
+              <p className="muted">
+                Если сотрудник отсутствует, передайте его незавершённые технические обращения
+                коллеге. Организация, документы и назначенные специалисты сохранятся. Личные вопросы
+                по квитанциям не передаются.
+              </p>
+              {members.filter((m) => m.role === "COORDINATOR").length < 2 && (
+                <p className="muted">
+                  Для замещения пригласите второго координатора в команду организации.
+                </p>
+              )}
+              <form
+                className="workflow-form"
+                onSubmit={(e) =>
+                  formSubmit(e, (d) =>
+                    action(`${root}/${org}/coordinators/reassign`, d).then(
+                      (result) => result && setNotice(`Передано обращений: ${result.reassigned}`),
+                    ),
+                  )
+                }
+              >
+                <label>
+                  У кого принять дела
+                  <select name="fromUserId" required>
+                    <option value="">Выберите координатора</option>
+                    {members
+                      .filter((m) => m.role === "COORDINATOR")
+                      .map((m) => (
+                        <option key={m.id} value={m.id}>
+                          {m.name}
+                          {!m.active ? " · доступ отозван" : ""}
+                        </option>
+                      ))}
+                  </select>
+                </label>
+                <label>
+                  Кому передать
+                  <select name="toUserId" required>
+                    <option value="">Выберите действующего координатора</option>
+                    {members
+                      .filter((m) => m.active && m.role === "COORDINATOR")
+                      .map((m) => (
+                        <option key={m.id} value={m.id}>
+                          {m.name}
+                        </option>
+                      ))}
+                  </select>
+                </label>
+                <button
+                  disabled={
+                    busy ||
+                    members.filter((m) => m.role === "COORDINATOR").length < 2 ||
+                    !members.some((m) => m.active && m.role === "COORDINATOR")
+                  }
+                >
+                  Передать незавершённые обращения
+                </button>
+              </form>
               <h3>Совмещение функций</h3>
               <p>
                 Координатор принимает обращения и назначает специалистов. Доступ к конкретному делу
@@ -660,111 +828,80 @@ export function OrganizationPortal({
           )}
           {mode !== "ADMIN" && ["cases", "tasks", "documents", "control"].includes(route.page) && (
             <>
-              {detail ? (
-                <>
-                  <button className="case-link" onClick={() => setDetail(null)}>
-                    К списку
-                  </button>
-                  {renderCase({
-                    item: detail,
-                    context,
-                    role: session,
-                    onClose: () => setDetail(null),
-                    onChange: (c) => {
-                      setDetail(c);
-                      setItems((list) => list.map((i) => (i.id === c.id ? c : i)));
-                    },
-                  })}
-                  {mode === "COORDINATOR" && (
-                    <section className="case-panel">
-                      <h2>Команда обращения</h2>
-                      <form
-                        className="workflow-form"
-                        onSubmit={(e) =>
-                          formSubmit(e, (d) =>
-                            action(
-                              `${root}/${org}/cases/${detail.id}/assignments`,
-                              {
-                                userId: d.userId,
-                                function: d.function,
-                                enabled: d.enabled === "true",
-                                revision: detail.revision,
-                              },
-                              "PUT",
-                            ).then(() => open(detail)),
-                          )
-                        }
-                      >
-                        <label>
-                          Сотрудник
-                          <select name="userId">
-                            {members
-                              .filter((m) => m.active)
-                              .map((m) => (
-                                <option key={m.id + m.role} value={m.id}>
-                                  {m.name} · {teamRoles[m.role]}
-                                </option>
-                              ))}
-                          </select>
-                        </label>
-                        <label>
-                          Функция
-                          <select name="function">
-                            <option value="COORDINATOR">Координатор</option>
-                            {Object.entries(teamFunctions).map(([v, label]) => (
-                              <option key={v} value={v}>
-                                {label}
-                              </option>
-                            ))}
-                          </select>
-                        </label>
-                        <label>
-                          Действие
-                          <select name="enabled">
-                            <option value="true">Назначить</option>
-                            <option value="false">Снять назначение</option>
-                          </select>
-                        </label>
-                        <button disabled={busy}>Применить назначение</button>
-                      </form>
-                      <h2>Направить организации</h2>
-                      <p>
-                        После принятия координатор получателя получит доступ к техническому
-                        обращению, его истории и документам. Личные финансовые дела не передаются.
-                        До приёма текущий ответственный сохраняется.
-                      </p>
-                      <form
-                        className="workflow-form"
-                        onSubmit={(e) =>
-                          formSubmit(e, (d) =>
-                            action(`${root}/${org}/transfers`, {
-                              caseId: detail.id,
-                              target: d.target,
-                              reason: d.reason,
-                              revision: detail.revision,
-                            }).then(() => open(detail)),
-                          )
-                        }
-                      >
-                        <label>
-                          Организация
-                          <select name="target">
-                            {partners.map((p) => (
-                              <option key={p.id} value={p.id}>
-                                {p.name}
-                              </option>
-                            ))}
-                          </select>
-                        </label>
-                        <label>
-                          Причина и необходимые действия
-                          <textarea name="reason" required maxLength={3000} />
-                        </label>
-                        <button disabled={busy || !partners.length}>Направить обращение</button>
-                      </form>
-                    </section>
+              {route.id ? (
+                <div className="case-workspace">
+                  {!detail && <p role="status">Загружаем обращение…</p>}
+                  {detail && (
+                    <>
+                      {renderCase({
+                        item: detail,
+                        organizationMode: true,
+                        context,
+                        role: session,
+                        onClose: closeDetail,
+                        onChange: (c) => {
+                          if (c.id !== route.id) {
+                            open(c);
+                            return;
+                          }
+                          setDetail(c);
+                          setItems((list) => list.map((i) => (i.id === c.id ? c : i)));
+                        },
+                      })}
+                      {mode === "COORDINATOR" && (
+                        <section className="case-panel">
+                          <h2>Команда обращения</h2>
+                          <AssignmentForm
+                            members={members}
+                            busy={busy}
+                            onAssign={(d) =>
+                              action(
+                                `${root}/${org}/cases/${detail.id}/assignments`,
+                                { ...d, revision: detail.revision },
+                                "PUT",
+                              ).then((result) => result && open(detail))
+                            }
+                          />
+                          <h2>Направить организации</h2>
+                          <p>
+                            После принятия координатор получателя получит доступ к техническому
+                            обращению, его истории и документам. Личные финансовые дела не
+                            передаются. До приёма текущий ответственный сохраняется.
+                          </p>
+                          <form
+                            className="workflow-form"
+                            onSubmit={(e) =>
+                              formSubmit(e, (d) =>
+                                action(`${root}/${org}/transfers`, {
+                                  caseId: detail.id,
+                                  target: d.target,
+                                  reason: d.reason,
+                                  revision: detail.revision,
+                                }).then((result) => result && open(detail)),
+                              )
+                            }
+                          >
+                            <label>
+                              Организация
+                              <select name="target">
+                                {partners.map((p) => (
+                                  <option key={p.id} value={p.id}>
+                                    {p.name}
+                                  </option>
+                                ))}
+                              </select>
+                            </label>
+                            <label>
+                              Причина и необходимые действия
+                              <textarea name="reason" required maxLength={3000} />
+                            </label>
+                            <button disabled={busy || !partners.length}>Направить обращение</button>
+                          </form>
+                        </section>
+                      )}
+                    </>
                   )}
-                </>
+                </div>
               ) : (
                 <section className="case-panel">
                   <h2>
@@ -838,7 +975,7 @@ export function OrganizationPortal({
                   )}
                 </section>
               )}
-              {mode === "COORDINATOR" && route.page === "cases" && !detail && (
+              {mode === "COORDINATOR" && route.page === "cases" && !route.id && (
                 <section className="case-panel">
                   <h2>Передача между организациями</h2>
                   {transfers.map((t) => (

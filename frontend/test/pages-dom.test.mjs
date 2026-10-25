@@ -130,7 +130,89 @@ try {
       await flush();
     });
     assert.match(document.body.textContent, /Карточка: Дверь не закрывается/);
+    assert.equal(new URLSearchParams(location.search).get("caseId"), "c");
+    assert.ok(document.querySelector(".case-workspace"));
     assert.ok(calls.includes("/v1/organization-workspaces/o/tasks?mode=SPECIALIST"));
+    await act(async () => root.unmount());
+    dom.window.close();
+  });
+  await test("organization deep link survives remount and assignment filters staff by function", async () => {
+    const dom = env("/organization/cases?organizationId=o&workspaceRole=COORDINATOR&caseId=c");
+    const changes = [];
+    const api = async (_role, path, options = {}) => {
+      if (path === "/v1/organization-workspaces")
+        return [{ id: "o", name: "УК", role: "COORDINATOR", functions: [] }];
+      if (path.endsWith("/houses")) return [house];
+      if (path.endsWith("/members"))
+        return [
+          { id: "e", name: "Инженер", role: "SPECIALIST", active: true, functions: ["ENGINEER"] },
+          { id: "k", name: "Координатор", role: "COORDINATOR", active: true, functions: [] },
+          { id: "a", name: "Администратор", role: "ADMIN", active: true, functions: [] },
+        ];
+      if (path.endsWith("/transfers") || path.endsWith("/partners") || path.includes("/tasks?"))
+        return [];
+      if (path.includes("/cases?")) return [];
+      if (path === "/v1/cases/c")
+        return {
+          id: "c",
+          number: 1,
+          houseId: "h",
+          kind: "PROBLEM",
+          revision: 2,
+          description: "Проблема",
+        };
+      if (path.endsWith("case-context")) return ctx;
+      if (path.endsWith("/assignments")) {
+        changes.push(JSON.parse(options.body));
+        return {};
+      }
+      if (path.endsWith("/config")) return {};
+      throw Error(path);
+    };
+    const props = {
+      api,
+      renderCase: ({ onClose }) => React.createElement("button", { onClick: onClose }, "К списку"),
+    };
+    let root = createRoot(document.getElementById("root"));
+    const mount = async () =>
+      act(async () => {
+        root.render(React.createElement(OrganizationPortal, props));
+        await flush();
+        await flush();
+      });
+    await mount();
+    assert.match(document.body.textContent, /Обращение №1/);
+    assert.equal(document.querySelectorAll("button").length > 0, true);
+    const people = () =>
+      Array.from(document.querySelector('select[name="userId"]').options).map((o) => o.textContent);
+    assert.deepEqual(people(), ["Инженер"]);
+    await act(async () => {
+      const sel = document.querySelector('select[name="function"]');
+      sel.value = "COORDINATOR";
+      sel.dispatchEvent(new Event("change", { bubbles: true }));
+    });
+    assert.deepEqual(people(), ["Координатор"]);
+    await act(async () => {
+      document
+        .querySelector('select[name="userId"]')
+        .closest("form")
+        .dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
+      await flush();
+      await flush();
+    });
+    assert.deepEqual(changes, [
+      { userId: "k", function: "COORDINATOR", enabled: true, revision: 2 },
+    ]);
+    await act(async () => root.unmount());
+    root = createRoot(document.getElementById("root"));
+    await mount();
+    assert.match(document.body.textContent, /Обращение №1/);
+    await act(async () =>
+      Array.from(document.querySelectorAll("button"))
+        .find((b) => b.textContent === "К списку")
+        .click(),
+    );
+    assert.equal(new URLSearchParams(location.search).has("caseId"), false);
     await act(async () => root.unmount());
     dom.window.close();
   });

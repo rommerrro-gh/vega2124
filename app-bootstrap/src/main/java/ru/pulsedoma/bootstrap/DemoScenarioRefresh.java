@@ -7,6 +7,7 @@ import org.springframework.core.annotation.Order;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Component;
 import ru.pulsedoma.issues.DemoScenarioService;
+import ru.pulsedoma.issues.OrganizationDemoService;
 
 /** One-off maintenance command. No HTTP endpoint and no automatic refresh on normal startup. */
 @Component
@@ -17,14 +18,17 @@ public class DemoScenarioRefresh implements ApplicationRunner {
     private final org.springframework.context.ConfigurableApplicationContext context;
     private final JdbcTemplate db;
     private final DemoScenarioService scenarios;
+    private final OrganizationDemoService organizations;
 
     public DemoScenarioRefresh(
             JdbcTemplate db,
             DemoScenarioService scenarios,
+            OrganizationDemoService organizations,
             org.springframework.core.env.Environment environment,
             org.springframework.context.ConfigurableApplicationContext context) {
         this.db = db;
         this.scenarios = scenarios;
+        this.organizations = organizations;
         this.environment = environment;
         this.context = context;
     }
@@ -36,6 +40,13 @@ public class DemoScenarioRefresh implements ApplicationRunner {
         if (db.queryForObject("SELECT count(*) FROM houses WHERE id='demo-house-1'", Integer.class)
                 > 0) {
             scenarios.refresh("demo-house-1", "demo-resident-1", "demo-dispatcher-1", "demo-uk-1");
+            String worker =
+                    "scenario-"
+                            + java.util.UUID.nameUUIDFromBytes(
+                                    "pulse-final-v3:demo-house-1:worker"
+                                            .getBytes(java.nio.charset.StandardCharsets.UTF_8));
+            organizations.seedAfterScenarioReset(
+                    "demo-house-1", "demo-resident-1", "demo-admin-1", "demo-uk-1", worker, false);
             count++;
         }
         for (var row :
@@ -46,6 +57,13 @@ public class DemoScenarioRefresh implements ApplicationRunner {
                     (String) row.get("user_id"),
                     (String) row.get("user_id"),
                     (String) row.get("organization_id"));
+            organizations.seedAfterScenarioReset(
+                    (String) row.get("house_id"),
+                    (String) row.get("user_id"),
+                    (String) row.get("user_id"),
+                    (String) row.get("organization_id"),
+                    (String) row.get("user_id"),
+                    true);
             count++;
         }
         System.out.println("DEMO_SCENARIOS_REFRESHED=" + count);

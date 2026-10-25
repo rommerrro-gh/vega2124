@@ -149,6 +149,18 @@ public class OrganizationWorkspaceController {
         return service.tasks(org, mode, p.getName());
     }
 
+    public record ReassignRequest(@NotBlank String fromUserId, @NotBlank String toUserId) {}
+
+    @PostMapping("/{org}/coordinators/reassign")
+    public Object reassign(
+            @PathVariable @NotBlank String org,
+            @Valid @RequestBody ReassignRequest r,
+            Principal p) {
+        return java.util.Map.of(
+                "reassigned",
+                service.reassignCoordinator(org, r.fromUserId(), r.toUserId(), p.getName()));
+    }
+
     @GetMapping("/{org}/partners")
     public Object partners(@PathVariable @NotBlank String org, Principal p) {
         return service.partners(org, p.getName());

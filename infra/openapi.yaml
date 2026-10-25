@@ -160,6 +160,25 @@ paths:
         '401': {description: Требуется вход}
         '403': {description: Недостаточно полномочий}
         '409': {description: Данные изменились}
+  /v1/organization-workspaces/{org}/coordinators/reassign:
+    post:
+      summary: Администратор передаёт незавершённые технические дела координатору своей организации
+      parameters:
+        - {in: path, name: org, required: true, schema: {type: string}}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [fromUserId, toUserId]
+              properties:
+                fromUserId: {type: string, minLength: 1}
+                toUserId: {type: string, minLength: 1}
+      responses:
+        '200': {description: Количество переданных дел; личные финансовые дела исключены}
+        '400': {description: Неподходящий координатор}
+        '403': {description: Нужны полномочия администратора организации}
   /v1/organization-workspaces/{org}/partners:
     get:
       summary: Партнёры в подтверждённой области домов

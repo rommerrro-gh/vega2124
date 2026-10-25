@@ -74,6 +74,7 @@ export function CaseDetail({
   onChange,
   onClose,
   residentOnly = false,
+  organizationMode = false,
   section = "overview",
 }) {
   const [message, setMessage] = useState("");
@@ -386,6 +387,7 @@ export function CaseDetail({
                 onChange={onChange}
                 residentOnly={residentOnly}
                 section={section}
+                allowAssignments={!organizationMode}
               />
             )}
           {(!residentOnly || ["messages", "history"].includes(section)) && (
@@ -591,7 +593,7 @@ export function CaseDetail({
           </form>
         </details>
       )}
-      {!residentOnly && context?.canManagePermissions && (
+      {!residentOnly && !organizationMode && context?.canManagePermissions && (
         <details className="case-editor">
           <summary>Участники конкретного обращения</summary>
           <p className="muted">

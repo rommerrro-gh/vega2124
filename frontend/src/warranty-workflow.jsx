@@ -422,6 +422,7 @@ export function CaseWorkflow({
   onChange,
   residentOnly = false,
   section = "history",
+  allowAssignments = true,
 }) {
   const [data, setData] = useState(null),
     [registry, setRegistry] = useState([]),
@@ -549,7 +550,7 @@ export function CaseWorkflow({
         </div>
       )}
       <Notice>{notice}</Notice>
-      {editable && data.canCoordinate && (
+      {editable && data.canCoordinate && allowAssignments && (
         <details className="case-editor">
           <summary>Назначить инженера или исполнителя в это обращение</summary>
           <Form

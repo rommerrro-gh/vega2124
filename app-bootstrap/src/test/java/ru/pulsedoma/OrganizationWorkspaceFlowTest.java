@@ -137,6 +137,104 @@ class OrganizationWorkspaceFlowTest {
     }
 
     @Test
+    void legacyAssignmentCannotMislabelExternalAccessOrRemoveScopedAssignment() {
+        var t =
+                teams.offer(
+                        org,
+                        caseId,
+                        target,
+                        "Осмотр",
+                        cases.get(caseId, "demo-admin-1").revision(),
+                        "demo-admin-1");
+        teams.reply(t.id(), TransferState.ACCEPTED, "Принято", 0, coordinator);
+        int revision = cases.get(caseId, coordinator).revision();
+        assertThrows(
+                RuntimeException.class,
+                () ->
+                        cases.assign(
+                                caseId,
+                                engineer,
+                                CaseFunction.ENGINEER,
+                                true,
+                                revision,
+                                coordinator));
+        assertEquals(revision, cases.get(caseId, coordinator).revision());
+        assertThrows(RuntimeException.class, () -> cases.get(privateCaseId, engineer));
+        teams.assign(target, caseId, engineer, CaseFunction.ENGINEER, revision, true, coordinator);
+        int assignedRevision = cases.get(caseId, coordinator).revision();
+        assertThrows(
+                RuntimeException.class,
+                () ->
+                        cases.assign(
+                                caseId,
+                                engineer,
+                                CaseFunction.ENGINEER,
+                                true,
+                                assignedRevision,
+                                coordinator));
+        assertThrows(
+                RuntimeException.class,
+                () ->
+                        cases.assign(
+                                caseId,
+                                engineer,
+                                CaseFunction.ENGINEER,
+                                false,
+                                assignedRevision,
+                                coordinator));
+        assertEquals(
+                target,
+                jdbc.queryForObject(
+                        "SELECT source_organization_id FROM case_collaborators WHERE case_id=? AND user_id=? AND function='ENGINEER'",
+                        String.class,
+                        caseId,
+                        engineer));
+        assertTrue(cases.get(caseId, engineer).fullAccess());
+        assertThrows(RuntimeException.class, () -> cases.get(privateCaseId, engineer));
+        teams.assign(
+                target,
+                caseId,
+                engineer,
+                CaseFunction.ENGINEER,
+                assignedRevision,
+                false,
+                coordinator);
+        assertThrows(RuntimeException.class, () -> cases.get(caseId, engineer));
+    }
+
+    @Test
+    void administratorCanReplaceAbsentCoordinatorWithoutOpeningPrivateCases() {
+        var transfer =
+                teams.offer(
+                        org,
+                        caseId,
+                        target,
+                        "Осмотр",
+                        cases.get(caseId, "demo-admin-1").revision(),
+                        "demo-admin-1");
+        teams.reply(transfer.id(), TransferState.ACCEPTED, "Принято", 0, coordinator);
+        var a = teams.invite(target, TeamRole.ADMIN, "", List.of(), "demo-admin-1");
+        teams.accept(a.token(), "demo-admin-1");
+        var i = teams.invite(target, TeamRole.COORDINATOR, "Замещение", List.of(), "demo-admin-1");
+        teams.accept(i.token(), engineer);
+        assertTrue(teams.assignedCases(target, TeamRole.COORDINATOR, engineer).isEmpty());
+        assertThrows(
+                RuntimeException.class,
+                () -> teams.reassignCoordinator(target, coordinator, engineer, coordinator));
+        assertThrows(
+                RuntimeException.class,
+                () ->
+                        teams.reassignCoordinator(
+                                target, coordinator, "demo-admin-1", "demo-admin-1"));
+        assertEquals(1, teams.reassignCoordinator(target, coordinator, engineer, "demo-admin-1"));
+        assertEquals(engineer, cases.get(caseId, engineer).responsibleUserId());
+        assertFalse(access.coordinator(caseId, "demo-house-1", coordinator));
+        assertEquals(1, teams.assignedCases(target, TeamRole.COORDINATOR, engineer).size());
+        assertThrows(RuntimeException.class, () -> cases.get(privateCaseId, engineer));
+        assertEquals(0, teams.reassignCoordinator(target, coordinator, engineer, "demo-admin-1"));
+    }
+
+    @Test
     void returnedTransferDoesNotGrantCaseAndCanBeOfferedAgain() {
         var t =
                 teams.offer(
