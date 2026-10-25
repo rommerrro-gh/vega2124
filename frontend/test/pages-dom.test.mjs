@@ -10,7 +10,7 @@ const temp = new URL(`./.pages-${process.pid}.mjs`, import.meta.url);
 await build({
   stdin: {
     contents:
-      'export {OrganizationPortal,OrganizationNavigation} from "./src/organization-workspaces.jsx";export {ResidentCases,CaseDetail} from "./src/resident-cases.jsx";export {AccountPages} from "./src/account-pages.jsx";export {OperationsInbox} from "./src/operations.jsx";export {CommonProblems} from "./src/common-problems.jsx";export {CaseWorkflow} from "./src/warranty-workflow.jsx";export {useRoute,go} from "./src/navigation.jsx";',
+      'export {OrganizationPortal,OrganizationNavigation} from "./src/organization-workspaces.jsx";export {ResidentCases,CaseDetail,StaffCases} from "./src/resident-cases.jsx";export {AccountPages} from "./src/account-pages.jsx";export {OperationsInbox} from "./src/operations.jsx";export {CommonProblems} from "./src/common-problems.jsx";export {CaseWorkflow} from "./src/warranty-workflow.jsx";export {useRoute,go} from "./src/navigation.jsx";',
     resolveDir: fileURLToPath(new URL("../", import.meta.url)),
     loader: "jsx",
   },
@@ -51,6 +51,7 @@ const {
   OrganizationNavigation,
   ResidentCases,
   CaseDetail,
+  StaffCases,
   AccountPages,
   OperationsInbox,
   CommonProblems,
@@ -410,6 +411,104 @@ try {
     });
     assert.deepEqual(sent, { action: "CONFIRM_TIME", revision: 0, caseRevision: 7 });
     assert.equal(document.body.textContent.includes("Это время подходит"), false);
+    await act(async () => root.unmount());
+    dom.window.close();
+  });
+  await test("dispatcher follows the merged common case instead of restoring its retired source", async () => {
+    const dom = env("/dispatcher/queue?caseId=source");
+    const source = {
+      id: "source",
+      workflowCaseId: "source",
+      sharedRequestId: "g1",
+      houseId: "h",
+      number: 1,
+      description: "Уборка подъезда",
+      kind: "PROBLEM",
+      status: "IN_PROGRESS",
+      revision: 1,
+      documents: [],
+      fullAccess: false,
+    };
+    const target = {
+      ...source,
+      id: "target",
+      workflowCaseId: "target",
+      sharedRequestId: "g2",
+      number: 2,
+    };
+    const group = (id, workflowCaseId) => ({
+      id,
+      workflowCaseId,
+      title: "Уборка подъезда",
+      category: "ENTRANCE_CLEANING",
+      status: "IN_PROGRESS",
+      canManage: true,
+      participants: 1,
+      confirmedCount: 0,
+      revision: 1,
+      members: [],
+      history: [],
+      work: [],
+    });
+    let merged = false;
+    const api = async (role, path) => {
+      if (path.endsWith("/case-queue")) return merged ? [target] : [source];
+      if (path.endsWith("/case-context"))
+        return { ...ctx, canReview: false, canManagePermissions: false };
+      if (path === "/v1/shared-requests/g1/merge") {
+        merged = true;
+        return group("g2", "target");
+      }
+      if (path === "/v1/shared-requests/g1") {
+        assert.equal(merged, false, "retired source must not be reopened");
+        return group("g1", "source");
+      }
+      if (path === "/v1/shared-requests/g2") return group("g2", "target");
+      if (path.endsWith("/shared-requests")) return [group("g1", "source"), group("g2", "target")];
+      if (path === "/v1/cases/target") return target;
+      throw Error(path);
+    };
+    const root = createRoot(document.getElementById("root"));
+    await act(async () => {
+      root.render(
+        React.createElement(StaffCases, {
+          houseId: "h",
+          role: "dispatcher",
+          api,
+          headers: () => ({}),
+        }),
+      );
+      await flush();
+    });
+    const section = document.querySelector(".shared-request-panel");
+    await act(async () => {
+      const reason = [...section.querySelectorAll("textarea")][0];
+      Object.getOwnPropertyDescriptor(dom.window.HTMLTextAreaElement.prototype, "value").set.call(
+        reason,
+        "Подтверждена одна проблема",
+      );
+      reason.dispatchEvent(new dom.window.Event("input", { bubbles: true }));
+      reason.dispatchEvent(new dom.window.Event("change", { bubbles: true }));
+      const select = [...section.querySelectorAll("select")].find((e) =>
+        [...e.options].some((o) => o.value === "g2"),
+      );
+      select.value = "g2";
+      select.dispatchEvent(new dom.window.Event("change", { bubbles: true }));
+      await flush();
+    });
+    const merge = [...section.querySelectorAll("button")].find(
+      (b) => b.textContent === "Объединить с сохранением истории",
+    );
+    assert.equal(merge.disabled, false);
+    await act(async () => {
+      merge.click();
+      await flush();
+      await flush();
+    });
+    assert.equal(merged, true);
+    assert.equal(new URL(location.href).searchParams.get("caseId"), "target");
+    assert.ok(document.body.textContent.includes("ОБРАЩЕНИЕ № 2"));
+    assert.ok(!document.body.textContent.includes("Общая заявка недоступна"));
     await act(async () => root.unmount());
     dom.window.close();
   });

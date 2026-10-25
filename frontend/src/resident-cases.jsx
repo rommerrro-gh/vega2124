@@ -1783,11 +1783,13 @@ export function StaffCases({ houseId, role, api, headers, section = "all" }) {
               headers={headers}
               onChange={(next) => {
                 setDetail(next);
-                setItems((list) => list.map((c) => (c.id === next.id ? next : c)));
+                setItems((list) => [next, ...list.filter((c) => c.id !== next.id)]);
+                if (next.id !== route.query.get("caseId")) filters({ caseId: next.id });
               }}
               onClose={() => {
                 setDetail(null);
                 filters({ caseId: "" });
+                refresh();
               }}
             />
           ) : (
