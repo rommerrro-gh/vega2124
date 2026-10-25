@@ -16,6 +16,8 @@ import ru.pulsedoma.issues.*;
 @org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc
 @SpringBootTest
 @ActiveProfiles("demo")
+// Matching tests must not compete with similar requests left by another test method.
+@org.springframework.transaction.annotation.Transactional
 class SharedRequestsFlowTest {
     static final String HOUSE = "demo-house-1",
             A = "demo-resident-1",
