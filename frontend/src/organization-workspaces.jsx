@@ -133,6 +133,7 @@ export function OrganizationPortal({
     [context, setContext] = useState(null),
     [notice, setNotice] = useState(""),
     [busy, setBusy] = useState(false),
+    [loading, setLoading] = useState(true),
     [token, setToken] = useState(""),
     [generation, setGeneration] = useState(0);
   const request = (path, options) => api(session, path, options),
@@ -161,6 +162,7 @@ export function OrganizationPortal({
   }, [org, mode, session]);
   useEffect(() => {
     let active = true;
+    setLoading(true);
     setNotice("");
     setItems([]);
     setDetail(null);
@@ -238,7 +240,11 @@ export function OrganizationPortal({
         setTasks(tasks);
       }
     }
-    load().catch((e) => active && setNotice(e.message));
+    load()
+      .catch((e) => active && setNotice(e.message))
+      .finally(() => {
+        if (active) setLoading(false);
+      });
     return () => {
       active = false;
     };
@@ -359,6 +365,7 @@ export function OrganizationPortal({
         </p>
       )}
       {notice && <p role="alert">{notice}</p>}
+      {loading && <p role="status">Загружаем кабинет…</p>}
       {invited && (
         <section className="case-panel">
           <h2>Подключение к организации</h2>
@@ -385,7 +392,7 @@ export function OrganizationPortal({
           </button>
         </section>
       )}
-      {system && (
+      {system && !loading && (
         <>
           {route.page === "queue" && (
             <section className="case-panel">
@@ -501,7 +508,7 @@ export function OrganizationPortal({
           )}
         </>
       )}
-      {!system && current && (
+      {!system && current && !loading && (
         <>
           {route.page === "overview" && (
             <>
@@ -885,7 +892,7 @@ export function OrganizationPortal({
           )}
         </>
       )}
-      {!system && !current && !invited && (
+      {!system && !current && !invited && !loading && (
         <section className="case-panel">
           <p>Этот кабинет недоступен. Выберите действующий кабинет в профиле.</p>
           <button onClick={() => go("/miniapp/roles")}>Мои кабинеты</button>
