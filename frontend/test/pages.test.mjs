@@ -80,3 +80,20 @@ test("organization detail retains its originating tab and native back", () => {
     );
   }
 });
+
+test("system tabs retain the selected organization without leaking it to resident pages", () => {
+  assert.equal(
+    routeUrl(
+      "/system/access",
+      "https://pulsedoma.ru/system/houses?organizationId=selected&demoSession=admin",
+    ),
+    "/system/access?demoSession=admin&organizationId=selected",
+  );
+  assert.equal(
+    routeUrl(
+      "/miniapp/profile",
+      "https://pulsedoma.ru/system/houses?organizationId=selected&demoSession=admin",
+    ),
+    "/miniapp/profile?demoSession=admin",
+  );
+});

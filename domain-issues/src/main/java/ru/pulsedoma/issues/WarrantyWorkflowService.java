@@ -162,7 +162,10 @@ public class WarrantyWorkflowService {
             boolean canCoordinate,
             boolean canReviewWarranty,
             boolean canInspect,
+            boolean commonWork,
             List<ResidentCaseService.Staff> staff,
+            List<ResidentCaseService.Staff> inspectors,
+            List<ResidentCaseService.Staff> executors,
             List<Review> reviews,
             List<Handoff> handoffs,
             List<Inspection> inspections,
@@ -753,6 +756,8 @@ public class WarrantyWorkflowService {
                                                 "SELECT r.id,r.version,r.report,r.evidence_version_id,r.created_at,u.display_name AS author FROM work_order_reports r JOIN users u ON u.id=r.created_by WHERE work_order_id=? ORDER BY version DESC",
                                                 rs.getString("id"))),
                         id);
+        var candidates =
+                coord ? access.candidates(c.houseId()) : List.<ResidentCaseService.Staff>of();
         return new Workspace(
                 c.revision(),
                 user,
@@ -760,7 +765,24 @@ public class WarrantyWorkflowService {
                 coord,
                 warranty(c, user),
                 engineer(c, user),
-                coord ? access.candidates(c.houseId()) : List.of(),
+                commonWork(c),
+                candidates,
+                candidates.stream()
+                        .filter(
+                                s ->
+                                        access.assigned(
+                                                c.id(), c.houseId(), s.id(), CaseFunction.ENGINEER))
+                        .toList(),
+                candidates.stream()
+                        .filter(
+                                s ->
+                                        access.assigned(
+                                                c.id(),
+                                                c.houseId(),
+                                                s.id(),
+                                                CaseFunction.ENGINEER,
+                                                CaseFunction.CONTRACTOR))
+                        .toList(),
                 reviews,
                 handoffs,
                 inspections,
@@ -768,6 +790,10 @@ public class WarrantyWorkflowService {
                 jdbc.queryForList(
                         "SELECT h.action,h.note,h.created_at,u.display_name AS actor FROM workflow_history h JOIN users u ON u.id=h.actor_id WHERE case_id=? ORDER BY h.rowid",
                         id));
+    }
+
+    private boolean commonWork(ResidentCaseService.CaseView c) {
+        return yes("SELECT count(*) FROM resident_cases WHERE id=? AND internal_work=1", c.id());
     }
 
     private List<Act> acts(String inspection, String user, ResidentCaseService.CaseView c) {
@@ -963,6 +989,8 @@ public class WarrantyWorkflowService {
         coordinate(c, user);
         inspector(c, r.inspectorId());
         slot(r.startsAt(), r.endsAt());
+        boolean common = commonWork(c);
+        var state = common ? InspectionState.SCHEDULED : InspectionState.PROPOSED;
         String id = inspectionId == null ? id() : inspectionId;
         String previous =
                 inspectionId == null
@@ -977,7 +1005,7 @@ public class WarrantyWorkflowService {
                                                 str(row("case_inspections", id), "ends_at"))));
         if (inspectionId == null)
             jdbc.update(
-                    "INSERT INTO case_inspections(id,case_id,inspector_id,location,participants,starts_at,ends_at,state,created_by,created_at) VALUES (?,?,?,?,?,?,?,'PROPOSED',?,?)",
+                    "INSERT INTO case_inspections(id,case_id,inspector_id,location,participants,starts_at,ends_at,state,created_by,created_at) VALUES (?,?,?,?,?,?,?,?,?,?)",
                     id,
                     caseId,
                     r.inspectorId(),
@@ -985,6 +1013,7 @@ public class WarrantyWorkflowService {
                     r.participants(),
                     r.startsAt(),
                     r.endsAt(),
+                    state.name(),
                     user,
                     now());
         else {
@@ -994,12 +1023,13 @@ public class WarrantyWorkflowService {
                 throw invalid("Создайте новый осмотр вместо изменения завершённого");
             if (optional(r.reason()) == null) throw invalid("Объясните перенос осмотра");
             if (jdbc.update(
-                            "UPDATE case_inspections SET inspector_id=?,location=?,participants=?,starts_at=?,ends_at=?,state='PROPOSED',resident_availability='PENDING',revision=revision+1 WHERE id=? AND revision=?",
+                            "UPDATE case_inspections SET inspector_id=?,location=?,participants=?,starts_at=?,ends_at=?,state=?,resident_availability='PENDING',revision=revision+1 WHERE id=? AND revision=?",
                             r.inspectorId(),
                             r.location(),
                             r.participants(),
                             r.startsAt(),
                             r.endsAt(),
+                            state.name(),
                             id,
                             r.revision())
                     != 1) throw conflict();
@@ -1008,7 +1038,9 @@ public class WarrantyWorkflowService {
                 c,
                 id,
                 "INSPECTION_PLANNED",
-                "Предложен осмотр. Инженер: "
+                (common
+                                ? "Запланирован осмотр общей проблемы. Инженер: "
+                                : "Предложен осмотр. Инженер: ")
                         + jdbc.queryForObject(
                                 "SELECT display_name FROM users WHERE id=?",
                                 String.class,
@@ -1023,12 +1055,15 @@ public class WarrantyWorkflowService {
                         + (optional(r.reason()) == null ? "" : ". Причина переноса: " + r.reason()),
                 r.caseRevision(),
                 user,
-                "Предложен осмотр: "
+                (common ? "Запланирован осмотр общей проблемы: " : "Предложен осмотр: ")
                         + moscow(r.startsAt())
                         + " — "
                         + moscow(r.endsAt())
-                        + ". В карточке можно подтвердить время или попросить другое");
-        jdbc.update("UPDATE resident_cases SET status='WAITING_RESIDENT' WHERE id=?", caseId);
+                        + (common
+                                ? ". Инженер проверит общее имущество"
+                                : ". В карточке можно подтвердить время или попросить другое"));
+        if (!common)
+            jdbc.update("UPDATE resident_cases SET status='WAITING_RESIDENT' WHERE id=?", caseId);
         return workspace(caseId, user);
     }
 

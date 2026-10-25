@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { problemCategories } from "./problem-fields.jsx";
 
-export function SharedRequestPanel({ item, role, api, onChange }) {
+export function SharedRequestPanel({ item, role, api, onChange, allowPrivateMaterials = true }) {
   const [group, setGroup] = useState(null),
     [queue, setQueue] = useState([]),
     [target, setTarget] = useState(""),
@@ -87,34 +87,7 @@ export function SharedRequestPanel({ item, role, api, onChange }) {
             Работа и сроки общие. Ваши документы, переписка и время визита доступны вам и
             уполномоченным сотрудникам.
           </p>
-          {item.withdrawn ? (
-            <p>Вы отозвали своё обращение. История сохранена.</p>
-          ) : (
-            item.isAuthor && (
-              <details>
-                <summary>Отозвать моё обращение</summary>
-                <label>
-                  Причина
-                  <textarea
-                    maxLength={1000}
-                    value={reason}
-                    onChange={(e) => setReason(e.target.value)}
-                  />
-                </label>
-                <p>Обращения соседей и общая работа сохранятся.</p>
-                <button
-                  type="button"
-                  className="case-secondary"
-                  disabled={busy || !reason.trim()}
-                  onClick={() =>
-                    run(`/v1/cases/${item.id}/withdraw`, { revision: item.revision, reason })
-                  }
-                >
-                  Подтвердить отзыв
-                </button>
-              </details>
-            )
-          )}
+          {item.withdrawn && <p>Обращение участника отозвано. История сохранена.</p>}
           <details>
             <summary>История общей работы</summary>
             <ol className="case-timeline">
@@ -169,9 +142,11 @@ export function SharedRequestPanel({ item, role, api, onChange }) {
                           : "Участвует в общей работе"}
                     </p>
                     <div className="case-actions">
-                      <button type="button" disabled={busy} onClick={() => open(m.caseId)}>
-                        Открыть материалы
-                      </button>
+                      {allowPrivateMaterials && (
+                        <button type="button" disabled={busy} onClick={() => open(m.caseId)}>
+                          Открыть материалы
+                        </button>
+                      )}
                       {m.caseId !== item.workflowCaseId && !m.withdrawn && (
                         <button
                           type="button"

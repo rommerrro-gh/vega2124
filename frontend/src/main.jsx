@@ -120,10 +120,15 @@ async function api(role, path, options = {}) {
     );
   });
   if (!response.ok) {
-    if (response.status === 401)
-      throw new Error(
-        "Нет доступа. Откройте приложение в MAX. Для локального просмотра запустите сервер с профилем demo.",
+    if (response.status === 401) {
+      const failure = new Error(
+        window.WebApp?.initData
+          ? "Вход в MAX нужно обновить. Закройте мини-приложение и откройте «Пульс дома» заново через бота. Сохранённые обращения останутся доступны."
+          : "Откройте «Пульс дома» через бота MAX, чтобы войти в приложение.",
       );
+      failure.status = 401;
+      throw failure;
+    }
     const error = await response.json().catch(() => ({}));
     const failure = new Error(error.message || `Ошибка ${response.status}`);
     failure.status = response.status;
@@ -1132,6 +1137,7 @@ function Admin() {
     setNotice("");
     try {
       await request(`/v1/access/invitations/${encodeURIComponent(id)}/revoke`, { method: "POST" });
+      setCreatedToken("");
       setInvitations(await request("/v1/access/invitations"));
     } catch (error) {
       fail(error);
@@ -1400,7 +1406,7 @@ function Admin() {
                     <div>
                       <strong>{item.displayName}</strong>
                       <small>
-                        {item.status}
+                        {accessStateLabels[item.status] || item.status}
                         {item.userId === currentUserId ? " · вы" : ""}
                       </small>
                     </div>
@@ -1480,7 +1486,7 @@ function Admin() {
                     </button>
                   )}
                 </div>
-                <Field id="poll-close" label="Закрыть опрос">
+                <Field id="poll-close" label="Принимать ответы до">
                   <input
                     id="poll-close"
                     type="datetime-local"
@@ -1592,6 +1598,11 @@ function Dispatcher() {
   );
 }
 
+const accessStateLabels = {
+  ACTIVE: "Доступ открыт",
+  SUSPENDED: "Доступ приостановлен",
+  REVOKED: "Доступ отозван",
+};
 const accessRoleLabels = {
   SYSTEM_ADMIN: "Системный администратор",
   UK_ADMIN: "Администратор УК",
@@ -1897,6 +1908,7 @@ function SystemAdmin() {
   async function revokeInvitation(id) {
     await run(async () => {
       await request(`/v1/access/invitations/${id}/revoke`, { method: "POST" });
+      setToken("");
       setInvitations(await request("/v1/access/invitations"));
     });
   }
@@ -2209,6 +2221,7 @@ function UkAdmin({ embedded = false, fixedOrganizationId = "" }) {
     setNotice("");
     try {
       await request(`/v1/access/invitations/${id}/revoke`, { method: "POST" });
+      setToken("");
       setInvitations(await request("/v1/access/invitations"));
     } catch (error) {
       setNotice(error.message);
@@ -2322,7 +2335,8 @@ function UkAdmin({ embedded = false, fixedOrganizationId = "" }) {
                 <div>
                   <strong>{item.displayName}</strong>
                   <small>
-                    {accessRoleLabels[item.role]} · {item.houseAddress} · {item.status}
+                    {accessRoleLabels[item.role]} · {item.houseAddress} ·{" "}
+                    {accessStateLabels[item.status] || item.status}
                   </small>
                 </div>
                 {item.status === "ACTIVE" && (

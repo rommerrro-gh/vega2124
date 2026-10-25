@@ -50,7 +50,7 @@ const recipients = {
 };
 const inspectionStates = {
   PROPOSED: "Предложено время",
-  SCHEDULED: "Время согласовано",
+  SCHEDULED: "Осмотр запланирован",
   COMPLETED: "Осмотр проведён",
   NO_ACCESS: "Осмотр не состоялся",
   CANCELLED: "Осмотр отменён",
@@ -482,10 +482,16 @@ export function CaseWorkflow({
           label: `Акт осмотра · ${date(a.inspectedAt)} · версия ${a.version}`,
         })),
     ) || [];
-  const participants = data?.staff.map((s) => ({ value: s.id, label: s.name })) || [];
+  const participants = (name) =>
+    (name === "inspectorId"
+      ? data?.inspectors
+      : name === "assigneeId"
+        ? data?.executors
+        : data?.staff
+    )?.map((s) => ({ value: s.id, label: s.name })) || [];
   const personField = (name, label) =>
     field(name, label, "select", {
-      options: [{ value: "", label: "Выберите назначенного сотрудника" }, ...participants],
+      options: [{ value: "", label: "Выберите назначенного сотрудника" }, ...participants(name)],
     });
   const finish = (path, d, method = "POST") =>
     act(
@@ -882,10 +888,12 @@ export function CaseWorkflow({
           ))}
           {editable && data.canCoordinate && (
             <details className="case-editor">
-              <summary>Предложить осмотр</summary>
+              <summary>{data.commonWork ? "Запланировать осмотр" : "Предложить осмотр"}</summary>
               <p className="muted">
-                Сначала назначьте инженера участником обращения. Жителю достаточно подтвердить
-                интервал или попросить другой.
+                Сначала назначьте инженера участником обращения.{" "}
+                {data.commonWork
+                  ? "Осмотр общего имущества планируется без подтверждения отдельного жителя. Личный визит согласуют в его обращении."
+                  : "Жителю достаточно подтвердить интервал или попросить другой."}
               </p>
               <Form
                 fields={inspectionForm()}
@@ -898,7 +906,7 @@ export function CaseWorkflow({
                     caseRevision: cr,
                   })
                 }
-                label="Предложить время"
+                label={data.commonWork ? "Запланировать осмотр" : "Предложить время"}
                 busy={busy}
               />
             </details>
@@ -928,6 +936,12 @@ export function CaseWorkflow({
                 Основание срока: {o.dueBasis}
               </p>
               <p className="muted">Основание работ: {o.basis}</p>
+              {o.state === "REPORTED" && data.canCoordinate && data.actorId === o.assigneeId && (
+                <p className="case-notice">
+                  Отчёт должен принять другой координатор: исполнитель не может принять собственную
+                  работу.
+                </p>
+              )}
               {o.reports.map((r) => (
                 <div key={r.id} className="workflow-act">
                   <strong>Отчёт исполнителя · версия {r.version}</strong>

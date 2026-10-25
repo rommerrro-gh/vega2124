@@ -84,6 +84,13 @@ export function routeUrl(path, current) {
       if (!next.searchParams.has(key) && old.searchParams.has(key))
         next.searchParams.set(key, old.searchParams.get(key));
   }
+  if (
+    next.pathname.startsWith("/system/") &&
+    old.pathname.startsWith("/system/") &&
+    !next.searchParams.has("organizationId") &&
+    old.searchParams.has("organizationId")
+  )
+    next.searchParams.set("organizationId", old.searchParams.get("organizationId"));
   if (!next.hash) next.hash = old.hash;
   return next.pathname + next.search + next.hash;
 }

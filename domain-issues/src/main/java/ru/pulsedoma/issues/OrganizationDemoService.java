@@ -198,11 +198,11 @@ public class OrganizationDemoService {
                         c.workflowCaseId(),
                         coord);
                 jdbc.update(
-                        "UPDATE resident_cases SET status='IN_REVIEW',responsible_user_id=?,next_step='Согласуем осмотр с инженером гарантийной службы' WHERE id=?",
+                        "UPDATE resident_cases SET status='IN_REVIEW',responsible_user_id=?,next_step='Запланирован осмотр общего имущества инженером гарантийной службы' WHERE id=?",
                         coord,
                         c.workflowCaseId());
                 jdbc.update(
-                        "INSERT OR IGNORE INTO case_inspections(id,case_id,inspector_id,location,participants,starts_at,ends_at,state,created_by,created_at) VALUES (?,?,?,?,?,?,?,'PROPOSED',?,?)",
+                        "INSERT OR IGNORE INTO case_inspections(id,case_id,inspector_id,location,participants,starts_at,ends_at,state,created_by,created_at) VALUES (?,?,?,?,?,?,?,'SCHEDULED',?,?)",
                         key(c.workflowCaseId() + ":inspection"),
                         c.workflowCaseId(),
                         worker,

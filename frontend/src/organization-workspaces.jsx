@@ -73,7 +73,13 @@ export function OrganizationNavigation({ route, system = false }) {
         <button
           key={page}
           aria-current={route.page === page ? "page" : undefined}
-          onClick={() => go(system ? `/system/${page}` : organizationPath(org, role, page))}
+          onClick={() =>
+            go(
+              system
+                ? `/system/${page}${org ? `?organizationId=${encodeURIComponent(org)}` : ""}`
+                : organizationPath(org, role, page),
+            )
+          }
         >
           <Icon size={23} weight={route.page === page ? "fill" : "regular"} />
           <span>{label}</span>
@@ -216,6 +222,7 @@ export function OrganizationPortal({
         ...(body === undefined ? {} : { body: JSON.stringify(body) }),
       });
       if (result?.token) setToken(result.token);
+      if (method === "DELETE" && path.includes("/invitations/")) setToken("");
       setGeneration((n) => n + 1);
       return result ?? { ok: true };
     } catch (e) {
@@ -836,6 +843,7 @@ export function OrganizationPortal({
                       {renderCase({
                         item: detail,
                         organizationMode: true,
+                        allowPrivateMaterials: current.kind === "MANAGEMENT_COMPANY",
                         context,
                         role: session,
                         onClose: closeDetail,
@@ -969,8 +977,11 @@ export function OrganizationPortal({
                       ? visible.flatMap((c) => c.documents || []).length
                       : visible.length) && (
                     <p>
-                      Пока нет назначенной работы. Обращения появятся после назначения
-                      координатором.
+                      {route.page === "documents"
+                        ? "В назначенных обращениях пока нет документов."
+                        : route.page === "control"
+                          ? "Нет обращений, требующих внимания."
+                          : "Пока нет назначенной работы. Обращения появятся после назначения координатором."}
                     </p>
                   )}
                 </section>

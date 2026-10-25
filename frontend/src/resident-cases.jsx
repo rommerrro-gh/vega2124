@@ -75,6 +75,7 @@ export function CaseDetail({
   onClose,
   residentOnly = false,
   organizationMode = false,
+  allowPrivateMaterials = true,
   section = "overview",
 }) {
   const [message, setMessage] = useState("");
@@ -232,7 +233,13 @@ export function CaseDetail({
       </div>
       <Notice>{notice}</Notice>
       {!residentOnly && (
-        <SharedRequestPanel item={item} role={role} api={api} onChange={onChange} />
+        <SharedRequestPanel
+          item={item}
+          role={role}
+          api={api}
+          onChange={onChange}
+          allowPrivateMaterials={allowPrivateMaterials}
+        />
       )}
       {residentOnly && section === "overview" && (
         <div className="page-list">
@@ -340,7 +347,7 @@ export function CaseDetail({
       {item.fullAccess && !item.withdrawn && (
         <>
           {(!residentOnly || section === "visits") &&
-            (item.id !== item.workflowCaseId ? (
+            (!item.sharedRequestId || item.id !== item.workflowCaseId ? (
               <CaseVisits
                 item={item}
                 role={role}
@@ -350,8 +357,7 @@ export function CaseDetail({
               />
             ) : (
               <p className="muted">
-                Чтобы предложить жителю время визита, откройте его материалы в участниках общей
-                заявки.
+                Личный визит согласуют в обращении жителя. Осмотр общей проблемы планируется ниже.
               </p>
             ))}
           {!residentOnly && (

@@ -33,6 +33,7 @@ class OrganizationWorkspaceFlowTest {
     @Autowired OrganizationWorkspaceService teams;
     @Autowired ResidentCaseService cases;
     @Autowired CaseWorkAccess access;
+    @Autowired WarrantyWorkflowService workflow;
     @Autowired JdbcTemplate jdbc;
     String org, target, coordinator, engineer, caseId, privateCaseId;
 
@@ -134,6 +135,74 @@ class OrganizationWorkspaceFlowTest {
                                 cases.get(caseId, coordinator).revision(),
                                 true,
                                 coordinator));
+    }
+
+    @Test
+    void commonInspectionUsesAssignedEngineerWithoutWaitingForNonexistentResident() {
+        var transfer =
+                teams.offer(
+                        org,
+                        caseId,
+                        target,
+                        "Осмотр общего имущества",
+                        cases.get(caseId, "demo-admin-1").revision(),
+                        "demo-admin-1");
+        teams.reply(transfer.id(), TransferState.ACCEPTED, "Принято", 0, coordinator);
+        assertTrue(workflow.workspace(caseId, coordinator).inspectors().isEmpty());
+        teams.assign(
+                target,
+                caseId,
+                engineer,
+                CaseFunction.ENGINEER,
+                cases.get(caseId, coordinator).revision(),
+                true,
+                coordinator);
+        var workspace = workflow.workspace(caseId, coordinator);
+        assertTrue(workspace.commonWork());
+        assertEquals(
+                List.of(engineer),
+                workspace.inspectors().stream().map(ResidentCaseService.Staff::id).toList());
+        assertEquals(
+                List.of(engineer),
+                workspace.executors().stream().map(ResidentCaseService.Staff::id).toList());
+        var start = java.time.Instant.now().plusSeconds(86400);
+        var planned =
+                workflow.planInspection(
+                        caseId,
+                        null,
+                        new WorkflowRequests.Inspection(
+                                engineer,
+                                "Подъезд 1",
+                                "Инженер и представитель УК",
+                                start,
+                                start.plusSeconds(3600),
+                                0,
+                                workspace.revision(),
+                                null),
+                        coordinator);
+        var inspection = planned.inspections().getFirst();
+        assertEquals(WorkflowTypes.InspectionState.SCHEDULED, inspection.state());
+        var residentView = cases.get(privateCaseId, "demo-resident-1");
+        assertEquals(CaseStatus.IN_PROGRESS, residentView.status());
+        assertTrue(residentView.nextStep().contains("Запланирован осмотр общей проблемы"));
+        assertFalse(residentView.nextStep().contains("подтвердить"));
+        var moved =
+                workflow.planInspection(
+                        caseId,
+                        inspection.id(),
+                        new WorkflowRequests.Inspection(
+                                engineer,
+                                "Подъезд 1",
+                                "Инженер и представитель УК",
+                                start.plusSeconds(3600),
+                                start.plusSeconds(7200),
+                                inspection.revision(),
+                                planned.revision(),
+                                "Изменилось время доступа"),
+                        coordinator);
+        assertEquals(
+                WorkflowTypes.InspectionState.SCHEDULED, moved.inspections().getFirst().state());
+        assertThrows(RuntimeException.class, () -> cases.get(privateCaseId, engineer));
     }
 
     @Test

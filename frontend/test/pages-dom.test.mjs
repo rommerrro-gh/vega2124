@@ -422,7 +422,13 @@ try {
       canCoordinate: true,
       canInspect: false,
       canReviewWarranty: false,
-      staff: [{ id: "engineer", name: "Инженер" }],
+      staff: [
+        { id: "engineer", name: "Инженер" },
+        { id: "other", name: "Не назначен" },
+      ],
+      inspectors: [{ id: "engineer", name: "Инженер" }],
+      executors: [],
+      commonWork: true,
       reviews: [],
       inspections: [],
       orders: [],
@@ -450,6 +456,8 @@ try {
     const form = [...document.querySelectorAll("form")].find((f) =>
       f.textContent.includes("Начало интервала"),
     );
+    assert.ok(form.textContent.includes("Запланировать осмотр"));
+    assert.ok(!form.textContent.includes("Не назначен"));
     const fields = [...form.querySelectorAll("input,textarea,select")];
     const input = async (label, value) => {
       const field = fields.find((f) => f.parentElement.textContent.startsWith(label));
