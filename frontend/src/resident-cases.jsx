@@ -1690,10 +1690,22 @@ export function StaffCases({ houseId, role, api, headers, section = "all" }) {
     }
   }
   useEffect(() => {
-    if (route.query.get("caseId"))
-      setDetail(items.find((i) => i.id === route.query.get("caseId")) || null);
-    else setDetail(null);
-  }, [items, route.key]);
+    let active = true;
+    const id = route.query.get("caseId");
+    const queued = items.find((i) => i.id === id);
+    setDetail(queued || null);
+    if (id && !queued)
+      api(role, `/v1/cases/${encodeURIComponent(id)}`)
+        .then((c) => {
+          if (active) setDetail(c);
+        })
+        .catch((e) => {
+          if (active) setNotice(e.message);
+        });
+    return () => {
+      active = false;
+    };
+  }, [items, route.key, role]);
   const visible = items
     .filter(
       (i) =>

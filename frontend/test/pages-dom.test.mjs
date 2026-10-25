@@ -466,6 +466,7 @@ try {
       if (path === "/v1/shared-requests/g2") return group("g2", "target");
       if (path.endsWith("/shared-requests")) return [group("g1", "source"), group("g2", "target")];
       if (path === "/v1/cases/target") return target;
+      if (path === "/v1/cases/source") return source;
       throw Error(path);
     };
     const root = createRoot(document.getElementById("root"));
@@ -509,6 +510,44 @@ try {
     assert.equal(new URL(location.href).searchParams.get("caseId"), "target");
     assert.ok(document.body.textContent.includes("ОБРАЩЕНИЕ № 2"));
     assert.ok(!document.body.textContent.includes("Общая заявка недоступна"));
+    await act(async () => root.unmount());
+    dom.window.close();
+  });
+  await test("dispatcher restores a permitted personal case absent from the common queue", async () => {
+    const dom = env("/dispatcher/queue?caseId=personal");
+    const item = {
+      id: "personal",
+      houseId: "h",
+      number: 17,
+      description: "Материалы жителя",
+      kind: "PROBLEM",
+      status: "IN_PROGRESS",
+      revision: 1,
+      documents: [],
+      fullAccess: false,
+    };
+    const api = async (role, path) => {
+      if (path.endsWith("/case-queue")) return [];
+      if (path.endsWith("/case-context"))
+        return { ...ctx, canReview: false, canManagePermissions: false };
+      if (path === "/v1/cases/personal") return item;
+      throw Error(path);
+    };
+    const root = createRoot(document.getElementById("root"));
+    await act(async () => {
+      root.render(
+        React.createElement(StaffCases, {
+          houseId: "h",
+          role: "dispatcher",
+          api,
+          headers: () => ({}),
+        }),
+      );
+      await flush();
+      await flush();
+    });
+    assert.ok(document.body.textContent.includes("ОБРАЩЕНИЕ № 17"));
+    assert.ok(document.body.textContent.includes("Материалы жителя"));
     await act(async () => root.unmount());
     dom.window.close();
   });
