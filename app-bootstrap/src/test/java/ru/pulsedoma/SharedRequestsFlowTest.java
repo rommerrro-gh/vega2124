@@ -115,7 +115,7 @@ class SharedRequestsFlowTest {
     ProblemIntakeService.Input input(ReportCategory category, int entrance) {
         return new ProblemIntakeService.Input(
                 HOUSE,
-                "Не горит свет в подъезде " + key(),
+                "Не горит свет в подъезде. Код обращения: " + key(),
                 category,
                 null,
                 new LocationFeatures(
