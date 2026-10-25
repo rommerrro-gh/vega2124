@@ -435,7 +435,8 @@ export function OrganizationPortal({
         {invitations.map((i) => (
           <div className="case-permission" key={i.id}>
             <span>
-              {teamRoles[i.role]} · {i.department}
+              {teamRoles[i.role]}
+              {i.department ? ` · ${i.department}` : ""}
               <small>
                 {i.accepted
                   ? "Принято"
@@ -490,7 +491,8 @@ export function OrganizationPortal({
             <>
               <h3>{invitation.organizationName}</h3>
               <p>
-                {teamRoles[invitation.role]} · {invitation.department}
+                {teamRoles[invitation.role]}
+                {invitation.department ? ` · ${invitation.department}` : ""}
               </p>
             </>
           )}
@@ -686,7 +688,8 @@ export function OrganizationPortal({
                   <span>
                     <strong>{m.name}</strong>
                     <small>
-                      {teamRoles[m.role]} · {m.department}
+                      {teamRoles[m.role]}
+                      {m.department ? ` · ${m.department}` : ""}
                       {m.functions.length
                         ? ` · ${m.functions.map((f) => teamFunctions[f]).join(", ")}`
                         : ""}{" "}
