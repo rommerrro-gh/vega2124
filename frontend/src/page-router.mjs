@@ -38,14 +38,38 @@ export function parseRoute(url) {
     query: u.searchParams,
   };
 }
+export function isWorkspaceRoot(route) {
+  const pages = {
+    organization: [
+      "overview",
+      "team",
+      "partners",
+      "cases",
+      "tasks",
+      "documents",
+      "control",
+      "profile",
+    ],
+    system: ["queue", "houses", "access", "profile"],
+    admin: ["queue", "residents", "events", "profile"],
+  };
+  return (
+    !route.id &&
+    (pages[route.workspace] || ["queue", "work", "control", "profile"]).includes(route.page)
+  );
+}
 export function parentPath(route) {
   const base = `/${route.workspace}`;
+  if (route.workspace !== "miniapp" && route.page === "queue" && route.query.has("caseId"))
+    return `${base}/queue`;
   if (route.id)
     return route.section !== "overview"
       ? `${base}/${route.page}/${encodeURIComponent(route.id)}`
       : `${base}/${route.page === "shared" ? "cases" : route.page === "polls" || route.page === "notices" ? "events" : "cases"}`;
   if (route.page === "similar") return `${base}/new`;
   if (route.account && route.page !== "profile") return `${base}/profile`;
+  if (route.workspace === "organization")
+    return `${base}/${(route.query.get("workspaceRole") || "ADMIN") === "ADMIN" ? "overview" : "cases"}`;
   return `${base}/${route.workspace === "miniapp" ? "home" : "queue"}`;
 }
 export function routeUrl(path, current) {

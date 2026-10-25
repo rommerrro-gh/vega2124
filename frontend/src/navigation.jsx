@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { parseRoute, parentPath, routeUrl } from "./page-router.mjs";
+import { parseRoute, parentPath, routeUrl, isWorkspaceRoot } from "./page-router.mjs";
 const positions = new Map();
 let serial = 0;
 function tabKey(path) {
@@ -74,10 +74,7 @@ export function useMaxBack(route) {
   useEffect(() => {
     const button = window.WebApp?.BackButton;
     if (!button) return;
-    const show =
-      route.workspace === "miniapp"
-        ? !route.root
-        : !["queue", "work", "control", "profile"].includes(route.page);
+    const show = route.workspace === "miniapp" ? !route.root : !isWorkspaceRoot(route);
     show ? button.show?.() : button.hide?.();
     button.onClick?.(back);
     return () => button.offClick?.(back);
